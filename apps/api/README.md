@@ -75,8 +75,13 @@ Implemented domain models:
 - `Course`: course metadata, join code, draft/published status.
 - `CourseMember`: course membership and role.
 - `CourseInvite`: invite lifecycle, usage limit, and expiry metadata.
+- `Document`: uploaded course material metadata and parse status.
+- `DocumentPage`: extracted text and page-level metadata.
 
-The initial migration is `alembic/versions/441be7725f7c_create_core_identity_and_course_tables.py`.
+Migrations:
+
+- `441be7725f7c`: core identity and course tables.
+- `8b1c2d3e4f50`: document and document page tables.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.
