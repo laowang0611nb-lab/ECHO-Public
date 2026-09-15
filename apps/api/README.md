@@ -21,6 +21,24 @@ Health endpoint:
 GET http://127.0.0.1:8000/api/v1/health
 ```
 
+## Temporary development authentication
+
+Authentication is intentionally limited to identity bootstrap and development
+lookup. It does not implement passwords, JWT, sessions, or production access
+control.
+
+```text
+POST /api/v1/auth/login
+GET  /api/v1/auth/me
+```
+
+`login` accepts `email`, `display_name`, and `role`. An existing email must
+reuse the same role. `me` reads the development-only `X-User-Id` request
+header and returns that user, or `401` when the header is absent, malformed,
+or unknown.
+
+Replace this mechanism before any deployed or production use.
+
 Tests and lint:
 
 ```powershell
