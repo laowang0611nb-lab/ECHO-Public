@@ -4,10 +4,19 @@ from uuid import UUID
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import get_db_session
 from app.models.user import User
+from app.services.storage import LocalDocumentStorage
 
 DBSession = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+def get_document_storage() -> LocalDocumentStorage:
+    return LocalDocumentStorage(settings.document_storage_root)
+
+
+DocumentStorageDep = Annotated[LocalDocumentStorage, Depends(get_document_storage)]
 
 
 async def get_current_user(

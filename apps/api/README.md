@@ -56,6 +56,16 @@ members. Student accounts join idempotently by submitting the course code and
 can view member lists. Teacher accounts cannot join by code. Publishing
 must happen before students can join. Chat remains out of scope for this step.
 
+## Document uploads
+
+```text
+POST /api/v1/courses/{course_id}/documents
+```
+
+Course teachers can upload PDF files. The default development adapter stores
+files under `tmp/uploads`; the storage interface is isolated so MinIO or OSS
+can replace it later. Parsing and page extraction are not implemented yet.
+
 Tests and lint:
 
 ```powershell
