@@ -4,16 +4,31 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DBSession, KnowledgeProviderDep
 from app.models.knowledge import Chapter
-from app.schemas.knowledge import ChapterResponse
+from app.schemas.knowledge import (
+    ChapterCreate,
+    ChapterResponse,
+    ChapterUpdate,
+    KnowledgePointCreate,
+    KnowledgePointResponse,
+    KnowledgePointUpdate,
+)
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 from app.services.knowledge import (
     KnowledgeDocumentNotFoundError,
     KnowledgeDocumentNotReadyError,
+    KnowledgeEditForbiddenError,
     KnowledgeGenerationForbiddenError,
+    KnowledgeNodeNotFoundError,
     KnowledgeStructureConflictError,
     KnowledgeStructureEmptyError,
+    create_chapter,
+    create_knowledge_point,
+    delete_chapter,
+    delete_knowledge_point,
     generate_document_structure,
     list_course_chapters,
+    update_chapter,
+    update_knowledge_point,
 )
 from app.services.llm import (
     LLMConfigurationError,
@@ -101,3 +116,112 @@ async def get_course_chapters(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Course membership required",
         ) from exc
+
+
+def _translate_edit_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, KnowledgeNodeNotFoundError | KnowledgeDocumentNotFoundError):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge node not found",
+        )
+    if isinstance(exc, KnowledgeEditForbiddenError):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can edit the knowledge structure",
+        )
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Knowledge structure conflicts with existing data",
+    )
+
+
+@router.post(
+    "/documents/{document_id}/chapters",
+    response_model=ChapterResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_course_chapter(
+    document_id: UUID,
+    payload: ChapterCreate,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> Chapter:
+    try:
+        return await create_chapter(session, document_id, current_user.id, payload)
+    except (KnowledgeDocumentNotFoundError, KnowledgeEditForbiddenError) as exc:
+        raise _translate_edit_error(exc) from exc
+
+
+@router.patch("/chapters/{chapter_id}", response_model=ChapterResponse)
+async def patch_chapter(
+    chapter_id: UUID,
+    payload: ChapterUpdate,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> Chapter:
+    try:
+        return await update_chapter(session, chapter_id, current_user.id, payload)
+    except (KnowledgeNodeNotFoundError, KnowledgeEditForbiddenError) as exc:
+        raise _translate_edit_error(exc) from exc
+
+
+@router.delete("/chapters/{chapter_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_chapter(
+    chapter_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> None:
+    try:
+        await delete_chapter(session, chapter_id, current_user.id)
+    except (KnowledgeNodeNotFoundError, KnowledgeEditForbiddenError) as exc:
+        raise _translate_edit_error(exc) from exc
+
+
+@router.post(
+    "/chapters/{chapter_id}/knowledge-points",
+    response_model=KnowledgePointResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_chapter_knowledge_point(
+    chapter_id: UUID,
+    payload: KnowledgePointCreate,
+    current_user: CurrentUser,
+    session: DBSession,
+):
+    try:
+        return await create_knowledge_point(session, chapter_id, current_user.id, payload)
+    except (
+        KnowledgeNodeNotFoundError,
+        KnowledgeEditForbiddenError,
+        KnowledgeStructureConflictError,
+    ) as exc:
+        raise _translate_edit_error(exc) from exc
+
+
+@router.patch("/knowledge-points/{point_id}", response_model=KnowledgePointResponse)
+async def patch_knowledge_point(
+    point_id: UUID,
+    payload: KnowledgePointUpdate,
+    current_user: CurrentUser,
+    session: DBSession,
+):
+    try:
+        return await update_knowledge_point(session, point_id, current_user.id, payload)
+    except (
+        KnowledgeNodeNotFoundError,
+        KnowledgeEditForbiddenError,
+        KnowledgeStructureConflictError,
+    ) as exc:
+        raise _translate_edit_error(exc) from exc
+
+
+@router.delete("/knowledge-points/{point_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_knowledge_point(
+    point_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> None:
+    try:
+        await delete_knowledge_point(session, point_id, current_user.id)
+    except (KnowledgeNodeNotFoundError, KnowledgeEditForbiddenError) as exc:
+        raise _translate_edit_error(exc) from exc

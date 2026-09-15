@@ -54,9 +54,9 @@ GET  /api/v1/courses/{course_id}/members
 
 Teachers create draft courses with a generated eight-character code and become
 course members automatically. Course lists and detail reads are restricted to
-members. Student accounts join idempotently by submitting the course code and
-can view member lists. Teacher accounts cannot join by code. Publishing
-must happen before students can join. Chat remains out of scope for this step.
+members. Student accounts join idempotently by submitting the course code.
+Only teachers can view the member list and email addresses. Teacher accounts
+cannot join by code. Publishing must happen before students can join.
 
 ## Document uploads
 
@@ -78,6 +78,21 @@ POST /api/v1/documents/{document_id}/generate-structure
 GET  /api/v1/courses/{course_id}/chapters
 ```
 
+Teachers can also edit the generated structure:
+
+```text
+POST   /api/v1/documents/{document_id}/chapters
+PATCH  /api/v1/chapters/{chapter_id}
+DELETE /api/v1/chapters/{chapter_id}
+POST   /api/v1/chapters/{chapter_id}/knowledge-points
+PATCH  /api/v1/knowledge-points/{knowledge_point_id}
+DELETE /api/v1/knowledge-points/{knowledge_point_id}
+```
+
+Knowledge points can be renamed, described, reordered, and moved between
+chapters in the same course. Merging multiple knowledge points remains a
+separate follow-up because it requires combining mastery and relation data.
+
 Teachers can generate chapters and knowledge points from a parsed document.
 Generation uses a Qwen-compatible chat completions endpoint configured by
 `ECHO_LLM_API_KEY`, `ECHO_LLM_BASE_URL`, and `ECHO_LLM_MODEL`. Regeneration
@@ -92,8 +107,7 @@ POST /api/v1/documents/{document_id}/chunks
 ```
 
 Parsed pages are split into overlapping chunks with page metadata. Re-running
-chunking replaces the previous chunks for the document. Embeddings and vector
-indexing are not implemented yet.
+chunking replaces the previous chunks for the document.
 
 ## Embeddings and retrieval
 
