@@ -104,6 +104,19 @@ Chunks are embedded in batches using a Qwen-compatible embeddings endpoint.
 PostgreSQL search uses pgvector cosine distance; SQLite uses the same cosine
 ranking in memory for development and tests.
 
+## Chat and SSE
+
+```text
+POST /api/v1/courses/{course_id}/conversations
+GET  /api/v1/courses/{course_id}/conversations
+GET  /api/v1/conversations/{conversation_id}/messages
+POST /api/v1/conversations/{conversation_id}/messages/stream
+```
+
+The stream endpoint retrieves course chunks, builds a teaching prompt, emits
+`text_delta`, `citation`, `done`, or `error` SSE events, and persists the user
+message plus assistant message citations.
+
 Tests and lint:
 
 ```powershell

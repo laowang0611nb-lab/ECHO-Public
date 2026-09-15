@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db_session
 from app.models.user import User
+from app.services.chat_provider import QwenChatProvider
 from app.services.embedding import QwenEmbeddingProvider
 from app.services.llm import QwenKnowledgeStructureProvider
 from app.services.storage import LocalDocumentStorage
@@ -51,6 +52,21 @@ def get_embedding_provider() -> QwenEmbeddingProvider:
 EmbeddingProviderDep = Annotated[
     QwenEmbeddingProvider,
     Depends(get_embedding_provider),
+]
+
+
+def get_chat_provider() -> QwenChatProvider:
+    return QwenChatProvider(
+        api_key=settings.chat_api_key,
+        base_url=settings.chat_base_url,
+        model=settings.chat_model,
+        timeout_seconds=settings.chat_timeout_seconds,
+    )
+
+
+ChatProviderDep = Annotated[
+    QwenChatProvider,
+    Depends(get_chat_provider),
 ]
 
 

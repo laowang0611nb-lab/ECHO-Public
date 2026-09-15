@@ -2,6 +2,8 @@
 
 from app.services import (
     auth,
+    chat,
+    chat_provider,
     chunking,
     course,
     document,
@@ -14,6 +16,8 @@ from app.services import (
 
 __all__ = [
     "auth",
+    "chat",
+    "chat_provider",
     "chunking",
     "course",
     "document",

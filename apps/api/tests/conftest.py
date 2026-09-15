@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import (
+    get_chat_provider,
     get_document_storage,
     get_embedding_provider,
     get_knowledge_structure_provider,
@@ -50,6 +51,13 @@ async def document_storage(tmp_path: Path) -> AsyncIterator[LocalDocumentStorage
         yield storage
     finally:
         app.dependency_overrides.pop(get_document_storage, None)
+
+
+class FakeChatProvider:
+    async def stream(self, messages: list[dict[str, str]]):
+        del messages
+        yield "Echo "
+        yield "answer"
 
 
 class FakeEmbeddingProvider:
@@ -103,9 +111,20 @@ async def embedding_provider() -> AsyncIterator[FakeEmbeddingProvider]:
 
 
 @pytest_asyncio.fixture
+async def chat_provider() -> AsyncIterator[FakeChatProvider]:
+    provider = FakeChatProvider()
+    app.dependency_overrides[get_chat_provider] = lambda: provider
+    try:
+        yield provider
+    finally:
+        app.dependency_overrides.pop(get_chat_provider, None)
+
+
+@pytest_asyncio.fixture
 async def client(
     session_factory: async_sessionmaker[AsyncSession],
     document_storage: LocalDocumentStorage,
+    chat_provider: FakeChatProvider,
     embedding_provider: FakeEmbeddingProvider,
     knowledge_provider: FakeKnowledgeStructureProvider,
 ) -> AsyncIterator[AsyncClient]:
