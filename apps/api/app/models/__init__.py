@@ -8,6 +8,12 @@ from app.models.chat import (
 from app.models.course import Course, CourseInvite, CourseMember, CourseStatus
 from app.models.document import Document, DocumentPage, DocumentStatus
 from app.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint, KnowledgeRelation
+from app.models.learning import (
+    LearningEvent,
+    LearningEventType,
+    MasterySnapshot,
+    StudentKnowledgeState,
+)
 from app.models.user import User, UserRole
 
 __all__ = [
@@ -27,6 +33,10 @@ __all__ = [
     "KnowledgeChunk",
     "KnowledgePoint",
     "KnowledgeRelation",
+    "LearningEvent",
+    "LearningEventType",
+    "MasterySnapshot",
+    "StudentKnowledgeState",
     "User",
     "UserRole",
 ]

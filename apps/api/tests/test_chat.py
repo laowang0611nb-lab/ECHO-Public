@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.document import Document, DocumentPage, DocumentStatus
 from app.models.knowledge import KnowledgeChunk
+from app.models.learning import LearningEvent, LearningEventType
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -107,8 +108,10 @@ async def test_conversation_and_sse_message_flow(
     assert messages[1]["citations"]
 
     async with session_factory() as session:
+        events = list(await session.scalars(select(LearningEvent)))
         chunk_count = len(list(await session.scalars(select(KnowledgeChunk.id))))
 
+    assert events[0].event_type == LearningEventType.QUESTION_ASKED
     assert chunk_count > 0
 
 

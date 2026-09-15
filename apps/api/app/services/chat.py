@@ -15,12 +15,15 @@ from app.models.chat import (
     MessageRole,
     TeachingPolicy,
 )
+from app.models.learning import LearningEventType
 from app.models.user import User
 from app.schemas.chat import ConversationCreate
+from app.schemas.learning import LearningEventCreate
 from app.schemas.search import ChunkSearchResult
 from app.services.chat_provider import ChatProvider
 from app.services.course import get_course_for_member
 from app.services.embedding import EmbeddingProvider
+from app.services.learning import record_learning_event
 from app.services.search import search_course_chunks
 
 
@@ -166,6 +169,18 @@ async def stream_chat_response(
     conversation.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(user_message)
+
+    await record_learning_event(
+        session,
+        conversation.course_id,
+        LearningEventCreate(
+            student_id=user_id,
+            conversation_id=conversation.id,
+            message_id=user_message.id,
+            event_type=LearningEventType.QUESTION_ASKED,
+            evidence=content,
+        ),
+    )
 
     collected: list[str] = []
     try:

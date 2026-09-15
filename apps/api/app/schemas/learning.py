@@ -1,0 +1,41 @@
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.learning import LearningEventType
+
+
+class LearningEventCreate(BaseModel):
+    student_id: UUID
+    knowledge_point_id: UUID | None = None
+    conversation_id: UUID | None = None
+    message_id: UUID | None = None
+    event_type: LearningEventType
+    weight: float = Field(default=1.0, gt=0, le=10)
+    evidence: str | None = Field(default=None, max_length=2000)
+    metadata_json: dict[str, object] = Field(default_factory=dict)
+
+
+class LearningEventResponse(BaseModel):
+    id: UUID
+    course_id: UUID
+    user_id: UUID
+    knowledge_point_id: UUID | None
+    event_type: LearningEventType
+    weight: float
+    evidence: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MasteryStateResponse(BaseModel):
+    id: UUID
+    course_id: UUID
+    user_id: UUID
+    knowledge_point_id: UUID
+    score: float
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -127,6 +127,17 @@ PUT /api/v1/courses/{course_id}/teaching-policy
 Course members can read the teacher-defined policy. Course teachers can update
 it. The policy is injected into the RAG system prompt for later chat turns.
 
+## Learning analytics
+
+```text
+POST /api/v1/courses/{course_id}/learning-events
+GET  /api/v1/courses/{course_id}/students/{student_id}/mastery
+```
+
+Teachers can record explainable learning events. Events update per-course,
+per-knowledge-point mastery state and create mastery snapshots. Students can
+read their own state; teachers can read student state.
+
 Tests and lint:
 
 ```powershell
@@ -156,6 +167,9 @@ Implemented domain models:
 - `Message`: persisted user, assistant, and system message content.
 - `MessageCitation`: snapshot of a retrieved chunk and page range.
 - `TeachingPolicy`: natural-language teaching behavior for a course.
+- `LearningEvent`: append-only evidence of student learning behavior.
+- `StudentKnowledgeState`: current explainable mastery score per knowledge point.
+- `MasterySnapshot`: historical score record linked to an event.
 
 Migrations:
 
@@ -166,6 +180,7 @@ Migrations:
 - `e4f5a6b7c8d9`: 1024-dimensional knowledge chunk embeddings.
 - `f5a6b7c8d9e0`: conversation, message, and citation tables.
 - `a6b7c8d9e0f1`: per-course teaching policy table.
+- `b7c8d9e0f1a2`: learning events, knowledge state, and mastery snapshots.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.
