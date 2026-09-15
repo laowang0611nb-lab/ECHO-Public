@@ -111,6 +111,19 @@ async def test_non_pdf_upload_returns_415(client: AsyncClient) -> None:
     assert response.status_code == 415
 
 
+async def test_pdf_with_generic_mime_type_is_accepted(client: AsyncClient) -> None:
+    teacher = await login(client, "upload-octet@example.com", "teacher")
+    course = await create_course(client, teacher)
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/documents",
+        headers=auth_headers(teacher),
+        files={"file": ("notes.pdf", PDF_BYTES, "application/octet-stream")},
+    )
+
+    assert response.status_code == 201
+
+
 async def test_oversized_upload_returns_413(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

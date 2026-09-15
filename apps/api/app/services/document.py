@@ -42,7 +42,11 @@ async def upload_course_document(
     original_name = Path(upload.filename or "").name
     if not original_name or Path(original_name).suffix.lower() != ".pdf":
         raise UnsupportedDocumentTypeError
-    if upload.content_type and upload.content_type not in PDF_CONTENT_TYPES:
+    if (
+        upload.content_type
+        and upload.content_type not in PDF_CONTENT_TYPES
+        and upload.content_type != "application/octet-stream"
+    ):
         raise UnsupportedDocumentTypeError
 
     document_id = uuid4()
