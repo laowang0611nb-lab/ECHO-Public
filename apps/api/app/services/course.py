@@ -3,17 +3,22 @@ import string
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import Course, CourseMember
 from app.models.user import User, UserRole
-from app.schemas.course import CourseCreate
+from app.schemas.course import CourseCreate, CourseJoinRequest, CourseMemberResponse
 
 COURSE_CODE_LENGTH = 8
 COURSE_CODE_ALPHABET = string.ascii_uppercase + string.digits
 
 
 class TeacherRoleRequiredError(Exception):
+    pass
+
+
+class StudentRoleRequiredError(Exception):
     pass
 
 
@@ -74,6 +79,49 @@ async def list_courses_for_user(session: AsyncSession, user_id: UUID) -> list[Co
     return list(result)
 
 
+async def join_course_by_code(
+    session: AsyncSession,
+    user: User,
+    payload: CourseJoinRequest,
+) -> Course:
+    if user.role != UserRole.STUDENT:
+        raise StudentRoleRequiredError
+
+    course = await session.scalar(select(Course).where(Course.code == payload.code))
+    if course is None:
+        raise CourseNotFoundError
+
+    existing_membership = await session.scalar(
+        select(CourseMember.id).where(
+            CourseMember.course_id == course.id,
+            CourseMember.user_id == user.id,
+        )
+    )
+    if existing_membership is not None:
+        return course
+
+    session.add(
+        CourseMember(
+            course_id=course.id,
+            user_id=user.id,
+            role=UserRole.STUDENT,
+        )
+    )
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing_membership = await session.scalar(
+            select(CourseMember.id).where(
+                CourseMember.course_id == course.id,
+                CourseMember.user_id == user.id,
+            )
+        )
+        if existing_membership is None:
+            raise
+    return course
+
+
 async def get_course_for_member(
     session: AsyncSession,
     course_id: UUID,
@@ -92,3 +140,30 @@ async def get_course_for_member(
     if membership is None:
         raise CourseMembershipRequiredError
     return course
+
+
+async def list_course_members(
+    session: AsyncSession,
+    course_id: UUID,
+    requester_id: UUID,
+) -> list[CourseMemberResponse]:
+    await get_course_for_member(session, course_id, requester_id)
+
+    rows = await session.execute(
+        select(CourseMember, User)
+        .join(User, User.id == CourseMember.user_id)
+        .where(CourseMember.course_id == course_id)
+        .order_by(CourseMember.joined_at.asc(), CourseMember.id.asc())
+    )
+    return [
+        CourseMemberResponse(
+            id=membership.id,
+            course_id=membership.course_id,
+            user_id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            role=membership.role,
+            joined_at=membership.joined_at,
+        )
+        for membership, user in rows.all()
+    ]

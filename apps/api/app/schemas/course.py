@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.course import CourseStatus
+from app.models.user import UserRole
 
 
 class CourseCreate(BaseModel):
@@ -20,6 +21,15 @@ class CourseCreate(BaseModel):
         return normalized or None
 
 
+class CourseJoinRequest(BaseModel):
+    code: str = Field(min_length=8, max_length=8)
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        return value.strip().upper()
+
+
 class CourseResponse(BaseModel):
     id: UUID
     name: str
@@ -32,3 +42,13 @@ class CourseResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CourseMemberResponse(BaseModel):
+    id: UUID
+    course_id: UUID
+    user_id: UUID
+    email: str
+    display_name: str
+    role: UserRole
+    joined_at: datetime

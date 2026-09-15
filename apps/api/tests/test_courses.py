@@ -151,3 +151,97 @@ async def test_unknown_course_returns_404(client: AsyncClient) -> None:
     )
 
     assert response.status_code == 404
+
+
+async def test_student_joins_course_by_code_and_duplicate_is_idempotent(
+    client: AsyncClient,
+) -> None:
+    teacher = await login(client, "join-teacher@example.com", "teacher")
+    student = await login(client, "join-student@example.com", "student")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "Join Course"},
+    )
+    code = created.json()["code"]
+
+    first = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": code.lower()},
+    )
+    second = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": code},
+    )
+    courses = await client.get("/api/v1/courses", headers=auth_headers(student))
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["id"] == created.json()["id"]
+    assert [course["id"] for course in courses.json()] == [created.json()["id"]]
+
+
+async def test_teacher_cannot_join_course_by_code(client: AsyncClient) -> None:
+    owner = await login(client, "join-owner@example.com", "teacher")
+    other_teacher = await login(client, "join-other@example.com", "teacher")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(owner),
+        json={"name": "Teacher Join Course"},
+    )
+
+    response = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(other_teacher),
+        json={"code": created.json()["code"]},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_join_with_unknown_code_returns_404(client: AsyncClient) -> None:
+    student = await login(client, "missing-code@example.com", "student")
+
+    response = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": "ZZZZZZZZ"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_course_members_can_list_members_and_outsiders_cannot(
+    client: AsyncClient,
+) -> None:
+    teacher = await login(client, "members-teacher@example.com", "teacher")
+    student = await login(client, "members-student@example.com", "student")
+    outsider = await login(client, "members-outsider@example.com", "student")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "Members Course"},
+    )
+    await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": created.json()["code"]},
+    )
+
+    member_response = await client.get(
+        f"/api/v1/courses/{created.json()['id']}/members",
+        headers=auth_headers(teacher),
+    )
+    outsider_response = await client.get(
+        f"/api/v1/courses/{created.json()['id']}/members",
+        headers=auth_headers(outsider),
+    )
+
+    assert member_response.status_code == 200
+    assert {member["email"] for member in member_response.json()} == {
+        "members-teacher@example.com",
+        "members-student@example.com",
+    }
+    assert outsider_response.status_code == 403

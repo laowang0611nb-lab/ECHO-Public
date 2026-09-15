@@ -4,13 +4,21 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DBSession
 from app.models.course import Course
-from app.schemas.course import CourseCreate, CourseResponse
+from app.schemas.course import (
+    CourseCreate,
+    CourseJoinRequest,
+    CourseMemberResponse,
+    CourseResponse,
+)
 from app.services.course import (
     CourseMembershipRequiredError,
     CourseNotFoundError,
+    StudentRoleRequiredError,
     TeacherRoleRequiredError,
     create_course,
     get_course_for_member,
+    join_course_by_code,
+    list_course_members,
     list_courses_for_user,
 )
 
@@ -35,6 +43,46 @@ async def create_new_course(
 @router.get("", response_model=list[CourseResponse])
 async def list_my_courses(current_user: CurrentUser, session: DBSession) -> list[Course]:
     return await list_courses_for_user(session, current_user.id)
+
+
+@router.post("/join", response_model=CourseResponse)
+async def join_course(
+    payload: CourseJoinRequest,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> Course:
+    try:
+        return await join_course_by_code(session, current_user, payload)
+    except CourseNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        ) from exc
+    except StudentRoleRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only students can join courses by code",
+        ) from exc
+
+
+@router.get("/{course_id}/members", response_model=list[CourseMemberResponse])
+async def get_members(
+    course_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> list[CourseMemberResponse]:
+    try:
+        return await list_course_members(session, course_id, current_user.id)
+    except CourseNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        ) from exc
+    except CourseMembershipRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Course membership required",
+        ) from exc
 
 
 @router.get("/{course_id}", response_model=CourseResponse)

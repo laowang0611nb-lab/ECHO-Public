@@ -44,13 +44,16 @@ Replace this mechanism before any deployed or production use.
 ```text
 POST /api/v1/courses
 GET  /api/v1/courses
+POST /api/v1/courses/join
 GET  /api/v1/courses/{course_id}
+GET  /api/v1/courses/{course_id}/members
 ```
 
 Teachers create draft courses with a generated eight-character code and become
 course members automatically. Course lists and detail reads are restricted to
-members. Invite-code joining, member lists, publishing workflows, and chat are
-not part of this step.
+members. Student accounts join idempotently by submitting the course code and
+can view member lists. Teacher accounts cannot join by code. Publishing
+workflows and chat remain out of scope for this step.
 
 Tests and lint:
 
