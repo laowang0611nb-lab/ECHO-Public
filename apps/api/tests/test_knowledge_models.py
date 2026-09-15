@@ -2,10 +2,20 @@ from app.db.base import Base
 
 
 def test_knowledge_tables_are_registered() -> None:
-    assert {"chapters", "knowledge_points", "knowledge_relations"}.issubset(Base.metadata.tables)
+    assert {
+        "chapters",
+        "knowledge_chunks",
+        "knowledge_points",
+        "knowledge_relations",
+    }.issubset(Base.metadata.tables)
 
 
 def test_chapter_and_knowledge_point_constraints() -> None:
+    chunk_constraints = Base.metadata.tables["knowledge_chunks"].constraints
+    chunk_names = {constraint.name for constraint in chunk_constraints if constraint.name}
+    assert "uq_knowledge_chunks_document_index" in chunk_names
+    assert "ck_knowledge_chunks_page_range" in chunk_names
+
     chapter_constraints = {
         constraint.name
         for constraint in Base.metadata.tables["chapters"].constraints

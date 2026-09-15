@@ -83,6 +83,16 @@ replaces the previous structure for that document.
 Duplicate knowledge-point names are normalized within a chapter. Documents above
 the configured context limit return `422` instead of being silently truncated.
 
+## Knowledge chunks
+
+```text
+POST /api/v1/documents/{document_id}/chunks
+```
+
+Parsed pages are split into overlapping chunks with page metadata. Re-running
+chunking replaces the previous chunks for the document. Embeddings and vector
+indexing are not implemented yet.
+
 Tests and lint:
 
 ```powershell
@@ -107,12 +117,14 @@ Implemented domain models:
 - `Chapter`: generated chapter structure tied to a course document.
 - `KnowledgePoint`: knowledge points belonging to a chapter.
 - `KnowledgeRelation`: typed prerequisite/related edges between knowledge points.
+- `KnowledgeChunk`: searchable text chunks with page metadata.
 
 Migrations:
 
 - `441be7725f7c`: core identity and course tables.
 - `8b1c2d3e4f50`: document and document page tables.
 - `c2d3e4f5a6b7`: chapters, knowledge points, and relation tables.
+- `d3e4f5a6b7c8`: searchable knowledge chunk table.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

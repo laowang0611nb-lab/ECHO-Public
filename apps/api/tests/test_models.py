@@ -10,6 +10,7 @@ def test_core_tables_are_registered() -> None:
         "course_members",
         "courses",
         "knowledge_points",
+        "knowledge_chunks",
         "knowledge_relations",
         "users",
     }

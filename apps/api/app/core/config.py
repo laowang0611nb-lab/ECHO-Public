@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.22"
+    app_version: str = "0.0.23"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     llm_model: str = "qwen-plus"
     llm_timeout_seconds: float = 60.0
     llm_max_context_chars: int = 60000
+    chunk_size_chars: int = 1200
+    chunk_overlap_chars: int = 200
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
