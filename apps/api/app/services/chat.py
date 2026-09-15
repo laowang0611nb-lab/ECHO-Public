@@ -8,7 +8,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.chat import Conversation, Message, MessageCitation, MessageRole
+from app.models.chat import (
+    Conversation,
+    Message,
+    MessageCitation,
+    MessageRole,
+    TeachingPolicy,
+)
 from app.models.user import User
 from app.schemas.chat import ConversationCreate
 from app.schemas.search import ChunkSearchResult
@@ -94,17 +100,20 @@ def _build_prompt(
     question: str,
     history: list[Message],
     sources: list[ChunkSearchResult],
+    teaching_policy: str | None,
 ) -> list[dict[str, str]]:
     source_blocks = [
         f"[{index}] Pages {source.page_start}-{source.page_end}\n{source.content}"
         for index, source in enumerate(sources, start=1)
     ]
     source_text = "\n\n".join(source_blocks) if source_blocks else "No course sources found."
+    policy_text = teaching_policy or "No additional teacher policy configured."
     system = (
         "You are ECHO, a course teaching agent. Answer in the student's language. "
         "Prefer the course sources, cite them as [1], [2], and clearly mark any "
         "course-external supplement. Guide thinking for homework-style questions "
         "instead of immediately revealing final answers.\n\n"
+        f"TEACHER POLICY:\n{policy_text}\n\n"
         f"COURSE SOURCES:\n{source_text}"
     )
     prompt_messages = [{"role": "system", "content": system}]
@@ -140,6 +149,9 @@ async def stream_chat_response(
         content,
         retrieval_limit,
     )
+    policy = await session.scalar(
+        select(TeachingPolicy).where(TeachingPolicy.course_id == conversation.course_id)
+    )
     history = await list_messages(session, conversation_id, user_id)
 
     user_message = Message(
@@ -157,7 +169,13 @@ async def stream_chat_response(
 
     collected: list[str] = []
     try:
-        async for delta in chat_provider.stream(_build_prompt(content, history, sources)):
+        prompt = _build_prompt(
+            content,
+            history,
+            sources,
+            policy.content if policy else None,
+        )
+        async for delta in chat_provider.stream(prompt):
             collected.append(delta)
             yield ChatEvent("text_delta", {"delta": delta})
     except Exception as exc:

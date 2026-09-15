@@ -117,6 +117,16 @@ The stream endpoint retrieves course chunks, builds a teaching prompt, emits
 `text_delta`, `citation`, `done`, or `error` SSE events, and persists the user
 message plus assistant message citations.
 
+## Teaching policy
+
+```text
+GET /api/v1/courses/{course_id}/teaching-policy
+PUT /api/v1/courses/{course_id}/teaching-policy
+```
+
+Course members can read the teacher-defined policy. Course teachers can update
+it. The policy is injected into the RAG system prompt for later chat turns.
+
 Tests and lint:
 
 ```powershell
@@ -145,6 +155,7 @@ Implemented domain models:
 - `Conversation`: course-scoped user chat thread.
 - `Message`: persisted user, assistant, and system message content.
 - `MessageCitation`: snapshot of a retrieved chunk and page range.
+- `TeachingPolicy`: natural-language teaching behavior for a course.
 
 Migrations:
 
@@ -154,6 +165,7 @@ Migrations:
 - `d3e4f5a6b7c8`: searchable knowledge chunk table.
 - `e4f5a6b7c8d9`: 1024-dimensional knowledge chunk embeddings.
 - `f5a6b7c8d9e0`: conversation, message, and citation tables.
+- `a6b7c8d9e0f1`: per-course teaching policy table.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

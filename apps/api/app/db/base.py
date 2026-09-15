@@ -1,5 +1,5 @@
 from app.db.base_class import Base
-from app.models.chat import Conversation, Message, MessageCitation
+from app.models.chat import Conversation, Message, MessageCitation, TeachingPolicy
 from app.models.course import Course, CourseInvite, CourseMember
 from app.models.document import Document, DocumentPage
 from app.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint, KnowledgeRelation
@@ -16,6 +16,7 @@ __all__ = [
     "DocumentPage",
     "Message",
     "MessageCitation",
+    "TeachingPolicy",
     "KnowledgeChunk",
     "KnowledgePoint",
     "KnowledgeRelation",

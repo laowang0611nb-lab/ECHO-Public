@@ -15,6 +15,7 @@ def test_core_tables_are_registered() -> None:
         "knowledge_relations",
         "message_citations",
         "messages",
+        "teaching_policies",
         "users",
     }
 

@@ -1,4 +1,10 @@
-from app.models.chat import Conversation, Message, MessageCitation, MessageRole
+from app.models.chat import (
+    Conversation,
+    Message,
+    MessageCitation,
+    MessageRole,
+    TeachingPolicy,
+)
 from app.models.course import Course, CourseInvite, CourseMember, CourseStatus
 from app.models.document import Document, DocumentPage, DocumentStatus
 from app.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint, KnowledgeRelation
@@ -17,6 +23,7 @@ __all__ = [
     "Message",
     "MessageCitation",
     "MessageRole",
+    "TeachingPolicy",
     "KnowledgeChunk",
     "KnowledgePoint",
     "KnowledgeRelation",

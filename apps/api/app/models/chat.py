@@ -31,6 +31,38 @@ class MessageRole(StrEnum):
     SYSTEM = "system"
 
 
+class TeachingPolicy(Base):
+    __tablename__ = "teaching_policies"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    course_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_by: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    course: Mapped["Course"] = relationship()
+    updater: Mapped["User"] = relationship()
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 

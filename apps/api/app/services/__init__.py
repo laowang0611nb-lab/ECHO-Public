@@ -12,6 +12,7 @@ from app.services import (
     llm,
     search,
     storage,
+    teaching_policy,
 )
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "knowledge",
     "llm",
     "search",
+    "teaching_policy",
     "storage",
 ]

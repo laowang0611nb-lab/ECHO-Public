@@ -54,8 +54,11 @@ async def document_storage(tmp_path: Path) -> AsyncIterator[LocalDocumentStorage
 
 
 class FakeChatProvider:
+    def __init__(self) -> None:
+        self.last_messages: list[dict[str, str]] = []
+
     async def stream(self, messages: list[dict[str, str]]):
-        del messages
+        self.last_messages = messages
         yield "Echo "
         yield "answer"
 
