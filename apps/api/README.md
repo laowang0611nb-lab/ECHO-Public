@@ -138,6 +138,15 @@ Teachers can record explainable learning events. Events update per-course,
 per-knowledge-point mastery state and create mastery snapshots. Students can
 read their own state; teachers can read student state.
 
+## Teacher dashboard
+
+```text
+GET /api/v1/courses/{course_id}/dashboard
+```
+
+Course teachers receive student counts, seven-day active students, seven-day
+question volume, total events, average mastery, and high-risk knowledge points.
+
 Tests and lint:
 
 ```powershell
