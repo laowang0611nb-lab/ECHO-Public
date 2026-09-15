@@ -129,6 +129,9 @@ Implemented domain models:
 - `KnowledgePoint`: knowledge points belonging to a chapter.
 - `KnowledgeRelation`: typed prerequisite/related edges between knowledge points.
 - `KnowledgeChunk`: searchable text chunks with page metadata.
+- `Conversation`: course-scoped user chat thread.
+- `Message`: persisted user, assistant, and system message content.
+- `MessageCitation`: snapshot of a retrieved chunk and page range.
 
 Migrations:
 
@@ -137,6 +140,7 @@ Migrations:
 - `c2d3e4f5a6b7`: chapters, knowledge points, and relation tables.
 - `d3e4f5a6b7c8`: searchable knowledge chunk table.
 - `e4f5a6b7c8d9`: 1024-dimensional knowledge chunk embeddings.
+- `f5a6b7c8d9e0`: conversation, message, and citation tables.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

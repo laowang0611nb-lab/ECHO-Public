@@ -4,6 +4,7 @@ from app.db.base import Base
 def test_core_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
         "chapters",
+        "conversations",
         "document_pages",
         "documents",
         "course_invites",
@@ -12,6 +13,8 @@ def test_core_tables_are_registered() -> None:
         "knowledge_points",
         "knowledge_chunks",
         "knowledge_relations",
+        "message_citations",
+        "messages",
         "users",
     }
 

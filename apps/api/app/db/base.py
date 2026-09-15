@@ -1,10 +1,12 @@
 from app.db.base_class import Base
+from app.models.chat import Conversation, Message, MessageCitation
 from app.models.course import Course, CourseInvite, CourseMember
 from app.models.document import Document, DocumentPage
 from app.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint, KnowledgeRelation
 from app.models.user import User
 
 __all__ = [
+    "Conversation",
     "Base",
     "Chapter",
     "Course",
@@ -12,6 +14,8 @@ __all__ = [
     "CourseMember",
     "Document",
     "DocumentPage",
+    "Message",
+    "MessageCitation",
     "KnowledgeChunk",
     "KnowledgePoint",
     "KnowledgeRelation",
