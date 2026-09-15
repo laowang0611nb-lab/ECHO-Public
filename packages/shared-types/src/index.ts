@@ -1,5 +1,7 @@
 export type UserRole = "teacher" | "student";
 
+export type MessageRole = "user" | "assistant" | "system";
+
 export type CourseStatus = "draft" | "published";
 
 export type ChatStreamEventName =
@@ -76,3 +78,53 @@ export interface CourseDashboard {
   average_mastery: number | null;
   high_risk_knowledge_points: HighRiskKnowledgePoint[];
 }
+
+export interface Conversation {
+  id: string;
+  course_id: string;
+  user_id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageCitation {
+  chunk_id: string | null;
+  document_id: string | null;
+  page_start: number;
+  page_end: number;
+  quote: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  role: MessageRole;
+  content: string;
+  created_at: string;
+  citations: MessageCitation[];
+}
+
+export interface ChatStreamRequest {
+  content: string;
+  retrieval_limit?: number;
+}
+
+export type ChatStreamEvent =
+  | { event: "text_delta"; data: { delta: string } }
+  | {
+      event: "citation";
+      data: {
+        index: number;
+        chunk_id: string | null;
+        document_id: string | null;
+        page_start: number;
+        page_end: number;
+      };
+    }
+  | { event: "error"; data: { detail: string } }
+  | {
+      event: "done";
+      data: { conversation_id: string; message_id: string };
+    }
+  | { event: "component" | "learning_event"; data: Record<string, unknown> };
