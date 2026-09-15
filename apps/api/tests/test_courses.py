@@ -163,6 +163,10 @@ async def test_student_joins_course_by_code_and_duplicate_is_idempotent(
         headers=auth_headers(teacher),
         json={"name": "Join Course"},
     )
+    await client.post(
+        f"/api/v1/courses/{created.json()['id']}/publish",
+        headers=auth_headers(teacher),
+    )
     code = created.json()["code"]
 
     first = await client.post(
@@ -225,6 +229,10 @@ async def test_course_members_can_list_members_and_outsiders_cannot(
         json={"name": "Members Course"},
     )
     await client.post(
+        f"/api/v1/courses/{created.json()['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    await client.post(
         "/api/v1/courses/join",
         headers=auth_headers(student),
         json={"code": created.json()["code"]},
@@ -245,3 +253,61 @@ async def test_course_members_can_list_members_and_outsiders_cannot(
         "members-student@example.com",
     }
     assert outsider_response.status_code == 403
+
+
+async def test_teacher_can_publish_course_idempotently(client: AsyncClient) -> None:
+    teacher = await login(client, "publish-teacher@example.com", "teacher")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "Publish Course"},
+    )
+
+    first = await client.post(
+        f"/api/v1/courses/{created.json()['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    second = await client.post(
+        f"/api/v1/courses/{created.json()['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+
+    assert first.status_code == 200
+    assert first.json()["status"] == "published"
+    assert second.status_code == 200
+    assert second.json()["status"] == "published"
+
+
+async def test_student_cannot_publish_course(client: AsyncClient) -> None:
+    teacher = await login(client, "publish-owner@example.com", "teacher")
+    student = await login(client, "publish-student@example.com", "student")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "Student Publish Course"},
+    )
+
+    response = await client.post(
+        f"/api/v1/courses/{created.json()['id']}/publish",
+        headers=auth_headers(student),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_student_cannot_join_unpublished_course(client: AsyncClient) -> None:
+    teacher = await login(client, "draft-owner@example.com", "teacher")
+    student = await login(client, "draft-student@example.com", "student")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "Draft Course"},
+    )
+
+    response = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": created.json()["code"]},
+    )
+
+    assert response.status_code == 409

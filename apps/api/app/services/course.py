@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.course import Course, CourseMember
+from app.models.course import Course, CourseMember, CourseStatus
 from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseJoinRequest, CourseMemberResponse
 
@@ -19,6 +19,14 @@ class TeacherRoleRequiredError(Exception):
 
 
 class StudentRoleRequiredError(Exception):
+    pass
+
+
+class CoursePublishForbiddenError(Exception):
+    pass
+
+
+class CourseNotPublishedError(Exception):
     pass
 
 
@@ -90,6 +98,9 @@ async def join_course_by_code(
     course = await session.scalar(select(Course).where(Course.code == payload.code))
     if course is None:
         raise CourseNotFoundError
+
+    if course.status != CourseStatus.PUBLISHED:
+        raise CourseNotPublishedError
 
     existing_membership = await session.scalar(
         select(CourseMember.id).where(
@@ -167,3 +178,24 @@ async def list_course_members(
         )
         for membership, user in rows.all()
     ]
+
+
+async def publish_course(session: AsyncSession, course_id: UUID, user_id: UUID) -> Course:
+    course = await session.get(Course, course_id)
+    if course is None:
+        raise CourseNotFoundError
+
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == user_id,
+        )
+    )
+    if membership is None or membership.role != UserRole.TEACHER:
+        raise CoursePublishForbiddenError
+
+    if course.status != CourseStatus.PUBLISHED:
+        course.status = CourseStatus.PUBLISHED
+        await session.commit()
+        await session.refresh(course)
+    return course

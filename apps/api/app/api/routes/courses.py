@@ -13,6 +13,8 @@ from app.schemas.course import (
 from app.services.course import (
     CourseMembershipRequiredError,
     CourseNotFoundError,
+    CourseNotPublishedError,
+    CoursePublishForbiddenError,
     StudentRoleRequiredError,
     TeacherRoleRequiredError,
     create_course,
@@ -20,6 +22,7 @@ from app.services.course import (
     join_course_by_code,
     list_course_members,
     list_courses_for_user,
+    publish_course,
 )
 
 router = APIRouter(prefix="/courses", tags=["courses"])
@@ -62,6 +65,31 @@ async def join_course(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only students can join courses by code",
+        ) from exc
+    except CourseNotPublishedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Course is not published",
+        ) from exc
+
+
+@router.post("/{course_id}/publish", response_model=CourseResponse)
+async def publish_course_endpoint(
+    course_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> Course:
+    try:
+        return await publish_course(session, course_id, current_user.id)
+    except CourseNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        ) from exc
+    except CoursePublishForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can publish the course",
         ) from exc
 
 
