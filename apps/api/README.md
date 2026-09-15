@@ -39,6 +39,19 @@ or unknown.
 
 Replace this mechanism before any deployed or production use.
 
+## Course management
+
+```text
+POST /api/v1/courses
+GET  /api/v1/courses
+GET  /api/v1/courses/{course_id}
+```
+
+Teachers create draft courses with a generated eight-character code and become
+course members automatically. Course lists and detail reads are restricted to
+members. Invite-code joining, member lists, publishing workflows, and chat are
+not part of this step.
+
 Tests and lint:
 
 ```powershell
