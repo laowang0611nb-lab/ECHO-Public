@@ -60,11 +60,14 @@ must happen before students can join. Chat remains out of scope for this step.
 
 ```text
 POST /api/v1/courses/{course_id}/documents
+POST /api/v1/documents/{document_id}/parse
 ```
 
 Course teachers can upload PDF files. The default development adapter stores
 files under `tmp/uploads`; the storage interface is isolated so MinIO or OSS
-can replace it later. Parsing and page extraction are not implemented yet.
+can replace it later. Teachers can parse an uploaded PDF into page-level text;
+successful parsing updates `page_count` and marks the document `ready`, while
+invalid files are marked `failed`.
 
 Tests and lint:
 

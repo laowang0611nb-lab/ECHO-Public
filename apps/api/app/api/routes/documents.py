@@ -8,7 +8,15 @@ from app.core.config import settings
 from app.models.document import Document
 from app.schemas.document import DocumentResponse
 from app.services.course import CourseNotFoundError
-from app.services.document import DocumentUploadForbiddenError, upload_course_document
+from app.services.document import (
+    DocumentFileMissingError,
+    DocumentNotFoundError,
+    DocumentParseError,
+    DocumentParseForbiddenError,
+    DocumentUploadForbiddenError,
+    parse_document,
+    upload_course_document,
+)
 from app.services.storage import DocumentTooLargeError, UnsupportedDocumentTypeError
 
 router = APIRouter(tags=["documents"])
@@ -54,4 +62,35 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="Document exceeds the configured upload limit",
+        ) from exc
+
+
+@router.post("/documents/{document_id}/parse", response_model=DocumentResponse)
+async def parse_uploaded_document(
+    document_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+    storage: DocumentStorageDep,
+) -> Document:
+    try:
+        return await parse_document(session, storage, document_id, current_user.id)
+    except DocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        ) from exc
+    except DocumentFileMissingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Stored document file is missing",
+        ) from exc
+    except DocumentParseForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can parse documents",
+        ) from exc
+    except DocumentParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unable to parse PDF document",
         ) from exc

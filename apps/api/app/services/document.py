@@ -1,12 +1,14 @@
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import anyio
 from fastapi import UploadFile
-from sqlalchemy import select
+from pypdf import PdfReader
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import Course, CourseMember
-from app.models.document import Document
+from app.models.document import Document, DocumentPage, DocumentStatus
 from app.models.user import User, UserRole
 from app.services.course import CourseNotFoundError
 from app.services.storage import LocalDocumentStorage, UnsupportedDocumentTypeError
@@ -15,6 +17,22 @@ PDF_CONTENT_TYPES = {"application/pdf", "application/x-pdf"}
 
 
 class DocumentUploadForbiddenError(Exception):
+    pass
+
+
+class DocumentNotFoundError(Exception):
+    pass
+
+
+class DocumentParseForbiddenError(Exception):
+    pass
+
+
+class DocumentFileMissingError(Exception):
+    pass
+
+
+class DocumentParseError(Exception):
     pass
 
 
@@ -70,5 +88,64 @@ async def upload_course_document(
         storage.delete(storage_key)
         raise
 
+    await session.refresh(document)
+    return document
+
+
+def _extract_pdf_pages(path: Path) -> list[str]:
+    reader = PdfReader(str(path))
+    return [(page.extract_text() or "") for page in reader.pages]
+
+
+async def parse_document(
+    session: AsyncSession,
+    storage: LocalDocumentStorage,
+    document_id: UUID,
+    requester_id: UUID,
+) -> Document:
+    document = await session.get(Document, document_id)
+    if document is None:
+        raise DocumentNotFoundError
+
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == document.course_id,
+            CourseMember.user_id == requester_id,
+        )
+    )
+    if membership is None or membership.role != UserRole.TEACHER:
+        raise DocumentParseForbiddenError
+
+    path = storage.path_for(document.storage_key)
+    if not path.is_file():
+        document.status = DocumentStatus.FAILED
+        await session.commit()
+        raise DocumentFileMissingError
+
+    document.status = DocumentStatus.PARSING
+    await session.commit()
+
+    try:
+        page_texts = await anyio.to_thread.run_sync(_extract_pdf_pages, path)
+    except Exception as exc:
+        document.status = DocumentStatus.FAILED
+        await session.commit()
+        raise DocumentParseError from exc
+
+    await session.execute(delete(DocumentPage).where(DocumentPage.document_id == document.id))
+    session.add_all(
+        [
+            DocumentPage(
+                document_id=document.id,
+                page_number=page_number,
+                text=text or None,
+                char_count=len(text),
+            )
+            for page_number, text in enumerate(page_texts, start=1)
+        ]
+    )
+    document.page_count = len(page_texts)
+    document.status = DocumentStatus.READY
+    await session.commit()
     await session.refresh(document)
     return document
