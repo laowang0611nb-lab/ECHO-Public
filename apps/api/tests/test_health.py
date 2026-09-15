@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
 from app.main import app
 
 
@@ -11,6 +12,6 @@ def test_health() -> None:
     assert response.json() == {
         "status": "ok",
         "service": "ECHO API",
-        "version": "0.0.3",
+        "version": settings.app_version,
         "environment": "development",
     }

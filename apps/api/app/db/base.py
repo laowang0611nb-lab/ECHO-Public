@@ -1,5 +1,5 @@
-from sqlalchemy.orm import DeclarativeBase
+from app.db.base_class import Base
+from app.models.course import Course, CourseInvite, CourseMember
+from app.models.user import User
 
-
-class Base(DeclarativeBase):
-    pass
+__all__ = ["Base", "Course", "CourseInvite", "CourseMember", "User"]

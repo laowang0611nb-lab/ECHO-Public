@@ -28,5 +28,20 @@ Tests and lint:
 .\.venv\Scripts\python -m ruff check .
 ```
 
+Database migrations:
+
+```powershell
+.\.venv\Scripts\alembic.exe upgrade head
+```
+
+Implemented domain models:
+
+- `User`: identity and teacher/student role.
+- `Course`: course metadata, join code, draft/published status.
+- `CourseMember`: course membership and role.
+- `CourseInvite`: invite lifecycle, usage limit, and expiry metadata.
+
+The initial migration is `alembic/versions/441be7725f7c_create_core_identity_and_course_tables.py`.
+
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.
