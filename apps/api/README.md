@@ -80,6 +80,8 @@ Teachers can generate chapters and knowledge points from a parsed document.
 Generation uses a Qwen-compatible chat completions endpoint configured by
 `ECHO_LLM_API_KEY`, `ECHO_LLM_BASE_URL`, and `ECHO_LLM_MODEL`. Regeneration
 replaces the previous structure for that document.
+Duplicate knowledge-point names are normalized within a chapter. Documents above
+the configured context limit return `422` instead of being silently truncated.
 
 Tests and lint:
 

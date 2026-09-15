@@ -95,6 +95,8 @@ async def join_course_by_code(
     if user.role != UserRole.STUDENT:
         raise StudentRoleRequiredError
 
+    user_id = user.id
+
     course = await session.scalar(select(Course).where(Course.code == payload.code))
     if course is None:
         raise CourseNotFoundError
@@ -102,10 +104,12 @@ async def join_course_by_code(
     if course.status != CourseStatus.PUBLISHED:
         raise CourseNotPublishedError
 
+    course_id = course.id
+
     existing_membership = await session.scalar(
         select(CourseMember.id).where(
-            CourseMember.course_id == course.id,
-            CourseMember.user_id == user.id,
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == user_id,
         )
     )
     if existing_membership is not None:
@@ -113,8 +117,8 @@ async def join_course_by_code(
 
     session.add(
         CourseMember(
-            course_id=course.id,
-            user_id=user.id,
+            course_id=course_id,
+            user_id=user_id,
             role=UserRole.STUDENT,
         )
     )
@@ -124,12 +128,15 @@ async def join_course_by_code(
         await session.rollback()
         existing_membership = await session.scalar(
             select(CourseMember.id).where(
-                CourseMember.course_id == course.id,
-                CourseMember.user_id == user.id,
+                CourseMember.course_id == course_id,
+                CourseMember.user_id == user_id,
             )
         )
         if existing_membership is None:
             raise
+        course = await session.get(Course, course_id)
+        if course is None:
+            raise CourseNotFoundError from None
     return course
 
 

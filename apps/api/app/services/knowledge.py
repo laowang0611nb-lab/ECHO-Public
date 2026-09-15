@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import delete, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -26,6 +27,10 @@ class KnowledgeGenerationForbiddenError(Exception):
 
 
 class KnowledgeStructureEmptyError(Exception):
+    pass
+
+
+class KnowledgeStructureConflictError(Exception):
     pass
 
 
@@ -114,7 +119,11 @@ async def generate_document_structure(
         session.add(chapter)
         chapters.append(chapter)
 
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise KnowledgeStructureConflictError from exc
     chapter_ids = [chapter.id for chapter in chapters]
     result = await session.scalars(
         select(Chapter)

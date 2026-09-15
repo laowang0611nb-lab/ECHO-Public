@@ -10,11 +10,16 @@ from app.services.knowledge import (
     KnowledgeDocumentNotFoundError,
     KnowledgeDocumentNotReadyError,
     KnowledgeGenerationForbiddenError,
+    KnowledgeStructureConflictError,
     KnowledgeStructureEmptyError,
     generate_document_structure,
     list_course_chapters,
 )
-from app.services.llm import LLMConfigurationError, LLMProviderError
+from app.services.llm import (
+    LLMConfigurationError,
+    LLMContextLimitError,
+    LLMProviderError,
+)
 
 router = APIRouter(tags=["knowledge"])
 
@@ -56,10 +61,20 @@ async def generate_structure(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Generated structure is empty",
         ) from exc
+    except KnowledgeStructureConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Generated structure conflicts with existing data",
+        ) from exc
     except LLMConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="LLM provider is not configured",
+        ) from exc
+    except LLMContextLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Document exceeds the configured LLM context limit",
         ) from exc
     except LLMProviderError as exc:
         raise HTTPException(

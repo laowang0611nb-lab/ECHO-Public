@@ -15,6 +15,10 @@ class LLMProviderError(Exception):
     pass
 
 
+class LLMContextLimitError(LLMProviderError):
+    pass
+
+
 class KnowledgeStructureProvider(Protocol):
     async def generate(self, pages: list[str]) -> list[ChapterDraft]: ...
 
@@ -41,7 +45,9 @@ class QwenKnowledgeStructureProvider:
 
         context = "\n\n".join(
             f"[Page {index}]\n{text}" for index, text in enumerate(pages, start=1)
-        )[: self.max_context_chars]
+        )
+        if len(context) > self.max_context_chars:
+            raise LLMContextLimitError("Document exceeds the configured LLM context limit")
         prompt = (
             "Analyze the course material and return strict JSON only. "
             'The JSON shape must be {"chapters":[{"title":string,'
@@ -92,11 +98,29 @@ class QwenKnowledgeStructureProvider:
 
 
 def _extract_json(content: str) -> str:
-    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, flags=re.DOTALL)
-    if fenced:
-        return fenced.group(1)
-    start = content.find("{")
-    end = content.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return content
-    return content[start : end + 1]
+    candidates: list[str] = [
+        match.group(1).strip()
+        for match in re.finditer(
+            r"```(?:json)?\s*(.*?)\s*```",
+            content,
+            flags=re.DOTALL,
+        )
+    ]
+
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", content):
+        try:
+            _, end = decoder.raw_decode(content[match.start() :])
+        except json.JSONDecodeError:
+            continue
+        candidates.append(content[match.start() : match.start() + end])
+
+    candidates.append(content.strip())
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return candidate
+    return content
