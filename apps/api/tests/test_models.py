@@ -3,11 +3,14 @@ from app.db.base import Base
 
 def test_core_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
+        "chapters",
         "document_pages",
         "documents",
         "course_invites",
         "course_members",
         "courses",
+        "knowledge_points",
+        "knowledge_relations",
         "users",
     }
 

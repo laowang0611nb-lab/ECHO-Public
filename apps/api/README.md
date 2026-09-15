@@ -90,11 +90,15 @@ Implemented domain models:
 - `CourseInvite`: invite lifecycle, usage limit, and expiry metadata.
 - `Document`: uploaded course material metadata and parse status.
 - `DocumentPage`: extracted text and page-level metadata.
+- `Chapter`: generated chapter structure tied to a course document.
+- `KnowledgePoint`: knowledge points belonging to a chapter.
+- `KnowledgeRelation`: typed prerequisite/related edges between knowledge points.
 
 Migrations:
 
 - `441be7725f7c`: core identity and course tables.
 - `8b1c2d3e4f50`: document and document page tables.
+- `c2d3e4f5a6b7`: chapters, knowledge points, and relation tables.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.
