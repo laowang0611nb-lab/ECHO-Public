@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db_session
 from app.models.user import User
+from app.services.llm import QwenKnowledgeStructureProvider
 from app.services.storage import LocalDocumentStorage
 
 DBSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -17,6 +18,22 @@ def get_document_storage() -> LocalDocumentStorage:
 
 
 DocumentStorageDep = Annotated[LocalDocumentStorage, Depends(get_document_storage)]
+
+
+def get_knowledge_structure_provider() -> QwenKnowledgeStructureProvider:
+    return QwenKnowledgeStructureProvider(
+        api_key=settings.llm_api_key,
+        base_url=settings.llm_base_url,
+        model=settings.llm_model,
+        timeout_seconds=settings.llm_timeout_seconds,
+        max_context_chars=settings.llm_max_context_chars,
+    )
+
+
+KnowledgeProviderDep = Annotated[
+    QwenKnowledgeStructureProvider,
+    Depends(get_knowledge_structure_provider),
+]
 
 
 async def get_current_user(

@@ -69,6 +69,18 @@ can replace it later. Teachers can parse an uploaded PDF into page-level text;
 successful parsing updates `page_count` and marks the document `ready`, while
 invalid files are marked `failed`.
 
+## Knowledge structure generation
+
+```text
+POST /api/v1/documents/{document_id}/generate-structure
+GET  /api/v1/courses/{course_id}/chapters
+```
+
+Teachers can generate chapters and knowledge points from a parsed document.
+Generation uses a Qwen-compatible chat completions endpoint configured by
+`ECHO_LLM_API_KEY`, `ECHO_LLM_BASE_URL`, and `ECHO_LLM_MODEL`. Regeneration
+replaces the previous structure for that document.
+
 Tests and lint:
 
 ```powershell

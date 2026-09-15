@@ -6,10 +6,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.api.dependencies import get_document_storage
+from app.api.dependencies import get_document_storage, get_knowledge_structure_provider
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import app
+from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft
 from app.services.storage import LocalDocumentStorage
 
 
@@ -47,10 +48,40 @@ async def document_storage(tmp_path: Path) -> AsyncIterator[LocalDocumentStorage
         app.dependency_overrides.pop(get_document_storage, None)
 
 
+class FakeKnowledgeStructureProvider:
+    async def generate(self, pages: list[str]) -> list[ChapterDraft]:
+        return [
+            ChapterDraft(
+                title="Chapter 1",
+                summary="Generated chapter",
+                knowledge_points=[
+                    KnowledgePointDraft(name="Point 1", description="First point"),
+                    KnowledgePointDraft(name="Point 2", description="Second point"),
+                ],
+            ),
+            ChapterDraft(
+                title="Chapter 2",
+                summary=None,
+                knowledge_points=[KnowledgePointDraft(name="Point 3")],
+            ),
+        ]
+
+
+@pytest_asyncio.fixture
+async def knowledge_provider() -> AsyncIterator[FakeKnowledgeStructureProvider]:
+    provider = FakeKnowledgeStructureProvider()
+    app.dependency_overrides[get_knowledge_structure_provider] = lambda: provider
+    try:
+        yield provider
+    finally:
+        app.dependency_overrides.pop(get_knowledge_structure_provider, None)
+
+
 @pytest_asyncio.fixture
 async def client(
     session_factory: async_sessionmaker[AsyncSession],
     document_storage: LocalDocumentStorage,
+    knowledge_provider: FakeKnowledgeStructureProvider,
 ) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as test_client:
