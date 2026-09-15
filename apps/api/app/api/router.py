@@ -6,6 +6,7 @@ from app.api.routes import (
     chunks,
     courses,
     dashboard,
+    dashboard_details,
     documents,
     health,
     knowledge,
@@ -19,6 +20,7 @@ api_router.include_router(auth.router)
 api_router.include_router(chat.router)
 api_router.include_router(chunks.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(dashboard_details.router)
 api_router.include_router(courses.router)
 api_router.include_router(documents.router)
 api_router.include_router(knowledge.router)

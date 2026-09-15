@@ -142,10 +142,15 @@ read their own state; teachers can read student state.
 
 ```text
 GET /api/v1/courses/{course_id}/dashboard
+GET /api/v1/courses/{course_id}/chapters/analytics
+GET /api/v1/courses/{course_id}/knowledge-points/{knowledge_point_id}/analytics
+GET /api/v1/courses/{course_id}/students/{student_id}/learning
 ```
 
 Course teachers receive student counts, seven-day active students, seven-day
 question volume, total events, average mastery, and high-risk knowledge points.
+Additional drill-down endpoints return chapter averages, per-knowledge-point
+student distributions, and a student's recent learning evidence.
 
 Tests and lint:
 
