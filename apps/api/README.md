@@ -93,6 +93,17 @@ Parsed pages are split into overlapping chunks with page metadata. Re-running
 chunking replaces the previous chunks for the document. Embeddings and vector
 indexing are not implemented yet.
 
+## Embeddings and retrieval
+
+```text
+POST /api/v1/documents/{document_id}/embeddings
+POST /api/v1/courses/{course_id}/search
+```
+
+Chunks are embedded in batches using a Qwen-compatible embeddings endpoint.
+PostgreSQL search uses pgvector cosine distance; SQLite uses the same cosine
+ranking in memory for development and tests.
+
 Tests and lint:
 
 ```powershell
@@ -125,6 +136,7 @@ Migrations:
 - `8b1c2d3e4f50`: document and document page tables.
 - `c2d3e4f5a6b7`: chapters, knowledge points, and relation tables.
 - `d3e4f5a6b7c8`: searchable knowledge chunk table.
+- `e4f5a6b7c8d9`: 1024-dimensional knowledge chunk embeddings.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

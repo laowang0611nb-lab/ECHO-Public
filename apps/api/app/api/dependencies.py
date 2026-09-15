@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db.session import get_db_session
 from app.models.user import User
+from app.services.embedding import QwenEmbeddingProvider
 from app.services.llm import QwenKnowledgeStructureProvider
 from app.services.storage import LocalDocumentStorage
 
@@ -33,6 +34,23 @@ def get_knowledge_structure_provider() -> QwenKnowledgeStructureProvider:
 KnowledgeProviderDep = Annotated[
     QwenKnowledgeStructureProvider,
     Depends(get_knowledge_structure_provider),
+]
+
+
+def get_embedding_provider() -> QwenEmbeddingProvider:
+    return QwenEmbeddingProvider(
+        api_key=settings.embedding_api_key,
+        base_url=settings.embedding_base_url,
+        model=settings.embedding_model,
+        dimension=settings.embedding_dimension,
+        timeout_seconds=settings.llm_timeout_seconds,
+        batch_size=settings.embedding_batch_size,
+    )
+
+
+EmbeddingProviderDep = Annotated[
+    QwenEmbeddingProvider,
+    Depends(get_embedding_provider),
 ]
 
 

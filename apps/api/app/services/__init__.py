@@ -1,5 +1,25 @@
 """Application service layer."""
 
-from app.services import auth, chunking, course, document, knowledge, llm, storage
+from app.services import (
+    auth,
+    chunking,
+    course,
+    document,
+    embedding,
+    knowledge,
+    llm,
+    search,
+    storage,
+)
 
-__all__ = ["auth", "chunking", "course", "document", "knowledge", "llm", "storage"]
+__all__ = [
+    "auth",
+    "chunking",
+    "course",
+    "document",
+    "embedding",
+    "knowledge",
+    "llm",
+    "search",
+    "storage",
+]

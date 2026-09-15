@@ -6,7 +6,11 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
-from app.api.dependencies import get_document_storage, get_knowledge_structure_provider
+from app.api.dependencies import (
+    get_document_storage,
+    get_embedding_provider,
+    get_knowledge_structure_provider,
+)
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import app
@@ -48,6 +52,17 @@ async def document_storage(tmp_path: Path) -> AsyncIterator[LocalDocumentStorage
         app.dependency_overrides.pop(get_document_storage, None)
 
 
+class FakeEmbeddingProvider:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(text) for text in texts]
+
+    @staticmethod
+    def _vector(text: str) -> list[float]:
+        vector = [0.0] * 1024
+        vector[0 if "alpha" in text.casefold() else 1] = 1.0
+        return vector
+
+
 class FakeKnowledgeStructureProvider:
     async def generate(self, pages: list[str]) -> list[ChapterDraft]:
         return [
@@ -78,9 +93,20 @@ async def knowledge_provider() -> AsyncIterator[FakeKnowledgeStructureProvider]:
 
 
 @pytest_asyncio.fixture
+async def embedding_provider() -> AsyncIterator[FakeEmbeddingProvider]:
+    provider = FakeEmbeddingProvider()
+    app.dependency_overrides[get_embedding_provider] = lambda: provider
+    try:
+        yield provider
+    finally:
+        app.dependency_overrides.pop(get_embedding_provider, None)
+
+
+@pytest_asyncio.fixture
 async def client(
     session_factory: async_sessionmaker[AsyncSession],
     document_storage: LocalDocumentStorage,
+    embedding_provider: FakeEmbeddingProvider,
     knowledge_provider: FakeKnowledgeStructureProvider,
 ) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
