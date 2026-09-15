@@ -1,4 +1,7 @@
+import pytest
 from httpx import AsyncClient
+
+from app.core.config import settings
 
 LOGIN_PAYLOAD = {
     "email": "teacher@example.com",
@@ -71,3 +74,16 @@ async def test_me_with_unknown_user_returns_401(client: AsyncClient) -> None:
     )
 
     assert response.status_code == 401
+
+
+async def test_development_auth_can_be_disabled(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "development_auth_enabled", False)
+
+    login_response = await client.post("/api/v1/auth/login", json=LOGIN_PAYLOAD)
+    me_response = await client.get("/api/v1/auth/me")
+
+    assert login_response.status_code == 403
+    assert me_response.status_code == 401

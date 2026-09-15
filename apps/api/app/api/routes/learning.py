@@ -12,6 +12,8 @@ from app.services.course import CourseMembershipRequiredError, CourseNotFoundErr
 from app.services.learning import (
     KnowledgePointNotFoundError,
     LearningEventForbiddenError,
+    LearningEventReferenceMismatchError,
+    LearningEventStudentNotFoundError,
     StudentMasteryForbiddenError,
     ensure_course_teacher,
     list_student_mastery,
@@ -54,6 +56,16 @@ async def create_learning_event(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Knowledge point not found",
+        ) from exc
+    except LearningEventStudentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student is not a member of this course",
+        ) from exc
+    except LearningEventReferenceMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Learning event references do not belong to the student and course",
         ) from exc
 
 

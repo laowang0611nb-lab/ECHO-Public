@@ -104,7 +104,7 @@ async def test_conversation_and_sse_message_flow(
     assert messages_response.status_code == 200
     messages = messages_response.json()
     assert [message["role"] for message in messages] == ["user", "assistant"]
-    assert messages[1]["content"] == "Echo answer"
+    assert messages[1]["content"] == "Echo [1] answer"
     assert messages[1]["citations"]
 
     async with session_factory() as session:

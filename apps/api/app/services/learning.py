@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.chat import Conversation, Message
 from app.models.course import CourseMember
 from app.models.knowledge import KnowledgePoint
 from app.models.learning import (
@@ -39,6 +40,14 @@ class LearningEventForbiddenError(Exception):
     pass
 
 
+class LearningEventStudentNotFoundError(Exception):
+    pass
+
+
+class LearningEventReferenceMismatchError(Exception):
+    pass
+
+
 async def ensure_course_teacher(
     session: AsyncSession,
     course_id: UUID,
@@ -63,7 +72,44 @@ async def record_learning_event(
     session: AsyncSession,
     course_id: UUID,
     payload: LearningEventCreate,
+    *,
+    require_student_membership: bool = True,
 ) -> LearningEvent:
+    membership_query = select(CourseMember.id).where(
+        CourseMember.course_id == course_id,
+        CourseMember.user_id == payload.student_id,
+    )
+    if require_student_membership:
+        membership_query = membership_query.where(CourseMember.role == UserRole.STUDENT)
+    student_membership = await session.scalar(membership_query)
+    if student_membership is None:
+        raise LearningEventStudentNotFoundError
+
+    if payload.conversation_id is not None:
+        conversation = await session.get(Conversation, payload.conversation_id)
+        if (
+            conversation is None
+            or conversation.course_id != course_id
+            or conversation.user_id != payload.student_id
+        ):
+            raise LearningEventReferenceMismatchError
+
+    if payload.message_id is not None:
+        message = await session.get(Message, payload.message_id)
+        if message is None:
+            raise LearningEventReferenceMismatchError
+        message_conversation = await session.get(Conversation, message.conversation_id)
+        if (
+            message_conversation is None
+            or message_conversation.course_id != course_id
+            or message_conversation.user_id != payload.student_id
+            or (
+                payload.conversation_id is not None
+                and message.conversation_id != payload.conversation_id
+            )
+        ):
+            raise LearningEventReferenceMismatchError
+
     knowledge_point_id = payload.knowledge_point_id
     if knowledge_point_id is not None:
         knowledge_point = await session.scalar(

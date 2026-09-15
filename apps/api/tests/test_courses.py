@@ -311,3 +311,29 @@ async def test_student_cannot_join_unpublished_course(client: AsyncClient) -> No
     )
 
     assert response.status_code == 409
+
+
+async def test_student_member_cannot_list_emails(client: AsyncClient) -> None:
+    teacher = await login(client, "privacy-teacher@example.com", "teacher")
+    student = await login(client, "privacy-student@example.com", "student")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "Privacy Course"},
+    )
+    await client.post(
+        f"/api/v1/courses/{created.json()['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": created.json()["code"]},
+    )
+
+    response = await client.get(
+        f"/api/v1/courses/{created.json()['id']}/members",
+        headers=auth_headers(student),
+    )
+
+    assert response.status_code == 403

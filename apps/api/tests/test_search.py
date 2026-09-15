@@ -129,6 +129,30 @@ async def test_student_cannot_embed_chunks(
     assert response.status_code == 403
 
 
+async def test_search_filters_unrelated_chunks(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "threshold-teacher@example.com", "teacher")
+    course = await create_chunked_document(client, session_factory, teacher)
+    document_id = None
+    async with session_factory() as session:
+        document_id = await session.scalar(select(KnowledgeChunk.document_id).limit(1))
+    await client.post(
+        f"/api/v1/documents/{document_id}/embeddings",
+        headers=auth_headers(teacher),
+    )
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/search",
+        headers=auth_headers(teacher),
+        json={"query": "gamma unrelated", "limit": 5},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 async def test_non_member_cannot_search_course(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

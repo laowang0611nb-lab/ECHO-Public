@@ -177,3 +177,57 @@ async def test_student_cannot_record_learning_event(
     )
 
     assert response.status_code == 403
+
+
+async def test_learning_event_rejects_non_member_student(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "event-owner@example.com", "teacher")
+    member = await login(client, "event-member@example.com", "student")
+    outsider = await login(client, "event-outsider@example.com", "student")
+    course, point_id = await create_course_and_point(
+        client,
+        session_factory,
+        teacher,
+        member,
+    )
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/learning-events",
+        headers=auth_headers(teacher),
+        json={
+            "student_id": outsider["id"],
+            "knowledge_point_id": str(point_id),
+            "event_type": "quiz_wrong",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+async def test_learning_event_rejects_mismatched_references(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "event-ref-teacher@example.com", "teacher")
+    student = await login(client, "event-ref-student@example.com", "student")
+    course, point_id = await create_course_and_point(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/learning-events",
+        headers=auth_headers(teacher),
+        json={
+            "student_id": student["id"],
+            "knowledge_point_id": str(point_id),
+            "conversation_id": str(uuid4()),
+            "event_type": "quiz_wrong",
+        },
+    )
+
+    assert response.status_code == 409

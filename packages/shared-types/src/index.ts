@@ -5,6 +5,7 @@ export type ChatStreamEventName =
   | "component"
   | "citation"
   | "learning_event"
+  | "error"
   | "done";
 
 export type LearningEventType =

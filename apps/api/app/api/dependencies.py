@@ -74,6 +74,8 @@ async def get_current_user(
     session: DBSession,
     x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
 ) -> User:
+    if not settings.development_auth_enabled:
+        raise _invalid_user_header()
     if x_user_id is None or not x_user_id.strip():
         raise _invalid_user_header()
 

@@ -11,6 +11,7 @@ from app.schemas.course import (
     CourseResponse,
 )
 from app.services.course import (
+    CourseMemberListForbiddenError,
     CourseMembershipRequiredError,
     CourseNotFoundError,
     CourseNotPublishedError,
@@ -110,6 +111,11 @@ async def get_members(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Course membership required",
+        ) from exc
+    except CourseMemberListForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can view member emails",
         ) from exc
 
 

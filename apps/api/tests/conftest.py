@@ -59,7 +59,7 @@ class FakeChatProvider:
 
     async def stream(self, messages: list[dict[str, str]]):
         self.last_messages = messages
-        yield "Echo "
+        yield "Echo [1] "
         yield "answer"
 
 
@@ -70,7 +70,13 @@ class FakeEmbeddingProvider:
     @staticmethod
     def _vector(text: str) -> list[float]:
         vector = [0.0] * 1024
-        vector[0 if "alpha" in text.casefold() else 1] = 1.0
+        normalized = text.casefold()
+        if "alpha" in normalized:
+            vector[0] = 1.0
+        elif "beta" in normalized:
+            vector[1] = 1.0
+        else:
+            vector[2] = 1.0
         return vector
 
 

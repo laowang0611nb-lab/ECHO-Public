@@ -38,6 +38,8 @@ header and returns that user, or `401` when the header is absent, malformed,
 or unknown.
 
 Replace this mechanism before any deployed or production use.
+Set `ECHO_ENVIRONMENT=production` and `ECHO_DEVELOPMENT_AUTH_ENABLED=false`.
+The application refuses production startup while development auth remains on.
 
 ## Course management
 
@@ -103,6 +105,7 @@ POST /api/v1/courses/{course_id}/search
 Chunks are embedded in batches using a Qwen-compatible embeddings endpoint.
 PostgreSQL search uses pgvector cosine distance; SQLite uses the same cosine
 ranking in memory for development and tests.
+Results above `ECHO_RETRIEVAL_MAX_DISTANCE` are discarded before the prompt is built.
 
 ## Chat and SSE
 

@@ -4,6 +4,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.course import CourseMember
 from app.models.knowledge import KnowledgeChunk
 from app.models.user import UserRole
@@ -76,7 +77,9 @@ async def search_course_chunks(
     requester_id: UUID,
     query: str,
     limit: int,
+    max_distance: float | None = None,
 ) -> list[ChunkSearchResult]:
+    threshold = max_distance if max_distance is not None else settings.retrieval_max_distance
     await get_course_for_member(session, course_id, requester_id)
     query_vectors = await provider.embed([query])
     if not query_vectors:
@@ -85,11 +88,13 @@ async def search_course_chunks(
 
     bind = session.get_bind()
     if bind.dialect.name == "postgresql":
-        distance = KnowledgeChunk.embedding.cosine_distance(query_vector).label("distance")
+        distance_expression = KnowledgeChunk.embedding.cosine_distance(query_vector)
+        distance = distance_expression.label("distance")
         rows = await session.execute(
             select(KnowledgeChunk, distance)
             .where(
                 KnowledgeChunk.course_id == course_id,
+                distance_expression <= threshold,
                 KnowledgeChunk.embedding.is_not(None),
             )
             .order_by(distance)
@@ -125,6 +130,7 @@ async def search_course_chunks(
         ),
         key=lambda item: item[0],
     )
+    ranked = [item for item in ranked if item[0] <= threshold]
     return [
         ChunkSearchResult(
             chunk_id=chunk.id,

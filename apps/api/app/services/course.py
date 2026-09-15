@@ -38,6 +38,10 @@ class CourseMembershipRequiredError(Exception):
     pass
 
 
+class CourseMemberListForbiddenError(Exception):
+    pass
+
+
 def generate_course_code() -> str:
     return "".join(secrets.choice(COURSE_CODE_ALPHABET) for _ in range(COURSE_CODE_LENGTH))
 
@@ -166,6 +170,14 @@ async def list_course_members(
     requester_id: UUID,
 ) -> list[CourseMemberResponse]:
     await get_course_for_member(session, course_id, requester_id)
+    requester_membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == requester_id,
+        )
+    )
+    if requester_membership is None or requester_membership.role != UserRole.TEACHER:
+        raise CourseMemberListForbiddenError
 
     rows = await session.execute(
         select(CourseMember, User)
