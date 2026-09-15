@@ -9,3 +9,19 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 .env
+
+# Node.js
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Expo
+.expo/
+web-build/
+expo-env.d.ts
+/apps/mobile/android/
+/apps/mobile/ios/
