@@ -95,8 +95,9 @@ separate follow-up because it requires combining mastery and relation data.
 
 Teachers can generate chapters and knowledge points from a parsed document.
 Generation uses a Qwen-compatible chat completions endpoint configured by
-`ECHO_LLM_API_KEY`, `ECHO_LLM_BASE_URL`, and `ECHO_LLM_MODEL`. Regeneration
-replaces the previous structure for that document.
+`ECHO_LLM_API_KEY`, `ECHO_LLM_BASE_URL`, and `ECHO_LLM_MODEL`. The default
+model is `qwen3.8-flash`. Regeneration replaces the previous structure for
+that document.
 Duplicate knowledge-point names are normalized within a chapter. Documents above
 the configured context limit return `422` instead of being silently truncated.
 
@@ -117,6 +118,8 @@ POST /api/v1/courses/{course_id}/search
 ```
 
 Chunks are embedded in batches using a Qwen-compatible embeddings endpoint.
+The default embedding batch size is 10, matching the `text-embedding-v3`
+provider limit.
 PostgreSQL search uses pgvector cosine distance; SQLite uses the same cosine
 ranking in memory for development and tests.
 Results above `ECHO_RETRIEVAL_MAX_DISTANCE` are discarded before the prompt is built.

@@ -10,6 +10,12 @@ def test_storage_root_is_absolute_and_project_scoped() -> None:
     assert API_ROOT.is_absolute()
 
 
+def test_qwen_model_defaults_match_runtime_limits() -> None:
+    assert settings.llm_model == "qwen3.8-flash"
+    assert settings.chat_model == "qwen3.8-flash"
+    assert settings.embedding_batch_size <= 10
+
+
 def test_production_rejects_development_auth() -> None:
     with pytest.raises(ValidationError):
         Settings(
