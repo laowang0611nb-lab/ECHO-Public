@@ -122,6 +122,33 @@ class KnowledgePointUpdate(BaseModel):
         return self
 
 
+class KnowledgePointMergeRequest(BaseModel):
+    target_knowledge_point_id: UUID
+    source_knowledge_point_ids: list[UUID] = Field(min_length=1, max_length=20)
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("knowledge point name must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_sources(self) -> "KnowledgePointMergeRequest":
+        unique_sources = list(dict.fromkeys(self.source_knowledge_point_ids))
+        if self.target_knowledge_point_id in unique_sources:
+            raise ValueError("target knowledge point cannot also be a source")
+        if not unique_sources:
+            raise ValueError("at least one source knowledge point is required")
+        self.source_knowledge_point_ids = unique_sources
+        return self
+
+
 class KnowledgePointResponse(KnowledgePointDraft):
     id: UUID
     course_id: UUID

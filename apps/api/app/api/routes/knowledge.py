@@ -9,6 +9,7 @@ from app.schemas.knowledge import (
     ChapterResponse,
     ChapterUpdate,
     KnowledgePointCreate,
+    KnowledgePointMergeRequest,
     KnowledgePointResponse,
     KnowledgePointUpdate,
 )
@@ -27,6 +28,7 @@ from app.services.knowledge import (
     delete_knowledge_point,
     generate_document_structure,
     list_course_chapters,
+    merge_knowledge_points,
     update_chapter,
     update_knowledge_point,
 )
@@ -207,6 +209,31 @@ async def patch_knowledge_point(
 ):
     try:
         return await update_knowledge_point(session, point_id, current_user.id, payload)
+    except (
+        KnowledgeNodeNotFoundError,
+        KnowledgeEditForbiddenError,
+        KnowledgeStructureConflictError,
+    ) as exc:
+        raise _translate_edit_error(exc) from exc
+
+
+@router.post(
+    "/courses/{course_id}/knowledge-points/merge",
+    response_model=KnowledgePointResponse,
+)
+async def merge_course_knowledge_points(
+    course_id: UUID,
+    payload: KnowledgePointMergeRequest,
+    current_user: CurrentUser,
+    session: DBSession,
+):
+    try:
+        return await merge_knowledge_points(
+            session,
+            course_id,
+            current_user.id,
+            payload,
+        )
     except (
         KnowledgeNodeNotFoundError,
         KnowledgeEditForbiddenError,

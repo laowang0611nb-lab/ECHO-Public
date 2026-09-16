@@ -106,6 +106,13 @@ export interface KnowledgePointUpdateRequest {
   order_index?: number;
 }
 
+export interface KnowledgePointMergeRequest {
+  target_knowledge_point_id: string;
+  source_knowledge_point_ids: string[];
+  name?: string;
+  description?: string;
+}
+
 export interface HighRiskKnowledgePoint {
   knowledge_point_id: string;
   name: string;

@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.39`
+> 冻结版本：`v0.0.40`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -44,9 +44,36 @@
 | POST | `/chapters/{chapter_id}/knowledge-points` | 课程教师 | 新建知识点 |
 | PATCH | `/knowledge-points/{knowledge_point_id}` | 课程教师 | 改名、排序或跨章节移动 |
 | DELETE | `/knowledge-points/{knowledge_point_id}` | 课程教师 | 删除知识点 |
+| POST | `/courses/{course_id}/knowledge-points/merge` | 课程教师 | 合并知识点并迁移学情 |
 | POST | `/documents/{document_id}/chunks` | 课程教师 | 重建文档知识块 |
 | POST | `/documents/{document_id}/embeddings` | 课程教师 | 生成 1024 维向量 |
 | POST | `/courses/{course_id}/search` | 课程成员 | 课程范围相似度检索 |
+
+### 3.1 知识点合并
+
+```text
+POST /api/v1/courses/{course_id}/knowledge-points/merge
+```
+
+请求示例：
+
+```json
+{
+  "target_knowledge_point_id": "uuid",
+  "source_knowledge_point_ids": ["uuid", "uuid"],
+  "name": "合并后的知识点名称",
+  "description": "可选的合并说明"
+}
+```
+
+合并行为：
+
+- 仅允许同一课程内的知识点合并。
+- 目标点不能同时出现在来源列表中。
+- 同一学生的来源与目标掌握分按平均值合并。
+- 来源知识点的事件和掌握快照迁移到目标点。
+- 来源知识关系会重连到目标点，自环和重复边会被丢弃。
+- 来源知识点在合并完成后删除。
 
 ## 4. 聊天与 SSE
 

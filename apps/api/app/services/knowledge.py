@@ -20,6 +20,7 @@ from app.schemas.knowledge import (
     ChapterDraft,
     ChapterUpdate,
     KnowledgePointCreate,
+    KnowledgePointMergeRequest,
     KnowledgePointUpdate,
 )
 from app.services.course import get_course_for_member
@@ -579,3 +580,144 @@ async def delete_knowledge_point(
     )
     await _set_point_order(session, chapter_id, remaining_ids)
     await session.commit()
+
+
+async def merge_knowledge_points(
+    session: AsyncSession,
+    course_id: UUID,
+    requester_id: UUID,
+    payload: KnowledgePointMergeRequest,
+) -> KnowledgePoint:
+    await _ensure_course_teacher(session, course_id, requester_id)
+    target = await session.get(KnowledgePoint, payload.target_knowledge_point_id)
+    if target is None or target.course_id != course_id:
+        raise KnowledgeNodeNotFoundError
+
+    sources = list(
+        await session.scalars(
+            select(KnowledgePoint).where(
+                KnowledgePoint.id.in_(payload.source_knowledge_point_ids),
+                KnowledgePoint.course_id == course_id,
+            )
+        )
+    )
+    if len(sources) != len(payload.source_knowledge_point_ids):
+        raise KnowledgeNodeNotFoundError
+
+    source_ids = {point.id for point in sources}
+    relation_rows = list(
+        await session.scalars(
+            select(KnowledgeRelation).where(KnowledgeRelation.course_id == course_id)
+        )
+    )
+    existing_relation_keys = {
+        (
+            relation.source_knowledge_point_id,
+            relation.target_knowledge_point_id,
+            relation.relation_type,
+        )
+        for relation in relation_rows
+        if relation.source_knowledge_point_id not in source_ids
+        and relation.target_knowledge_point_id not in source_ids
+    }
+    mapped_relation_keys: set[tuple[UUID, UUID, str]] = set()
+    for relation in relation_rows:
+        if (
+            relation.source_knowledge_point_id not in source_ids
+            and relation.target_knowledge_point_id not in source_ids
+        ):
+            continue
+        mapped_source = (
+            target.id
+            if relation.source_knowledge_point_id in source_ids
+            else relation.source_knowledge_point_id
+        )
+        mapped_target = (
+            target.id
+            if relation.target_knowledge_point_id in source_ids
+            else relation.target_knowledge_point_id
+        )
+        if mapped_source != mapped_target:
+            mapped_relation_keys.add((mapped_source, mapped_target, relation.relation_type))
+
+    await session.execute(
+        delete(KnowledgeRelation).where(
+            or_(
+                KnowledgeRelation.source_knowledge_point_id.in_(source_ids),
+                KnowledgeRelation.target_knowledge_point_id.in_(source_ids),
+            )
+        )
+    )
+    for source_id, target_id, relation_type in mapped_relation_keys - existing_relation_keys:
+        session.add(
+            KnowledgeRelation(
+                course_id=course_id,
+                source_knowledge_point_id=source_id,
+                target_knowledge_point_id=target_id,
+                relation_type=relation_type,
+            )
+        )
+
+    await session.execute(
+        update(LearningEvent)
+        .where(LearningEvent.knowledge_point_id.in_(source_ids))
+        .values(knowledge_point_id=target.id)
+    )
+    await session.execute(
+        update(MasterySnapshot)
+        .where(MasterySnapshot.knowledge_point_id.in_(source_ids))
+        .values(knowledge_point_id=target.id)
+    )
+
+    target_states = {
+        state.user_id: state
+        for state in await session.scalars(
+            select(StudentKnowledgeState).where(
+                StudentKnowledgeState.course_id == course_id,
+                StudentKnowledgeState.knowledge_point_id == target.id,
+            )
+        )
+    }
+    source_states = list(
+        await session.scalars(
+            select(StudentKnowledgeState).where(
+                StudentKnowledgeState.course_id == course_id,
+                StudentKnowledgeState.knowledge_point_id.in_(source_ids),
+            )
+        )
+    )
+    for state in source_states:
+        existing = target_states.get(state.user_id)
+        if existing is None:
+            state.knowledge_point_id = target.id
+            target_states[state.user_id] = state
+        else:
+            existing.score = round((existing.score + state.score) / 2, 2)
+            await session.delete(state)
+
+    if payload.name is not None:
+        target.name = payload.name
+    if payload.description is not None:
+        target.description = payload.description
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise KnowledgeStructureConflictError from exc
+    await session.execute(delete(KnowledgePoint).where(KnowledgePoint.id.in_(source_ids)))
+    await session.flush()
+    remaining_ids = list(
+        await session.scalars(
+            select(KnowledgePoint.id)
+            .where(KnowledgePoint.chapter_id == target.chapter_id)
+            .order_by(KnowledgePoint.order_index, KnowledgePoint.id)
+        )
+    )
+    await _set_point_order(session, target.chapter_id, remaining_ids)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise KnowledgeStructureConflictError from exc
+    await session.refresh(target)
+    return target

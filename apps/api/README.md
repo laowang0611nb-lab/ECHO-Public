@@ -89,9 +89,9 @@ PATCH  /api/v1/knowledge-points/{knowledge_point_id}
 DELETE /api/v1/knowledge-points/{knowledge_point_id}
 ```
 
-Knowledge points can be renamed, described, reordered, and moved between
-chapters in the same course. Merging multiple knowledge points remains a
-separate follow-up because it requires combining mastery and relation data.
+Knowledge points can be renamed, described, reordered, moved between
+chapters, merged, and deleted. Merging combines student mastery by average and
+migrates events, snapshots, and relation edges to the target point.
 
 Teachers can generate chapters and knowledge points from a parsed document.
 Generation uses a Qwen-compatible chat completions endpoint configured by

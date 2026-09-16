@@ -1,7 +1,20 @@
 from io import BytesIO
+from uuid import UUID
 
 from httpx import AsyncClient
 from pypdf import PdfWriter
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.models.course import CourseMember
+from app.models.knowledge import KnowledgeRelation
+from app.models.learning import (
+    LearningEvent,
+    LearningEventType,
+    MasterySnapshot,
+    StudentKnowledgeState,
+)
+from app.models.user import UserRole
 
 
 def make_pdf(page_count: int = 2) -> bytes:
@@ -154,6 +167,101 @@ async def test_teacher_can_create_reorder_and_edit_structure(client: AsyncClient
         "Chapter 1",
     ]
     assert [chapter["order_index"] for chapter in final_structure.json()] == [0, 1]
+
+
+async def test_teacher_merges_knowledge_points_with_explainable_state(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "knowledge-merge@example.com", "teacher")
+    student = await login(client, "knowledge-merge-student@example.com", "student")
+    course, _, chapters = await create_generated_structure(client, teacher)
+    target = chapters[0]["knowledge_points"][0]
+    source = chapters[0]["knowledge_points"][1]
+    course_id = UUID(course["id"])
+    student_id = UUID(student["id"])
+    target_id = UUID(target["id"])
+    source_id = UUID(source["id"])
+
+    async with session_factory() as session:
+        session.add(
+            CourseMember(
+                course_id=course_id,
+                user_id=student_id,
+                role=UserRole.STUDENT,
+            )
+        )
+        session.add_all(
+            [
+                StudentKnowledgeState(
+                    course_id=course_id,
+                    user_id=student_id,
+                    knowledge_point_id=target_id,
+                    score=60.0,
+                ),
+                StudentKnowledgeState(
+                    course_id=course_id,
+                    user_id=student_id,
+                    knowledge_point_id=source_id,
+                    score=80.0,
+                ),
+                MasterySnapshot(
+                    course_id=course_id,
+                    user_id=student_id,
+                    knowledge_point_id=source_id,
+                    score=80.0,
+                ),
+                LearningEvent(
+                    course_id=course_id,
+                    user_id=student_id,
+                    knowledge_point_id=source_id,
+                    event_type=LearningEventType.QUIZ_WRONG,
+                    weight=1.0,
+                    metadata_json={},
+                ),
+                KnowledgeRelation(
+                    course_id=course_id,
+                    source_knowledge_point_id=source_id,
+                    target_knowledge_point_id=target_id,
+                    relation_type="related",
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.post(
+        f"/api/v1/courses/{course_id}/knowledge-points/merge",
+        headers=auth_headers(teacher),
+        json={
+            "target_knowledge_point_id": str(target_id),
+            "source_knowledge_point_ids": [str(source_id)],
+            "name": "Merged Point",
+            "description": "Merged description",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["id"] == str(target_id)
+    assert response.json()["name"] == "Merged Point"
+
+    async with session_factory() as session:
+        states = list(
+            await session.scalars(
+                select(StudentKnowledgeState).where(
+                    StudentKnowledgeState.course_id == course_id,
+                    StudentKnowledgeState.user_id == student_id,
+                )
+            )
+        )
+        snapshots = list(await session.scalars(select(MasterySnapshot)))
+        events = list(await session.scalars(select(LearningEvent)))
+        relations = list(await session.scalars(select(KnowledgeRelation)))
+
+    assert len(states) == 1
+    assert states[0].knowledge_point_id == target_id
+    assert states[0].score == 70.0
+    assert snapshots[0].knowledge_point_id == target_id
+    assert events[0].knowledge_point_id == target_id
+    assert relations == []
 
 
 async def test_duplicate_knowledge_point_name_returns_conflict(client: AsyncClient) -> None:
