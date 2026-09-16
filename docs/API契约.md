@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.41`
+> 冻结版本：`v0.0.42`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -21,6 +21,7 @@
 
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
+| GET | `/health` | 公开 | 服务存活检查 |
 | POST | `/auth/login` | 公开 | 创建或恢复开发用户 |
 | GET | `/auth/me` | 已登录 | 当前用户 |
 | POST | `/courses` | 教师 | 创建课程并自动成为教师成员 |
@@ -42,8 +43,8 @@
 | PATCH | `/chapters/{chapter_id}` | 课程教师 | 修改标题、简介或顺序 |
 | DELETE | `/chapters/{chapter_id}` | 课程教师 | 删除章节及知识点 |
 | POST | `/chapters/{chapter_id}/knowledge-points` | 课程教师 | 新建知识点 |
-| PATCH | `/knowledge-points/{knowledge_point_id}` | 课程教师 | 改名、排序或跨章节移动 |
-| DELETE | `/knowledge-points/{knowledge_point_id}` | 课程教师 | 删除知识点 |
+| PATCH | `/knowledge-points/{point_id}` | 课程教师 | 改名、排序或跨章节移动 |
+| DELETE | `/knowledge-points/{point_id}` | 课程教师 | 删除知识点 |
 | POST | `/courses/{course_id}/knowledge-points/merge` | 课程教师 | 合并知识点并迁移学情 |
 | POST | `/documents/{document_id}/chunks` | 课程教师 | 重建文档知识块 |
 | POST | `/documents/{document_id}/embeddings` | 课程教师 | 生成 1024 维向量 |
