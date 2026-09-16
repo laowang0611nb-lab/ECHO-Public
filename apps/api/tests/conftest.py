@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -12,11 +13,17 @@ from app.api.dependencies import (
     get_embedding_provider,
     get_knowledge_structure_provider,
 )
+from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_db_session
 from app.main import app
 from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft
 from app.services.storage import LocalDocumentStorage
+
+
+@pytest.fixture(autouse=True)
+def enable_development_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "development_auth_enabled", True)
 
 
 @pytest_asyncio.fixture

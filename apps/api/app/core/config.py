@@ -11,12 +11,12 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.43"
+    app_version: str = "0.0.44"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
     document_storage_root: Path = PROJECT_ROOT / "tmp" / "uploads"
-    development_auth_enabled: bool = True
+    development_auth_enabled: bool = False
     retrieval_max_distance: float = 0.65
     max_upload_bytes: int = 20 * 1024 * 1024
     llm_api_key: str | None = None

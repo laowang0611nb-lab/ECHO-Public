@@ -46,17 +46,38 @@ async def create_conversation(
     return response.json()
 
 
+async def enroll_student(
+    client: AsyncClient,
+    teacher: dict[str, str],
+    student: dict[str, str],
+    course: dict[str, str],
+) -> None:
+    published = await client.post(
+        f"/api/v1/courses/{course['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    assert published.status_code == 200
+    joined = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": published.json()["code"]},
+    )
+    assert joined.status_code == 200
+
+
 async def test_chat_creates_missing_basis_flag_and_teacher_reviews_it(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     teacher = await login(client, "review-teacher@example.com", "teacher")
+    student = await login(client, "review-student@example.com", "student")
     course = await create_course_without_sources(client, teacher)
-    conversation = await create_conversation(client, course["id"], teacher)
+    await enroll_student(client, teacher, student, course)
+    conversation = await create_conversation(client, course["id"], student)
 
     stream = await client.post(
         f"/api/v1/conversations/{conversation['id']}/messages/stream",
-        headers=auth_headers(teacher),
+        headers=auth_headers(student),
         json={"content": "What is not covered by the course?", "retrieval_limit": 5},
     )
     flags = await client.get(
@@ -100,18 +121,20 @@ async def test_chat_creates_missing_basis_flag_and_teacher_reviews_it(
 
 async def test_repeated_follow_up_creates_review_flag(client: AsyncClient) -> None:
     teacher = await login(client, "review-repeat@example.com", "teacher")
+    student = await login(client, "review-repeat-student@example.com", "student")
     course = await create_course_without_sources(client, teacher)
-    conversation = await create_conversation(client, course["id"], teacher)
+    await enroll_student(client, teacher, student, course)
+    conversation = await create_conversation(client, course["id"], student)
     endpoint = f"/api/v1/conversations/{conversation['id']}/messages/stream"
 
     first = await client.post(
         endpoint,
-        headers=auth_headers(teacher),
+        headers=auth_headers(student),
         json={"content": "Explain the main concept.", "retrieval_limit": 5},
     )
     second = await client.post(
         endpoint,
-        headers=auth_headers(teacher),
+        headers=auth_headers(student),
         json={"content": "Explain the main concept.", "retrieval_limit": 5},
     )
     flags = await client.get(
@@ -173,6 +196,46 @@ async def test_student_can_report_not_resolved_and_reopen_flag(
     assert reported.json()["severity"] == "high"
     assert reported.json()["status"] == ReviewStatus.OPEN
     assert any(flag["reason"] == ReviewReason.STUDENT_NOT_RESOLVED for flag in teacher_flags.json())
+
+
+async def test_teacher_chat_does_not_create_review_flags(client: AsyncClient) -> None:
+    teacher = await login(client, "review-teacher-chat@example.com", "teacher")
+    course = await create_course_without_sources(client, teacher)
+    conversation = await create_conversation(client, course["id"], teacher)
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "Teacher test question", "retrieval_limit": 5},
+    )
+    flags = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags",
+        headers=auth_headers(teacher),
+    )
+
+    assert stream.status_code == 200
+    assert flags.json() == []
+
+
+async def test_trivial_student_message_does_not_create_review_flag(client: AsyncClient) -> None:
+    teacher = await login(client, "review-trivial@example.com", "teacher")
+    student = await login(client, "review-trivial-student@example.com", "student")
+    course = await create_course_without_sources(client, teacher)
+    await enroll_student(client, teacher, student, course)
+    conversation = await create_conversation(client, course["id"], student)
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation['id']}/messages/stream",
+        headers=auth_headers(student),
+        json={"content": "你好", "retrieval_limit": 5},
+    )
+    flags = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags",
+        headers=auth_headers(teacher),
+    )
+
+    assert stream.status_code == 200
+    assert flags.json() == []
 
 
 async def test_review_endpoints_are_teacher_only(client: AsyncClient) -> None:

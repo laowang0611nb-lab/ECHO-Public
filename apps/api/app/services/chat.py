@@ -193,7 +193,8 @@ async def _stream_chat_response_contents(
     await session.refresh(user_message)
 
     chat_user = await session.get(User, user_id)
-    if chat_user is not None and chat_user.role == UserRole.STUDENT:
+    is_student = chat_user is not None and chat_user.role == UserRole.STUDENT
+    if is_student:
         await record_learning_event(
             session,
             conversation.course_id,
@@ -251,15 +252,16 @@ async def _stream_chat_response_contents(
     ]
     session.add(assistant_message)
     await session.flush()
-    await attach_auto_review_flags(
-        session,
-        assistant_message,
-        conversation.course_id,
-        user_id,
-        content,
-        history,
-        len(used_sources),
-    )
+    if is_student:
+        await attach_auto_review_flags(
+            session,
+            assistant_message,
+            conversation.course_id,
+            user_id,
+            content,
+            history,
+            len(used_sources),
+        )
     conversation.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(assistant_message)

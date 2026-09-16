@@ -28,3 +28,7 @@ def test_production_rejects_development_auth() -> None:
             environment="production",
             development_auth_enabled=True,
         )
+
+
+def test_development_auth_defaults_to_disabled() -> None:
+    assert Settings.model_fields["development_auth_enabled"].default is False

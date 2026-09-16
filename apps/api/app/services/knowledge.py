@@ -669,15 +669,14 @@ async def merge_knowledge_points(
         .values(knowledge_point_id=target.id)
     )
 
-    target_states = {
-        state.user_id: state
-        for state in await session.scalars(
+    target_states = list(
+        await session.scalars(
             select(StudentKnowledgeState).where(
                 StudentKnowledgeState.course_id == course_id,
                 StudentKnowledgeState.knowledge_point_id == target.id,
             )
         )
-    }
+    )
     source_states = list(
         await session.scalars(
             select(StudentKnowledgeState).where(
@@ -686,14 +685,37 @@ async def merge_knowledge_points(
             )
         )
     )
-    for state in source_states:
-        existing = target_states.get(state.user_id)
-        if existing is None:
-            state.knowledge_point_id = target.id
-            target_states[state.user_id] = state
+    scores_by_user: dict[UUID, list[float]] = {}
+    state_by_user: dict[UUID, StudentKnowledgeState] = {}
+    for state in [*target_states, *source_states]:
+        scores_by_user.setdefault(state.user_id, []).append(state.score)
+        if state.knowledge_point_id == target.id:
+            state_by_user[state.user_id] = state
+
+    for user_id, scores in scores_by_user.items():
+        merged_score = round(sum(scores) / len(scores), 2)
+        state = state_by_user.get(user_id)
+        if state is None:
+            state = StudentKnowledgeState(
+                course_id=course_id,
+                user_id=user_id,
+                knowledge_point_id=target.id,
+                score=merged_score,
+            )
+            session.add(state)
         else:
-            existing.score = round((existing.score + state.score) / 2, 2)
-            await session.delete(state)
+            state.score = merged_score
+        session.add(
+            MasterySnapshot(
+                course_id=course_id,
+                user_id=user_id,
+                knowledge_point_id=target.id,
+                score=merged_score,
+            )
+        )
+
+    for state in source_states:
+        await session.delete(state)
 
     if payload.name is not None:
         target.name = payload.name

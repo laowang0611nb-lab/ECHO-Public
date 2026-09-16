@@ -84,9 +84,17 @@ async def get_course_dashboard(
     pending_review_count = await session.scalar(
         select(func.count())
         .select_from(AIReviewFlag)
+        .join(
+            CourseMember,
+            and_(
+                CourseMember.course_id == AIReviewFlag.course_id,
+                CourseMember.user_id == AIReviewFlag.student_id,
+            ),
+        )
         .where(
             AIReviewFlag.course_id == course_id,
             AIReviewFlag.status == ReviewStatus.OPEN,
+            CourseMember.role == UserRole.STUDENT,
         )
     )
 

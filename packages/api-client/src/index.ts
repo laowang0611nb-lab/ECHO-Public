@@ -11,9 +11,12 @@ import type {
   DevelopmentLoginRequest,
   HealthResponse,
   KnowledgePoint,
+  KnowledgePointMergeRequest,
   KnowledgePointCreateRequest,
   KnowledgePointUpdateRequest,
   Message,
+  ReviewDecision,
+  ReviewFlag,
   User,
 } from "@echo/shared-types";
 
@@ -220,6 +223,53 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       ),
     deleteKnowledgePoint: (userId: string, pointId: string) =>
       request<void>(`/api/v1/knowledge-points/${pointId}`, { method: "DELETE" }, userId),
+    mergeKnowledgePoints: (
+      userId: string,
+      courseId: string,
+      payload: KnowledgePointMergeRequest,
+    ) =>
+      request<KnowledgePoint>(
+        `/api/v1/courses/${courseId}/knowledge-points/merge`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    listReviewFlags: (
+      userId: string,
+      courseId: string,
+      options?: { status?: string; severity?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.severity) params.set("severity", options.severity);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<ReviewFlag[]>(
+        `/api/v1/courses/${courseId}/review-flags${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    reviewFlag: (
+      userId: string,
+      courseId: string,
+      flagId: string,
+      payload: {
+        decision: ReviewDecision;
+        note?: string;
+        corrected_answer?: string;
+      },
+    ) =>
+      request<ReviewFlag>(
+        `/api/v1/courses/${courseId}/review-flags/${flagId}/review`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
     listConversations: (userId: string, courseId: string) =>
       request<Conversation[]>(`/api/v1/courses/${courseId}/conversations`, undefined, userId),
     createConversation: (userId: string, courseId: string, title?: string) =>

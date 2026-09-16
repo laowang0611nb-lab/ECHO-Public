@@ -178,10 +178,12 @@ async def test_teacher_merges_knowledge_points_with_explainable_state(
     course, _, chapters = await create_generated_structure(client, teacher)
     target = chapters[0]["knowledge_points"][0]
     source = chapters[0]["knowledge_points"][1]
+    second_source = chapters[1]["knowledge_points"][0]
     course_id = UUID(course["id"])
     student_id = UUID(student["id"])
     target_id = UUID(target["id"])
     source_id = UUID(source["id"])
+    second_source_id = UUID(second_source["id"])
 
     async with session_factory() as session:
         session.add(
@@ -204,6 +206,12 @@ async def test_teacher_merges_knowledge_points_with_explainable_state(
                     user_id=student_id,
                     knowledge_point_id=source_id,
                     score=80.0,
+                ),
+                StudentKnowledgeState(
+                    course_id=course_id,
+                    user_id=student_id,
+                    knowledge_point_id=second_source_id,
+                    score=90.0,
                 ),
                 MasterySnapshot(
                     course_id=course_id,
@@ -234,7 +242,7 @@ async def test_teacher_merges_knowledge_points_with_explainable_state(
         headers=auth_headers(teacher),
         json={
             "target_knowledge_point_id": str(target_id),
-            "source_knowledge_point_ids": [str(source_id)],
+            "source_knowledge_point_ids": [str(source_id), str(second_source_id)],
             "name": "Merged Point",
             "description": "Merged description",
         },
@@ -258,8 +266,10 @@ async def test_teacher_merges_knowledge_points_with_explainable_state(
 
     assert len(states) == 1
     assert states[0].knowledge_point_id == target_id
-    assert states[0].score == 70.0
+    assert states[0].score == 76.67
     assert snapshots[0].knowledge_point_id == target_id
+    assert len(snapshots) == 2
+    assert any(snapshot.score == 76.67 for snapshot in snapshots)
     assert events[0].knowledge_point_id == target_id
     assert relations == []
 

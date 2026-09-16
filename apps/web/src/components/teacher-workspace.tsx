@@ -11,8 +11,8 @@ import {
 } from "react";
 
 import { KnowledgeEditor } from "@/components/knowledge-editor";
+import { ReviewQueue } from "@/components/review-queue";
 import { apiClient } from "@/lib/api";
-
 const SESSION_KEY = "echo.teacher.user-id";
 
 function errorMessage(error: unknown): string {
@@ -214,6 +214,7 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [courseName, setCourseName] = useState("");
   const [courseDescription, setCourseDescription] = useState("");
   const [courseTerm, setCourseTerm] = useState("");
+  const [dashboardReloadKey, setDashboardReloadKey] = useState(0);
 
   const selectedCourse = courses.find((course) => course.id === selectedCourseId) ?? null;
 
@@ -286,7 +287,7 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [onLogout, selectedCourseId, user.id]);
+  }, [dashboardReloadKey, onLogout, selectedCourseId, user.id]);
 
   async function handleCreateCourse(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -642,7 +643,14 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
           )}
 
           {selectedCourse ? (
-            <KnowledgeEditor courseId={selectedCourse.id} userId={user.id} />
+            <>
+              <ReviewQueue
+              courseId={selectedCourse.id}
+              onChanged={() => setDashboardReloadKey((current) => current + 1)}
+              userId={user.id}
+              />
+              <KnowledgeEditor courseId={selectedCourse.id} userId={user.id} />
+            </>
           ) : null}
         </main>
       </div>
