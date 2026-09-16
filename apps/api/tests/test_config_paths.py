@@ -16,6 +16,11 @@ def test_qwen_model_defaults_match_runtime_limits() -> None:
     assert settings.embedding_batch_size <= 10
 
 
+def test_embedding_dimension_must_match_database_vector() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, embedding_dimension=768)
+
+
 def test_production_rejects_development_auth() -> None:
     with pytest.raises(ValidationError):
         Settings(

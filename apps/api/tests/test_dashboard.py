@@ -31,6 +31,7 @@ async def test_teacher_reads_course_dashboard(
     teacher = await login(client, "dashboard-teacher@example.com", "teacher")
     student_one = await login(client, "dashboard-student-one@example.com", "student")
     student_two = await login(client, "dashboard-student-two@example.com", "student")
+    student_three = await login(client, "dashboard-student-three@example.com", "student")
     course_response = await client.post(
         "/api/v1/courses",
         headers=auth_headers(teacher),
@@ -84,6 +85,11 @@ async def test_teacher_reads_course_dashboard(
                     user_id=UUID(student_two["id"]),
                     role=UserRole.STUDENT,
                 ),
+                CourseMember(
+                    course_id=UUID(course["id"]),
+                    user_id=UUID(student_three["id"]),
+                    role=UserRole.STUDENT,
+                ),
                 StudentKnowledgeState(
                     course_id=UUID(course["id"]),
                     user_id=UUID(student_one["id"]),
@@ -95,6 +101,12 @@ async def test_teacher_reads_course_dashboard(
                     user_id=UUID(student_two["id"]),
                     knowledge_point_id=point_id,
                     score=50.0,
+                ),
+                StudentKnowledgeState(
+                    course_id=UUID(course["id"]),
+                    user_id=UUID(student_three["id"]),
+                    knowledge_point_id=point_id,
+                    score=80.0,
                 ),
                 LearningEvent(
                     course_id=UUID(course["id"]),
@@ -116,11 +128,12 @@ async def test_teacher_reads_course_dashboard(
 
     assert response.status_code == 200
     dashboard = response.json()
-    assert dashboard["student_count"] == 2
+    assert dashboard["student_count"] == 3
     assert dashboard["active_student_count"] == 1
     assert dashboard["question_count_7d"] == 1
-    assert dashboard["average_mastery"] == 45.0
+    assert dashboard["average_mastery"] == 56.67
     assert dashboard["high_risk_knowledge_points"][0]["name"] == "Weak Point"
+    assert dashboard["high_risk_knowledge_points"][0]["affected_students"] == 2
 
 
 async def test_student_cannot_read_teacher_dashboard(

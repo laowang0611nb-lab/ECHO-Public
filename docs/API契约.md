@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.38`  
+> 冻结版本：`v0.0.39`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -65,6 +65,8 @@ SSE 事件：
 | `citation` | `{"index": 1, "chunk_id": "...", "document_id": "...", "page_start": 1, "page_end": 2}` |
 | `error` | `{"detail": "..."}` |
 | `done` | `{"conversation_id": "...", "message_id": "..."}` |
+
+历史消息中的引用包含 `citation_index`，表示模型回答使用的原始来源编号。若回答只引用 `[2]`，刷新历史后仍保留编号 `2`，不会重新编号为 `1`。
 
 ## 5. 教学规则与学习分析
 

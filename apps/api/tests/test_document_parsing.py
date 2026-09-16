@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.document import Document, DocumentPage
+from app.models.knowledge import KnowledgeChunk
 
 PDF_BYTES = b"%PDF-1.7\ntrailer\n%%EOF\n"
 
@@ -112,6 +113,44 @@ async def test_reparse_replaces_existing_pages(
         )
 
     assert page_count == 2
+
+
+async def test_reparse_removes_stale_chunks(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "reparse-chunks@example.com", "teacher")
+    document = await create_course_and_upload(client, teacher, make_pdf(page_count=2))
+    document_id = UUID(document["id"])
+    endpoint = f"/api/v1/documents/{document_id}/parse"
+
+    first = await client.post(endpoint, headers=auth_headers(teacher))
+    assert first.status_code == 200
+    async with session_factory() as session:
+        session.add(
+            KnowledgeChunk(
+                course_id=UUID(first.json()["course_id"]),
+                document_id=document_id,
+                chunk_index=0,
+                page_start=1,
+                page_end=1,
+                content="stale chunk",
+                char_count=11,
+                metadata_json={},
+            )
+        )
+        await session.commit()
+
+    second = await client.post(endpoint, headers=auth_headers(teacher))
+    assert second.status_code == 200
+    async with session_factory() as session:
+        chunks = list(
+            await session.scalars(
+                select(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id)
+            )
+        )
+
+    assert chunks == []
 
 
 async def test_student_cannot_parse_document(client: AsyncClient) -> None:

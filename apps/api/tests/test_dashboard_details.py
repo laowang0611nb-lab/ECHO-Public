@@ -36,6 +36,7 @@ async def create_analytics_data(
         json={"name": "Drilldown Course"},
     )
     course = course_response.json()
+    high_student = await login(client, "drill-high-student@example.com", "student")
     document_id = uuid4()
     chapter_id = uuid4()
     point_id = uuid4()
@@ -87,6 +88,21 @@ async def create_analytics_data(
             )
         )
         session.add(
+            CourseMember(
+                course_id=UUID(course["id"]),
+                user_id=UUID(high_student["id"]),
+                role=UserRole.STUDENT,
+            )
+        )
+        session.add(
+            StudentKnowledgeState(
+                course_id=UUID(course["id"]),
+                user_id=UUID(high_student["id"]),
+                knowledge_point_id=point_id,
+                score=90.0,
+            )
+        )
+        session.add(
             LearningEvent(
                 course_id=UUID(course["id"]),
                 user_id=UUID(student["id"]),
@@ -131,9 +147,10 @@ async def test_teacher_drilldown_endpoints(
 
     assert chapters.status_code == 200
     assert chapters.json()[0]["chapter_id"] == str(chapter_id)
-    assert chapters.json()[0]["average_mastery"] == 42.0
+    assert chapters.json()[0]["average_mastery"] == 66.0
     assert point.status_code == 200
     assert point.json()["students"][0]["score"] == 42.0
+    assert point.json()["affected_students"] == 1
     assert learning.status_code == 200
     assert learning.json()["recent_evidence"][0]["event_type"] == "quiz_wrong"
 

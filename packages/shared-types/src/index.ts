@@ -172,6 +172,7 @@ export interface Conversation {
 }
 
 export interface MessageCitation {
+  citation_index: number;
   chunk_id: string | null;
   document_id: string | null;
   page_start: number;

@@ -129,7 +129,7 @@ class Message(Base):
     citations: Mapped[list["MessageCitation"]] = relationship(
         back_populates="message",
         cascade="all, delete-orphan",
-        order_by="MessageCitation.created_at",
+        order_by="MessageCitation.citation_index",
     )
 
 
@@ -149,6 +149,7 @@ class MessageCitation(Base):
         index=True,
         nullable=False,
     )
+    citation_index: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("knowledge_chunks.id", ondelete="SET NULL"),

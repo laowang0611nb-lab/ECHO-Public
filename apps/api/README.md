@@ -233,6 +233,7 @@ Migrations:
 - `a6b7c8d9e0f1`: per-course teaching policy table.
 - `b7c8d9e0f1a2`: learning events, knowledge state, and mastery snapshots.
 - `c8d9e0f1a2b3`: AI answer review flags and teacher decisions.
+- `d9e0f1a2b3c4`: original citation index persisted on message citations.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

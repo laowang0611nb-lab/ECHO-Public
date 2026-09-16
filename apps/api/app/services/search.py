@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.course import CourseMember
+from app.models.document import Document, DocumentStatus
 from app.models.knowledge import KnowledgeChunk
 from app.models.user import UserRole
 from app.schemas.search import ChunkSearchResult
@@ -26,6 +27,10 @@ async def embed_document_chunks(
     *,
     batch_size: int,
 ) -> int:
+    document = await session.get(Document, document_id)
+    if document is None or document.status != DocumentStatus.READY:
+        raise KnowledgeDocumentNotReadyError
+
     chunks = list(
         await session.scalars(
             select(KnowledgeChunk)
@@ -38,7 +43,7 @@ async def embed_document_chunks(
 
     membership = await session.scalar(
         select(CourseMember).where(
-            CourseMember.course_id == chunks[0].course_id,
+            CourseMember.course_id == document.course_id,
             CourseMember.user_id == requester_id,
         )
     )
@@ -92,8 +97,10 @@ async def search_course_chunks(
         distance = distance_expression.label("distance")
         rows = await session.execute(
             select(KnowledgeChunk, distance)
+            .join(Document, Document.id == KnowledgeChunk.document_id)
             .where(
                 KnowledgeChunk.course_id == course_id,
+                Document.status == DocumentStatus.READY,
                 distance_expression <= threshold,
                 KnowledgeChunk.embedding.is_not(None),
             )
@@ -114,8 +121,11 @@ async def search_course_chunks(
 
     chunks = list(
         await session.scalars(
-            select(KnowledgeChunk).where(
+            select(KnowledgeChunk)
+            .join(Document, Document.id == KnowledgeChunk.document_id)
+            .where(
                 KnowledgeChunk.course_id == course_id,
+                Document.status == DocumentStatus.READY,
                 KnowledgeChunk.embedding.is_not(None),
             )
         )

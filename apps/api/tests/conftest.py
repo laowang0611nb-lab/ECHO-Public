@@ -54,13 +54,13 @@ async def document_storage(tmp_path: Path) -> AsyncIterator[LocalDocumentStorage
 
 
 class FakeChatProvider:
-    def __init__(self) -> None:
+    def __init__(self, answer: str = "Echo [1] answer") -> None:
+        self.answer = answer
         self.last_messages: list[dict[str, str]] = []
 
     async def stream(self, messages: list[dict[str, str]]):
         self.last_messages = messages
-        yield "Echo [1] "
-        yield "answer"
+        yield self.answer
 
 
 class FakeEmbeddingProvider:

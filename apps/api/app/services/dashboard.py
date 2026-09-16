@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import CourseMember
@@ -30,22 +30,51 @@ async def get_course_dashboard(
         )
     )
     active_student_count = await session.scalar(
-        select(func.count(distinct(LearningEvent.user_id))).where(
+        select(func.count(distinct(LearningEvent.user_id)))
+        .join(
+            CourseMember,
+            and_(
+                CourseMember.course_id == LearningEvent.course_id,
+                CourseMember.user_id == LearningEvent.user_id,
+            ),
+        )
+        .where(
             LearningEvent.course_id == course_id,
+            CourseMember.role == UserRole.STUDENT,
             LearningEvent.created_at >= since,
         )
     )
     question_count = await session.scalar(
         select(func.count())
         .select_from(LearningEvent)
+        .join(
+            CourseMember,
+            and_(
+                CourseMember.course_id == LearningEvent.course_id,
+                CourseMember.user_id == LearningEvent.user_id,
+            ),
+        )
         .where(
             LearningEvent.course_id == course_id,
+            CourseMember.role == UserRole.STUDENT,
             LearningEvent.event_type == LearningEventType.QUESTION_ASKED,
             LearningEvent.created_at >= since,
         )
     )
     total_events = await session.scalar(
-        select(func.count()).select_from(LearningEvent).where(LearningEvent.course_id == course_id)
+        select(func.count())
+        .select_from(LearningEvent)
+        .join(
+            CourseMember,
+            and_(
+                CourseMember.course_id == LearningEvent.course_id,
+                CourseMember.user_id == LearningEvent.user_id,
+            ),
+        )
+        .where(
+            LearningEvent.course_id == course_id,
+            CourseMember.role == UserRole.STUDENT,
+        )
     )
     average_mastery = await session.scalar(
         select(func.avg(StudentKnowledgeState.score)).where(
@@ -66,7 +95,13 @@ async def get_course_dashboard(
             KnowledgePoint.id,
             KnowledgePoint.name,
             func.avg(StudentKnowledgeState.score).label("average_score"),
-            func.count(distinct(StudentKnowledgeState.user_id)).label("affected_students"),
+            func.count(
+                distinct(
+                    case(
+                        (StudentKnowledgeState.score < 60, StudentKnowledgeState.user_id),
+                    )
+                )
+            ).label("affected_students"),
         )
         .join(
             StudentKnowledgeState,

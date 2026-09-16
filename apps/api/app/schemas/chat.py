@@ -22,6 +22,7 @@ class ConversationResponse(BaseModel):
 
 
 class CitationResponse(BaseModel):
+    citation_index: int
     chunk_id: UUID | None
     document_id: UUID | None
     page_start: int

@@ -11,7 +11,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.38"
+    app_version: str = "0.0.39"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     @classmethod
     def resolve_storage_root(cls, value: Path) -> Path:
         return value if value.is_absolute() else PROJECT_ROOT / value
+
+    @field_validator("embedding_dimension")
+    @classmethod
+    def require_supported_embedding_dimension(cls, value: int) -> int:
+        if value != 1024:
+            raise ValueError("embedding_dimension must remain 1024 until a migration is applied")
+        return value
 
     @model_validator(mode="after")
     def reject_dev_auth_in_production(self) -> "Settings":

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import Course, CourseMember
 from app.models.document import Document, DocumentPage, DocumentStatus
+from app.models.knowledge import KnowledgeChunk
 from app.models.user import User, UserRole
 from app.services.course import CourseNotFoundError
 from app.services.storage import LocalDocumentStorage, UnsupportedDocumentTypeError
@@ -123,6 +124,7 @@ async def parse_document(
         raise DocumentFileMissingError
 
     document.status = DocumentStatus.PARSING
+    await session.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id))
     await session.commit()
 
     try:

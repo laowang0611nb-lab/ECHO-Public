@@ -114,7 +114,7 @@ async def get_knowledge_point_analytics(
         chapter_id=point_row[2],
         chapter_title=point_row[3],
         average_mastery=average,
-        affected_students=len(students),
+        affected_students=sum(student.score < 60 for student in students),
         students=students,
     )
 

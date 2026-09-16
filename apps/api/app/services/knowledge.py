@@ -54,21 +54,120 @@ class KnowledgeNodeNotFoundError(Exception):
     pass
 
 
-async def _delete_existing_structure(session: AsyncSession, document_id: UUID) -> None:
-    chapter_ids = list(
-        await session.scalars(select(Chapter.id).where(Chapter.document_id == document_id))
-    )
-    if not chapter_ids:
-        return
+REORDER_OFFSET = 100000
 
-    point_ids = list(
+
+async def _replace_document_structure(
+    session: AsyncSession,
+    document: Document,
+    drafts: list[ChapterDraft],
+) -> list[Chapter]:
+    existing_chapters = list(
         await session.scalars(
-            select(KnowledgePoint.id).where(KnowledgePoint.chapter_id.in_(chapter_ids))
+            select(Chapter)
+            .options(selectinload(Chapter.knowledge_points))
+            .where(Chapter.document_id == document.id)
+            .order_by(Chapter.order_index, Chapter.id)
         )
     )
-    if point_ids:
-        await _remove_knowledge_points(session, point_ids)
-    await session.execute(delete(Chapter).where(Chapter.id.in_(chapter_ids)))
+    existing_chapter_ids = [chapter.id for chapter in existing_chapters]
+    if existing_chapter_ids:
+        await session.execute(
+            update(Chapter)
+            .where(Chapter.id.in_(existing_chapter_ids))
+            .values(order_index=Chapter.order_index + REORDER_OFFSET)
+        )
+        await session.execute(
+            update(KnowledgePoint)
+            .where(KnowledgePoint.chapter_id.in_(existing_chapter_ids))
+            .values(order_index=KnowledgePoint.order_index + REORDER_OFFSET)
+        )
+
+    chapters_by_title: dict[str, list[Chapter]] = {}
+    points_by_name: dict[str, list[KnowledgePoint]] = {}
+    for chapter in existing_chapters:
+        chapters_by_title.setdefault(chapter.title.casefold(), []).append(chapter)
+        for point in chapter.knowledge_points:
+            points_by_name.setdefault(point.name.casefold(), []).append(point)
+
+    reused_chapter_ids: set[UUID] = set()
+    reused_point_ids: set[UUID] = set()
+    chapters: list[Chapter] = []
+    for chapter_index, draft in enumerate(drafts):
+        title_key = draft.title.casefold()
+        chapter = next(
+            (
+                candidate
+                for candidate in chapters_by_title.get(title_key, [])
+                if candidate.id not in reused_chapter_ids
+            ),
+            None,
+        )
+        if chapter is None:
+            chapter = Chapter(
+                course_id=document.course_id,
+                document_id=document.id,
+                title=draft.title,
+                summary=draft.summary,
+                order_index=chapter_index,
+            )
+            session.add(chapter)
+        else:
+            chapter.title = draft.title
+            chapter.summary = draft.summary
+            chapter.order_index = chapter_index
+            reused_chapter_ids.add(chapter.id)
+
+        existing_points = {
+            point.name.casefold(): point
+            for point in chapter.knowledge_points
+            if point.id not in reused_point_ids
+        }
+        for point_index, point_draft in enumerate(draft.knowledge_points):
+            name_key = point_draft.name.casefold()
+            point = existing_points.get(name_key)
+            fallback_points = points_by_name.get(name_key, [])
+            if point is None and len(fallback_points) == 1:
+                fallback = fallback_points[0]
+                if fallback.id not in reused_point_ids:
+                    point = fallback
+
+            if point is None:
+                point = KnowledgePoint(
+                    course_id=document.course_id,
+                    chapter=chapter,
+                    name=point_draft.name,
+                    description=point_draft.description,
+                    order_index=point_index,
+                )
+                session.add(point)
+            else:
+                point.chapter_id = chapter.id
+                point.name = point_draft.name
+                point.description = point_draft.description
+                point.order_index = point_index
+                reused_point_ids.add(point.id)
+        chapters.append(chapter)
+
+    await session.flush()
+    existing_point_ids = {
+        point.id for chapter in existing_chapters for point in chapter.knowledge_points
+    }
+    await _remove_knowledge_points(
+        session,
+        list(existing_point_ids - reused_point_ids),
+    )
+
+    unused_chapter_ids = set(existing_chapter_ids) - reused_chapter_ids
+    if unused_chapter_ids:
+        await session.execute(
+            update(KnowledgeChunk)
+            .where(KnowledgeChunk.chapter_id.in_(unused_chapter_ids))
+            .values(chapter_id=None)
+        )
+        await session.execute(delete(Chapter).where(Chapter.id.in_(unused_chapter_ids)))
+
+    return chapters
 
 
 async def generate_document_structure(
@@ -108,30 +207,8 @@ async def generate_document_structure(
     if not drafts:
         raise KnowledgeStructureEmptyError
 
-    await _delete_existing_structure(session, document_id)
-
-    chapters: list[Chapter] = []
-    for chapter_index, draft in enumerate(drafts):
-        chapter = Chapter(
-            course_id=document.course_id,
-            document_id=document.id,
-            title=draft.title,
-            summary=draft.summary,
-            order_index=chapter_index,
-        )
-        chapter.knowledge_points = [
-            KnowledgePoint(
-                course_id=document.course_id,
-                name=point.name,
-                description=point.description,
-                order_index=point_index,
-            )
-            for point_index, point in enumerate(draft.knowledge_points)
-        ]
-        session.add(chapter)
-        chapters.append(chapter)
-
     try:
+        chapters = await _replace_document_structure(session, document, drafts)
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -159,9 +236,6 @@ async def list_course_chapters(
         .order_by(Chapter.order_index)
     )
     return list(result)
-
-
-REORDER_OFFSET = 100000
 
 
 async def _ensure_course_teacher(

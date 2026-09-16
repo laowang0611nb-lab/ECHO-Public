@@ -9,6 +9,41 @@ from app.models.knowledge import KnowledgeChunk
 from app.services.search import cosine_distance
 
 
+async def test_search_ignores_chunks_from_non_ready_documents(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "threshold-status@example.com", "teacher")
+    course = await create_chunked_document(client, session_factory, teacher)
+    async with session_factory() as session:
+        document = await session.scalar(
+            select(Document).where(Document.course_id == UUID(course["id"]))
+        )
+        assert document is not None
+        document_id = document.id
+
+    embedded = await client.post(
+        f"/api/v1/documents/{document_id}/embeddings",
+        headers=auth_headers(teacher),
+    )
+    assert embedded.status_code == 200
+
+    async with session_factory() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        document.status = DocumentStatus.FAILED
+        await session.commit()
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/search",
+        headers=auth_headers(teacher),
+        json={"query": "alpha concept", "limit": 5},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_cosine_distance() -> None:
     assert cosine_distance([1.0, 0.0], [1.0, 0.0]) == 0.0
     assert cosine_distance([1.0, 0.0], [0.0, 1.0]) == 1.0

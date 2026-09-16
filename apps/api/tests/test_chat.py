@@ -1,5 +1,6 @@
 from uuid import UUID, uuid4
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -111,8 +112,111 @@ async def test_conversation_and_sse_message_flow(
         events = list(await session.scalars(select(LearningEvent)))
         chunk_count = len(list(await session.scalars(select(KnowledgeChunk.id))))
 
-    assert events[0].event_type == LearningEventType.QUESTION_ASKED
+    assert events == []
     assert chunk_count > 0
+
+
+async def test_student_chat_updates_learning_metrics(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "chat-student-metrics@example.com", "teacher")
+    student = await login(client, "chat-metrics-student@example.com", "student")
+    course = await create_searchable_course(client, session_factory, teacher)
+    published = await client.post(
+        f"/api/v1/courses/{course['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": published.json()["code"]},
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(student),
+        json={"title": "Student chat"},
+    )
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(student),
+        json={"content": "Explain alpha", "retrieval_limit": 3},
+    )
+    dashboard = await client.get(
+        f"/api/v1/courses/{course['id']}/dashboard",
+        headers=auth_headers(teacher),
+    )
+
+    assert stream.status_code == 200
+    assert dashboard.json()["active_student_count"] == 1
+    assert dashboard.json()["question_count_7d"] == 1
+    assert dashboard.json()["total_learning_events"] == 1
+
+    async with session_factory() as session:
+        event = await session.scalar(select(LearningEvent))
+
+    assert event is not None
+    assert event.user_id == UUID(student["id"])
+    assert event.event_type == LearningEventType.QUESTION_ASKED
+
+
+async def test_citation_index_preserves_original_source_number(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "chat-citation-index@example.com", "teacher")
+    course = await create_searchable_course(client, session_factory, teacher)
+    chat_provider.answer = "Echo [2] answer"
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Citation index"},
+    )
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "Explain alpha", "retrieval_limit": 5},
+    )
+    messages = await client.get(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages",
+        headers=auth_headers(teacher),
+    )
+
+    assert stream.status_code == 200
+    assert '"index": 2' in stream.text
+    assistant = next(message for message in messages.json() if message["role"] == "assistant")
+    assert len(assistant["citations"]) == 1
+    assert assistant["citations"][0]["citation_index"] == 2
+
+
+async def test_stream_retrieval_failure_returns_sse_error(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    embedding_provider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teacher = await login(client, "chat-stream-error@example.com", "teacher")
+    course = await create_searchable_course(client, session_factory, teacher)
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Stream error"},
+    )
+
+    async def failing_embed(_: list[str]) -> list[list[float]]:
+        raise RuntimeError("embedding unavailable")
+
+    monkeypatch.setattr(embedding_provider, "embed", failing_embed)
+    response = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "Explain alpha", "retrieval_limit": 3},
+    )
+
+    assert response.status_code == 200
+    assert "event: error" in response.text
+    assert "embedding unavailable" in response.text
 
 
 async def test_conversation_list_is_user_scoped(

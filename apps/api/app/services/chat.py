@@ -17,7 +17,7 @@ from app.models.chat import (
     TeachingPolicy,
 )
 from app.models.learning import LearningEventType
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.chat import ConversationCreate
 from app.schemas.learning import LearningEventCreate
 from app.schemas.search import ChunkSearchResult
@@ -34,9 +34,9 @@ CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 def _referenced_sources(
     answer: str,
     sources: list[ChunkSearchResult],
-) -> list[ChunkSearchResult]:
+) -> list[tuple[int, ChunkSearchResult]]:
     indexes = {int(match) for match in CITATION_PATTERN.findall(answer)}
-    return [source for index, source in enumerate(sources, start=1) if index in indexes]
+    return [(index, source) for index, source in enumerate(sources, start=1) if index in indexes]
 
 
 class ConversationNotFoundError(Exception):
@@ -151,7 +151,7 @@ def _build_prompt(
     return prompt_messages
 
 
-async def stream_chat_response(
+async def _stream_chat_response_contents(
     session: AsyncSession,
     embedding_provider: EmbeddingProvider,
     chat_provider: ChatProvider,
@@ -192,18 +192,20 @@ async def stream_chat_response(
     await session.commit()
     await session.refresh(user_message)
 
-    await record_learning_event(
-        session,
-        conversation.course_id,
-        LearningEventCreate(
-            student_id=user_id,
-            conversation_id=conversation.id,
-            message_id=user_message.id,
-            event_type=LearningEventType.QUESTION_ASKED,
-            evidence=content,
-        ),
-        require_student_membership=False,
-    )
+    chat_user = await session.get(User, user_id)
+    if chat_user is not None and chat_user.role == UserRole.STUDENT:
+        await record_learning_event(
+            session,
+            conversation.course_id,
+            LearningEventCreate(
+                student_id=user_id,
+                conversation_id=conversation.id,
+                message_id=user_message.id,
+                event_type=LearningEventType.QUESTION_ASKED,
+                evidence=content,
+            ),
+            require_student_membership=True,
+        )
 
     collected: list[str] = []
     try:
@@ -238,13 +240,14 @@ async def stream_chat_response(
     used_sources = _referenced_sources(assistant_message.content, sources)
     assistant_message.citations = [
         MessageCitation(
+            citation_index=index,
             chunk_id=source.chunk_id,
             document_id=source.document_id,
             page_start=source.page_start,
             page_end=source.page_end,
             quote=source.content[:500],
         )
-        for source in used_sources
+        for index, source in used_sources
     ]
     session.add(assistant_message)
     await session.flush()
@@ -261,7 +264,7 @@ async def stream_chat_response(
     await session.commit()
     await session.refresh(assistant_message)
 
-    for index, source in enumerate(used_sources, start=1):
+    for index, source in used_sources:
         yield ChatEvent(
             "citation",
             {
@@ -279,3 +282,28 @@ async def stream_chat_response(
             "message_id": str(assistant_message.id),
         },
     )
+
+
+async def stream_chat_response(
+    session: AsyncSession,
+    embedding_provider: EmbeddingProvider,
+    chat_provider: ChatProvider,
+    conversation_id: UUID,
+    user_id: UUID,
+    content: str,
+    retrieval_limit: int,
+) -> AsyncIterator[ChatEvent]:
+    try:
+        async for event in _stream_chat_response_contents(
+            session,
+            embedding_provider,
+            chat_provider,
+            conversation_id,
+            user_id,
+            content,
+            retrieval_limit,
+        ):
+            yield event
+    except Exception as exc:
+        await session.rollback()
+        yield ChatEvent("error", {"detail": str(exc)})

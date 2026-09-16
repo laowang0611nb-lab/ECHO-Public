@@ -1,12 +1,15 @@
 from io import BytesIO
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from httpx import AsyncClient
 from pypdf import PdfWriter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.models.course import CourseMember
 from app.models.knowledge import Chapter, KnowledgePoint
+from app.models.learning import MasterySnapshot, StudentKnowledgeState
+from app.models.user import UserRole
 
 
 def make_pdf(page_count: int = 2) -> bytes:
@@ -79,6 +82,63 @@ async def test_teacher_generates_and_lists_structure(
     assert len(generated.json()[0]["knowledge_points"]) == 2
     assert listed.status_code == 200
     assert listed.json()[0]["knowledge_points"][0]["name"] == "Point 1"
+
+
+async def test_regeneration_preserves_mastery_for_matching_points(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "knowledge-preserve@example.com", "teacher")
+    student = await login(client, "knowledge-preserve-student@example.com", "student")
+    course, document = await create_ready_document(client, teacher)
+    endpoint = f"/api/v1/documents/{document['id']}/generate-structure"
+
+    first = await client.post(endpoint, headers=auth_headers(teacher))
+    assert first.status_code == 200
+    point_id = UUID(first.json()[0]["knowledge_points"][0]["id"])
+    async with session_factory() as session:
+        session.add(
+            CourseMember(
+                course_id=UUID(course["id"]),
+                user_id=UUID(student["id"]),
+                role=UserRole.STUDENT,
+            )
+        )
+        session.add(
+            StudentKnowledgeState(
+                course_id=UUID(course["id"]),
+                user_id=UUID(student["id"]),
+                knowledge_point_id=point_id,
+                score=73.0,
+            )
+        )
+        session.add(
+            MasterySnapshot(
+                course_id=UUID(course["id"]),
+                user_id=UUID(student["id"]),
+                knowledge_point_id=point_id,
+                score=73.0,
+            )
+        )
+        await session.commit()
+
+    second = await client.post(endpoint, headers=auth_headers(teacher))
+    assert second.status_code == 200
+    assert second.json()[0]["knowledge_points"][0]["id"] == str(point_id)
+
+    async with session_factory() as session:
+        state = await session.scalar(
+            select(StudentKnowledgeState).where(
+                StudentKnowledgeState.course_id == UUID(course["id"]),
+                StudentKnowledgeState.user_id == UUID(student["id"]),
+            )
+        )
+        snapshots = list(await session.scalars(select(MasterySnapshot)))
+
+    assert state is not None
+    assert state.knowledge_point_id == point_id
+    assert state.score == 73.0
+    assert len(snapshots) == 1
 
 
 async def test_regeneration_replaces_existing_structure(
