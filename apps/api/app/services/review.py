@@ -86,13 +86,14 @@ def _detect_review_reasons(
     history: list[Message],
     answer: str,
     used_source_count: int,
+    has_course_material: bool,
 ) -> list[tuple[ReviewReason, ReviewSeverity, dict[str, object]]]:
     normalized_answer = answer.casefold()
     normalized_question = question.casefold()
     substantive_question = _is_substantive_question(question)
     reasons: list[tuple[ReviewReason, ReviewSeverity, dict[str, object]]] = []
 
-    if used_source_count == 0 and substantive_question:
+    if used_source_count == 0 and substantive_question and has_course_material:
         reasons.append(
             (
                 ReviewReason.MISSING_COURSE_BASIS,
@@ -108,7 +109,11 @@ def _detect_review_reasons(
     outside_markers = [
         marker for marker in OUTSIDE_MATERIAL_MARKERS if marker.casefold() in normalized_answer
     ]
-    if outside_markers and (len(outside_markers) >= 2 or used_source_count == 0):
+    if (
+        has_course_material
+        and outside_markers
+        and (len(outside_markers) >= 2 or used_source_count == 0)
+    ):
         reasons.append(
             (
                 ReviewReason.OUTSIDE_MATERIAL_HEAVY,
@@ -157,6 +162,8 @@ async def attach_auto_review_flags(
     question: str,
     history: list[Message],
     used_source_count: int,
+    *,
+    has_course_material: bool,
 ) -> list[AIReviewFlag]:
     flags: list[AIReviewFlag] = []
     for reason, severity, details in _detect_review_reasons(
@@ -164,6 +171,7 @@ async def attach_auto_review_flags(
         history,
         assistant_message.content,
         used_source_count,
+        has_course_material,
     ):
         flag = AIReviewFlag(
             course_id=course_id,

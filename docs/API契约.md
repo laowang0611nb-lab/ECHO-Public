@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.44`
+> 冻结版本：`v0.0.45`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -254,8 +254,8 @@ POST /api/v1/courses/{course_id}/messages/{message_id}/not-resolved
 
 当前基础版自动检测：
 
-- AI 回答没有引用任何课程来源：`missing_course_basis`。
-- 回答包含明显的课程外补充标记：`outside_material_heavy`。
+- 课程存在可检索教材，但 AI 回答没有引用任何课程来源：`missing_course_basis`。
+- 课程存在可检索教材，且回答包含明显的课程外补充标记：`outside_material_heavy`。
 - 学生重复相同问题，或明确表示“没解决/还是不懂”：`repeated_follow_up`。
 - 学生主动点击“没解决”：`student_not_resolved`。
 

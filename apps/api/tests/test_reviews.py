@@ -1,8 +1,10 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.models.document import Document, DocumentStatus
+from app.models.knowledge import KnowledgeChunk
 from app.models.review import ReviewReason, ReviewStatus
 
 
@@ -65,6 +67,43 @@ async def enroll_student(
     assert joined.status_code == 200
 
 
+async def add_unrelated_course_material(
+    session_factory: async_sessionmaker[AsyncSession],
+    teacher: dict[str, str],
+    course: dict[str, str],
+) -> None:
+    document_id = uuid4()
+    embedding = [0.0] * 1024
+    embedding[0] = 1.0
+    async with session_factory() as session:
+        session.add(
+            Document(
+                id=document_id,
+                course_id=UUID(course["id"]),
+                uploaded_by=UUID(teacher["id"]),
+                original_name="review-material.pdf",
+                storage_key=f"tests/{document_id}.pdf",
+                content_type="application/pdf",
+                size_bytes=100,
+                status=DocumentStatus.READY,
+                page_count=1,
+            )
+        )
+        session.add(
+            KnowledgeChunk(
+                course_id=UUID(course["id"]),
+                document_id=document_id,
+                chunk_index=0,
+                page_start=1,
+                page_end=1,
+                content="Alpha-only course material.",
+                char_count=29,
+                embedding=embedding,
+            )
+        )
+        await session.commit()
+
+
 async def test_chat_creates_missing_basis_flag_and_teacher_reviews_it(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -72,6 +111,7 @@ async def test_chat_creates_missing_basis_flag_and_teacher_reviews_it(
     teacher = await login(client, "review-teacher@example.com", "teacher")
     student = await login(client, "review-student@example.com", "student")
     course = await create_course_without_sources(client, teacher)
+    await add_unrelated_course_material(session_factory, teacher, course)
     await enroll_student(client, teacher, student, course)
     conversation = await create_conversation(client, course["id"], student)
 
@@ -119,6 +159,29 @@ async def test_chat_creates_missing_basis_flag_and_teacher_reviews_it(
     assert reviewed_dashboard.json()["pending_review_count"] == 0
 
 
+async def test_chat_without_course_material_does_not_create_missing_basis_flag(
+    client: AsyncClient,
+) -> None:
+    teacher = await login(client, "review-empty@example.com", "teacher")
+    student = await login(client, "review-empty-student@example.com", "student")
+    course = await create_course_without_sources(client, teacher)
+    await enroll_student(client, teacher, student, course)
+    conversation = await create_conversation(client, course["id"], student)
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation['id']}/messages/stream",
+        headers=auth_headers(student),
+        json={"content": "Explain the central concept in detail.", "retrieval_limit": 5},
+    )
+    flags = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags",
+        headers=auth_headers(teacher),
+    )
+
+    assert stream.status_code == 200
+    assert flags.json() == []
+
+
 async def test_repeated_follow_up_creates_review_flag(client: AsyncClient) -> None:
     teacher = await login(client, "review-repeat@example.com", "teacher")
     student = await login(client, "review-repeat-student@example.com", "student")
@@ -145,8 +208,7 @@ async def test_repeated_follow_up_creates_review_flag(client: AsyncClient) -> No
     assert first.status_code == 200
     assert second.status_code == 200
     reasons = {flag["reason"] for flag in flags.json()}
-    assert ReviewReason.MISSING_COURSE_BASIS in reasons
-    assert ReviewReason.REPEATED_FOLLOW_UP in reasons
+    assert reasons == {ReviewReason.REPEATED_FOLLOW_UP}
 
 
 async def test_student_can_report_not_resolved_and_reopen_flag(

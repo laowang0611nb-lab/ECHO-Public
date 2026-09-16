@@ -16,6 +16,8 @@ from app.models.chat import (
     MessageRole,
     TeachingPolicy,
 )
+from app.models.document import Document, DocumentStatus
+from app.models.knowledge import KnowledgeChunk
 from app.models.learning import LearningEventType
 from app.models.user import User, UserRole
 from app.schemas.chat import ConversationCreate
@@ -29,6 +31,22 @@ from app.services.review import attach_auto_review_flags
 from app.services.search import search_course_chunks
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
+
+
+async def _course_has_searchable_material(session: AsyncSession, course_id: UUID) -> bool:
+    return (
+        await session.scalar(
+            select(KnowledgeChunk.id)
+            .join(Document, Document.id == KnowledgeChunk.document_id)
+            .where(
+                KnowledgeChunk.course_id == course_id,
+                Document.status == DocumentStatus.READY,
+                KnowledgeChunk.embedding.is_not(None),
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def _referenced_sources(
@@ -253,6 +271,9 @@ async def _stream_chat_response_contents(
     session.add(assistant_message)
     await session.flush()
     if is_student:
+        has_course_material = bool(sources) or await _course_has_searchable_material(
+            session, conversation.course_id
+        )
         await attach_auto_review_flags(
             session,
             assistant_message,
@@ -261,6 +282,7 @@ async def _stream_chat_response_contents(
             content,
             history,
             len(used_sources),
+            has_course_material=has_course_material,
         )
     conversation.updated_at = datetime.now(UTC)
     await session.commit()
