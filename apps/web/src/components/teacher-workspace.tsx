@@ -9,6 +9,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+
+import { KnowledgeEditor } from "@/components/knowledge-editor";
 import { apiClient } from "@/lib/api";
 
 const SESSION_KEY = "echo.teacher.user-id";
@@ -638,6 +640,10 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
               )}
             </section>
           )}
+
+          {selectedCourse ? (
+            <KnowledgeEditor courseId={selectedCourse.id} userId={user.id} />
+          ) : null}
         </main>
       </div>
     </div>

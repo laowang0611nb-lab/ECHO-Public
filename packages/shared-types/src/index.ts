@@ -62,6 +62,50 @@ export interface CourseCreateRequest {
   term?: string;
 }
 
+export interface KnowledgePoint {
+  id: string;
+  course_id: string;
+  chapter_id: string;
+  name: string;
+  description: string | null;
+  order_index: number;
+}
+
+export interface Chapter {
+  id: string;
+  course_id: string;
+  document_id: string;
+  title: string;
+  summary: string | null;
+  order_index: number;
+  knowledge_points: KnowledgePoint[];
+}
+
+export interface ChapterCreateRequest {
+  title: string;
+  summary?: string;
+  order_index?: number;
+}
+
+export interface ChapterUpdateRequest {
+  title?: string;
+  summary?: string | null;
+  order_index?: number;
+}
+
+export interface KnowledgePointCreateRequest {
+  name: string;
+  description?: string;
+  order_index?: number;
+}
+
+export interface KnowledgePointUpdateRequest {
+  chapter_id?: string;
+  name?: string;
+  description?: string | null;
+  order_index?: number;
+}
+
 export interface HighRiskKnowledgePoint {
   knowledge_point_id: string;
   name: string;

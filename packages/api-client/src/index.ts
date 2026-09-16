@@ -1,4 +1,7 @@
 import type {
+  Chapter,
+  ChapterCreateRequest,
+  ChapterUpdateRequest,
   Course,
   CourseCreateRequest,
   CourseDashboard,
@@ -7,6 +10,9 @@ import type {
   Conversation,
   DevelopmentLoginRequest,
   HealthResponse,
+  KnowledgePoint,
+  KnowledgePointCreateRequest,
+  KnowledgePointUpdateRequest,
   Message,
   User,
 } from "@echo/shared-types";
@@ -120,6 +126,10 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       throw await readError(response);
     }
 
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
     return response.json() as Promise<T>;
   }
 
@@ -160,6 +170,56 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       ),
     getCourseDashboard: (userId: string, courseId: string) =>
       request<CourseDashboard>(`/api/v1/courses/${courseId}/dashboard`, undefined, userId),
+    listChapters: (userId: string, courseId: string) =>
+      request<Chapter[]>(`/api/v1/courses/${courseId}/chapters`, undefined, userId),
+    createChapter: (userId: string, documentId: string, payload: ChapterCreateRequest) =>
+      request<Chapter>(
+        `/api/v1/documents/${documentId}/chapters`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    updateChapter: (userId: string, chapterId: string, payload: ChapterUpdateRequest) =>
+      request<Chapter>(
+        `/api/v1/chapters/${chapterId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    deleteChapter: (userId: string, chapterId: string) =>
+      request<void>(`/api/v1/chapters/${chapterId}`, { method: "DELETE" }, userId),
+    createKnowledgePoint: (
+      userId: string,
+      chapterId: string,
+      payload: KnowledgePointCreateRequest,
+    ) =>
+      request<KnowledgePoint>(
+        `/api/v1/chapters/${chapterId}/knowledge-points`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    updateKnowledgePoint: (
+      userId: string,
+      pointId: string,
+      payload: KnowledgePointUpdateRequest,
+    ) =>
+      request<KnowledgePoint>(
+        `/api/v1/knowledge-points/${pointId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    deleteKnowledgePoint: (userId: string, pointId: string) =>
+      request<void>(`/api/v1/knowledge-points/${pointId}`, { method: "DELETE" }, userId),
     listConversations: (userId: string, courseId: string) =>
       request<Conversation[]>(`/api/v1/courses/${courseId}/conversations`, undefined, userId),
     createConversation: (userId: string, courseId: string, title?: string) =>
