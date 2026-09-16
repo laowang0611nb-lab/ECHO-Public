@@ -12,8 +12,11 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
-.\.venv\Scripts\python -m uvicorn app.main:app --reload
+.\.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --reload
 ```
+
+`0.0.0.0` allows Android devices connected to the computer hotspot to reach
+the API. Use the hotspot IPv4 address in `EXPO_PUBLIC_API_BASE_URL`.
 
 Health endpoint:
 

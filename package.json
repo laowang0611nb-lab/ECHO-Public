@@ -1,12 +1,12 @@
 {
   "name": "echo",
-  "version": "0.0.40",
+  "version": "0.0.41",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "dev:web": "pnpm --filter @echo/web dev",
     "dev:mobile": "pnpm --filter @echo/mobile start",
-    "dev:api": "python -m uvicorn app.main:app --app-dir apps/api --reload",
+    "dev:api": "python -m uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --reload",
     "build:web": "pnpm --filter @echo/web build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
