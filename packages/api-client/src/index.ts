@@ -1,22 +1,40 @@
 import type {
   Chapter,
+  ChapterAnalytics,
   ChapterCreateRequest,
   ChapterUpdateRequest,
+  ChatStreamEvent,
+  ChatStreamRequest,
+  ChunkSearchRequest,
+  ChunkSearchResult,
+  Conversation,
   Course,
   CourseCreateRequest,
   CourseDashboard,
-  ChatStreamEvent,
-  ChatStreamRequest,
-  Conversation,
+  CourseDocument,
+  CourseMember,
   DevelopmentLoginRequest,
+  DocumentUploadSource,
+  EmbeddingResult,
   HealthResponse,
+  KnowledgeChunk,
   KnowledgePoint,
-  KnowledgePointMergeRequest,
+  KnowledgePointAnalytics,
   KnowledgePointCreateRequest,
+  KnowledgePointMergeRequest,
   KnowledgePointUpdateRequest,
+  LearningEventCreateRequest,
+  LearningEventRecord,
+  MasteryState,
   Message,
-  ReviewDecision,
+  NotResolvedRequest,
+  ReviewDecisionRequest,
   ReviewFlag,
+  ReviewSeverity,
+  ReviewStatus,
+  StudentLearningDetail,
+  TeachingPolicy,
+  TeachingPolicyUpdateRequest,
   User,
 } from "@echo/shared-types";
 
@@ -47,6 +65,16 @@ async function readError(response: Response): Promise<ApiClientError> {
 
   const message = typeof detail === "string" ? detail : `ECHO API request failed: ${response.status}`;
   return new ApiClientError(response.status, message, detail);
+}
+
+function createDocumentFormData(file: DocumentUploadSource, fileName?: string): FormData {
+  const formData = new FormData();
+  if ("uri" in file) {
+    formData.append("file", file as unknown as Blob, file.name);
+  } else {
+    formData.append("file", file, fileName);
+  }
+  return formData;
 }
 
 function parseSseBlock(block: string): ChatStreamEvent | null {
@@ -113,7 +141,8 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
 
   async function request<T>(path: string, init?: RequestInit, userId?: string): Promise<T> {
     const headers = new Headers(init?.headers);
-    if (init?.body !== undefined && !headers.has("content-type")) {
+    const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+    if (init?.body !== undefined && !isFormData && !headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
     if (userId) {
@@ -134,6 +163,22 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
     }
 
     return response.json() as Promise<T>;
+  }
+
+  function reviewFlagRequest(
+    userId: string,
+    courseId: string,
+    flagId: string,
+    payload: ReviewDecisionRequest,
+  ) {
+    return request<ReviewFlag>(
+      `/api/v1/courses/${courseId}/review-flags/${flagId}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      userId,
+    );
   }
 
   return {
@@ -171,8 +216,167 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
         },
         userId,
       ),
+    listCourseMembers: (userId: string, courseId: string) =>
+      request<CourseMember[]>(
+        `/api/v1/courses/${courseId}/members`,
+        undefined,
+        userId,
+      ),
+    listCourseDocuments: (userId: string, courseId: string) =>
+      request<CourseDocument[]>(
+        `/api/v1/courses/${courseId}/documents`,
+        undefined,
+        userId,
+      ),
+    uploadCourseDocument: (
+      userId: string,
+      courseId: string,
+      file: DocumentUploadSource,
+      fileName?: string,
+    ) =>
+      request<CourseDocument>(
+        `/api/v1/courses/${courseId}/documents`,
+        {
+          method: "POST",
+          body: createDocumentFormData(file, fileName),
+        },
+        userId,
+      ),
+    parseCourseDocument: (userId: string, documentId: string) =>
+      request<CourseDocument>(
+        `/api/v1/documents/${documentId}/parse`,
+        { method: "POST" },
+        userId,
+      ),
+    generateKnowledgeStructure: (userId: string, documentId: string) =>
+      request<Chapter[]>(
+        `/api/v1/documents/${documentId}/generate-structure`,
+        { method: "POST" },
+        userId,
+      ),
+    createDocumentChunks: (userId: string, documentId: string) =>
+      request<KnowledgeChunk[]>(
+        `/api/v1/documents/${documentId}/chunks`,
+        { method: "POST" },
+        userId,
+      ),
+    createDocumentEmbeddings: (userId: string, documentId: string) =>
+      request<EmbeddingResult>(
+        `/api/v1/documents/${documentId}/embeddings`,
+        { method: "POST" },
+        userId,
+      ),
+    searchCourse: (userId: string, courseId: string, payload: ChunkSearchRequest) =>
+      request<ChunkSearchResult[]>(
+        `/api/v1/courses/${courseId}/search`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    getTeachingPolicy: (userId: string, courseId: string) =>
+      request<TeachingPolicy>(
+        `/api/v1/courses/${courseId}/teaching-policy`,
+        undefined,
+        userId,
+      ),
+    updateTeachingPolicy: (
+      userId: string,
+      courseId: string,
+      payload: TeachingPolicyUpdateRequest,
+    ) =>
+      request<TeachingPolicy>(
+        `/api/v1/courses/${courseId}/teaching-policy`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
     getCourseDashboard: (userId: string, courseId: string) =>
       request<CourseDashboard>(`/api/v1/courses/${courseId}/dashboard`, undefined, userId),
+    getChapterAnalytics: (userId: string, courseId: string) =>
+      request<ChapterAnalytics[]>(
+        `/api/v1/courses/${courseId}/chapters/analytics`,
+        undefined,
+        userId,
+      ),
+    getKnowledgePointAnalytics: (
+      userId: string,
+      courseId: string,
+      knowledgePointId: string,
+    ) =>
+      request<KnowledgePointAnalytics>(
+        `/api/v1/courses/${courseId}/knowledge-points/${knowledgePointId}/analytics`,
+        undefined,
+        userId,
+      ),
+    getStudentLearningDetail: (
+      userId: string,
+      courseId: string,
+      studentId: string,
+    ) =>
+      request<StudentLearningDetail>(
+        `/api/v1/courses/${courseId}/students/${studentId}/learning`,
+        undefined,
+        userId,
+      ),
+    createLearningEvent: (
+      userId: string,
+      courseId: string,
+      payload: LearningEventCreateRequest,
+    ) =>
+      request<LearningEventRecord>(
+        `/api/v1/courses/${courseId}/learning-events`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    getStudentMastery: (userId: string, courseId: string, studentId: string) =>
+      request<MasteryState[]>(
+        `/api/v1/courses/${courseId}/students/${studentId}/mastery`,
+        undefined,
+        userId,
+      ),
+    listReviewFlags: (
+      userId: string,
+      courseId: string,
+      options?: { status?: ReviewStatus; severity?: ReviewSeverity; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.severity) params.set("severity", options.severity);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<ReviewFlag[]>(
+        `/api/v1/courses/${courseId}/review-flags${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getReviewFlag: (userId: string, courseId: string, flagId: string) =>
+      request<ReviewFlag>(
+        `/api/v1/courses/${courseId}/review-flags/${flagId}`,
+        undefined,
+        userId,
+      ),
+    reportMessageNotResolved: (
+      userId: string,
+      courseId: string,
+      messageId: string,
+      payload: NotResolvedRequest,
+    ) =>
+      request<ReviewFlag>(
+        `/api/v1/courses/${courseId}/messages/${messageId}/not-resolved`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
     listChapters: (userId: string, courseId: string) =>
       request<Chapter[]>(`/api/v1/courses/${courseId}/chapters`, undefined, userId),
     createChapter: (userId: string, documentId: string, payload: ChapterCreateRequest) =>
@@ -236,40 +440,8 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
         },
         userId,
       ),
-    listReviewFlags: (
-      userId: string,
-      courseId: string,
-      options?: { status?: string; severity?: string; limit?: number },
-    ) => {
-      const params = new URLSearchParams();
-      if (options?.status) params.set("status", options.status);
-      if (options?.severity) params.set("severity", options.severity);
-      if (options?.limit) params.set("limit", String(options.limit));
-      const query = params.toString();
-      return request<ReviewFlag[]>(
-        `/api/v1/courses/${courseId}/review-flags${query ? `?${query}` : ""}`,
-        undefined,
-        userId,
-      );
-    },
-    reviewFlag: (
-      userId: string,
-      courseId: string,
-      flagId: string,
-      payload: {
-        decision: ReviewDecision;
-        note?: string;
-        corrected_answer?: string;
-      },
-    ) =>
-      request<ReviewFlag>(
-        `/api/v1/courses/${courseId}/review-flags/${flagId}/review`,
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-        userId,
-      ),
+    reviewFlag: reviewFlagRequest,
+    decideReviewFlag: reviewFlagRequest,
     listConversations: (userId: string, courseId: string) =>
       request<Conversation[]>(`/api/v1/courses/${courseId}/conversations`, undefined, userId),
     createConversation: (userId: string, courseId: string, title?: string) =>
