@@ -10,16 +10,38 @@ from app.schemas.document import DocumentResponse
 from app.services.course import CourseNotFoundError
 from app.services.document import (
     DocumentFileMissingError,
+    DocumentListForbiddenError,
     DocumentNotFoundError,
     DocumentParseError,
     DocumentParseForbiddenError,
     DocumentUploadForbiddenError,
+    list_course_documents,
     parse_document,
     upload_course_document,
 )
 from app.services.storage import DocumentTooLargeError, UnsupportedDocumentTypeError
 
 router = APIRouter(tags=["documents"])
+
+
+@router.get("/courses/{course_id}/documents", response_model=list[DocumentResponse])
+async def get_course_documents(
+    course_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> list[Document]:
+    try:
+        return await list_course_documents(session, course_id, current_user.id)
+    except CourseNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        ) from exc
+    except DocumentListForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can list documents",
+        ) from exc
 
 
 @router.post(

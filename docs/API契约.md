@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.42`
+> 冻结版本：`v0.0.43`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -36,6 +36,7 @@
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
 | POST | `/courses/{course_id}/documents` | 课程教师 | 上传 PDF |
+| GET | `/courses/{course_id}/documents` | 课程教师 | 查询教材列表和解析状态 |
 | POST | `/documents/{document_id}/parse` | 课程教师 | 解析 PDF 页文本 |
 | POST | `/documents/{document_id}/generate-structure` | 课程教师 | 生成并替换章节结构 |
 | GET | `/courses/{course_id}/chapters` | 课程成员 | 查询章节与知识点 |

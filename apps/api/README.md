@@ -65,10 +65,13 @@ cannot join by code. Publishing must happen before students can join.
 
 ```text
 POST /api/v1/courses/{course_id}/documents
+GET  /api/v1/courses/{course_id}/documents
 POST /api/v1/documents/{document_id}/parse
 ```
 
 Course teachers can upload PDF files. The default development adapter stores
+Course teachers can list all uploads for a course with their current parsing
+status. Student and non-member accounts receive `403`.
 files under `tmp/uploads`; the storage interface is isolated so MinIO or OSS
 can replace it later. Teachers can parse an uploaded PDF into page-level text;
 successful parsing updates `page_count` and marks the document `ready`, while

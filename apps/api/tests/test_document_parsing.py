@@ -153,6 +153,59 @@ async def test_reparse_removes_stale_chunks(
     assert chunks == []
 
 
+async def test_teacher_lists_documents_after_upload_and_parse(client: AsyncClient) -> None:
+    teacher = await login(client, "list-documents@example.com", "teacher")
+    document = await create_course_and_upload(client, teacher, make_pdf(page_count=2))
+    course_id = document["course_id"]
+
+    parsed = await client.post(
+        f"/api/v1/documents/{document['id']}/parse",
+        headers=auth_headers(teacher),
+    )
+    second = await client.post(
+        f"/api/v1/courses/{course_id}/documents",
+        headers=auth_headers(teacher),
+        files={"file": ("second.pdf", make_pdf(page_count=1), "application/pdf")},
+    )
+    listed = await client.get(
+        f"/api/v1/courses/{course_id}/documents",
+        headers=auth_headers(teacher),
+    )
+
+    assert parsed.status_code == 200
+    assert second.status_code == 201
+    assert listed.status_code == 200
+    documents = {item["id"]: item for item in listed.json()}
+    assert set(documents) == {document["id"], second.json()["id"]}
+    assert documents[document["id"]]["status"] == "ready"
+    assert documents[document["id"]]["page_count"] == 2
+    assert documents[second.json()["id"]]["status"] == "uploaded"
+
+
+async def test_student_cannot_list_documents(client: AsyncClient) -> None:
+    teacher = await login(client, "list-documents-owner@example.com", "teacher")
+    student = await login(client, "list-documents-student@example.com", "student")
+    document = await create_course_and_upload(client, teacher, make_pdf())
+
+    response = await client.get(
+        f"/api/v1/courses/{document['course_id']}/documents",
+        headers=auth_headers(student),
+    )
+
+    assert response.status_code == 403
+
+
+async def test_unknown_course_document_list_returns_404(client: AsyncClient) -> None:
+    teacher = await login(client, "list-documents-missing@example.com", "teacher")
+
+    response = await client.get(
+        f"/api/v1/courses/{uuid4()}/documents",
+        headers=auth_headers(teacher),
+    )
+
+    assert response.status_code == 404
+
+
 async def test_student_cannot_parse_document(client: AsyncClient) -> None:
     teacher = await login(client, "parse-owner@example.com", "teacher")
     student = await login(client, "parse-student@example.com", "student")

@@ -21,6 +21,10 @@ class DocumentUploadForbiddenError(Exception):
     pass
 
 
+class DocumentListForbiddenError(Exception):
+    pass
+
+
 class DocumentNotFoundError(Exception):
     pass
 
@@ -91,6 +95,32 @@ async def upload_course_document(
 
     await session.refresh(document)
     return document
+
+
+async def list_course_documents(
+    session: AsyncSession,
+    course_id: UUID,
+    requester_id: UUID,
+) -> list[Document]:
+    course = await session.get(Course, course_id)
+    if course is None:
+        raise CourseNotFoundError
+
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == requester_id,
+        )
+    )
+    if membership is None or membership.role != UserRole.TEACHER:
+        raise DocumentListForbiddenError
+
+    documents = await session.scalars(
+        select(Document)
+        .where(Document.course_id == course_id)
+        .order_by(Document.created_at.desc(), Document.id.desc())
+    )
+    return list(documents)
 
 
 def _extract_pdf_pages(path: Path) -> list[str]:
