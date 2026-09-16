@@ -14,10 +14,20 @@ from app.models.learning import (
     MasterySnapshot,
     StudentKnowledgeState,
 )
+from app.models.review import (
+    AIReviewFlag,
+    ReviewReason,
+    ReviewSeverity,
+    ReviewStatus,
+)
 from app.models.user import User, UserRole
 
 __all__ = [
+    "AIReviewFlag",
     "Conversation",
+    "ReviewReason",
+    "ReviewSeverity",
+    "ReviewStatus",
     "Chapter",
     "Course",
     "CourseInvite",

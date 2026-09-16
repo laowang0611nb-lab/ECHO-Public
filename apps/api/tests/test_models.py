@@ -3,6 +3,7 @@ from app.db.base import Base
 
 def test_core_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
+        "ai_review_flags",
         "chapters",
         "conversations",
         "document_pages",

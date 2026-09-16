@@ -9,9 +9,11 @@ from app.models.learning import (
     MasterySnapshot,
     StudentKnowledgeState,
 )
+from app.models.review import AIReviewFlag, ReviewReason
 from app.models.user import User
 
 __all__ = [
+    "AIReviewFlag",
     "Conversation",
     "Base",
     "Chapter",
@@ -29,6 +31,7 @@ __all__ = [
     "LearningEvent",
     "LearningEventType",
     "MasterySnapshot",
+    "ReviewReason",
     "StudentKnowledgeState",
     "User",
 ]

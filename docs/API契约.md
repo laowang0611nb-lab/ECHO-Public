@@ -1,0 +1,238 @@
+# ECHO API 契约
+
+> 冻结版本：`v0.0.38`  
+> 基础路径：`/api/v1`  
+> 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
+
+## 1. 通用约定
+
+- 请求和响应使用 JSON，文件上传除外。
+- UUID 均以字符串传输。
+- 时间使用 ISO 8601 字符串。
+- 错误响应统一为 `{"detail": "..."}`。
+- 未登录或开发身份无效返回 `401`。
+- 角色或课程权限不足返回 `403`。
+- 资源不存在返回 `404`。
+- 状态冲突、重复数据或未发布课程返回 `409`。
+- 请求参数或模型输出不合法返回 `422`。
+- 模型、Embedding 或外部服务失败返回 `502` 或 `503`。
+
+## 2. 身份与课程
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| POST | `/auth/login` | 公开 | 创建或恢复开发用户 |
+| GET | `/auth/me` | 已登录 | 当前用户 |
+| POST | `/courses` | 教师 | 创建课程并自动成为教师成员 |
+| GET | `/courses` | 已登录 | 当前用户加入的课程 |
+| GET | `/courses/{course_id}` | 课程成员 | 课程详情 |
+| POST | `/courses/join` | 学生 | 课程码加入已发布课程 |
+| POST | `/courses/{course_id}/publish` | 课程教师 | 发布课程 |
+| GET | `/courses/{course_id}/members` | 课程教师 | 查看含邮箱的成员列表 |
+
+## 3. 文档与知识结构
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| POST | `/courses/{course_id}/documents` | 课程教师 | 上传 PDF |
+| POST | `/documents/{document_id}/parse` | 课程教师 | 解析 PDF 页文本 |
+| POST | `/documents/{document_id}/generate-structure` | 课程教师 | 生成并替换章节结构 |
+| GET | `/courses/{course_id}/chapters` | 课程成员 | 查询章节与知识点 |
+| POST | `/documents/{document_id}/chapters` | 课程教师 | 新建章节 |
+| PATCH | `/chapters/{chapter_id}` | 课程教师 | 修改标题、简介或顺序 |
+| DELETE | `/chapters/{chapter_id}` | 课程教师 | 删除章节及知识点 |
+| POST | `/chapters/{chapter_id}/knowledge-points` | 课程教师 | 新建知识点 |
+| PATCH | `/knowledge-points/{knowledge_point_id}` | 课程教师 | 改名、排序或跨章节移动 |
+| DELETE | `/knowledge-points/{knowledge_point_id}` | 课程教师 | 删除知识点 |
+| POST | `/documents/{document_id}/chunks` | 课程教师 | 重建文档知识块 |
+| POST | `/documents/{document_id}/embeddings` | 课程教师 | 生成 1024 维向量 |
+| POST | `/courses/{course_id}/search` | 课程成员 | 课程范围相似度检索 |
+
+## 4. 聊天与 SSE
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| POST | `/courses/{course_id}/conversations` | 课程成员 | 新建会话 |
+| GET | `/courses/{course_id}/conversations` | 课程成员 | 当前用户的课程会话 |
+| GET | `/conversations/{conversation_id}/messages` | 会话所有者 | 历史消息和引用 |
+| POST | `/conversations/{conversation_id}/messages/stream` | 会话所有者 | RAG 流式回答 |
+
+SSE 事件：
+
+| 事件 | 数据结构 |
+|---|---|
+| `text_delta` | `{"delta": "..."}` |
+| `citation` | `{"index": 1, "chunk_id": "...", "document_id": "...", "page_start": 1, "page_end": 2}` |
+| `error` | `{"detail": "..."}` |
+| `done` | `{"conversation_id": "...", "message_id": "..."}` |
+
+## 5. 教学规则与学习分析
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/courses/{course_id}/teaching-policy` | 课程成员 | 读取教学规则 |
+| PUT | `/courses/{course_id}/teaching-policy` | 课程教师 | 更新教学规则 |
+| POST | `/courses/{course_id}/learning-events` | 课程教师 | 记录学习事件 |
+| GET | `/courses/{course_id}/students/{student_id}/mastery` | 本人或课程教师 | 查询知识点状态 |
+
+## 6. Dashboard
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/courses/{course_id}/dashboard` | 课程教师 | 课程聚合指标 |
+| GET | `/courses/{course_id}/chapters/analytics` | 课程教师 | 章节掌握分析 |
+| GET | `/courses/{course_id}/knowledge-points/{knowledge_point_id}/analytics` | 课程教师 | 知识点分布 |
+| GET | `/courses/{course_id}/students/{student_id}/learning` | 课程教师 | 学生学习证据 |
+
+Dashboard 响应新增字段：
+
+```json
+{
+  "pending_review_count": 3
+}
+```
+
+## 7. AI 回答审核
+
+### 7.1 枚举
+
+`reason`：
+
+```text
+missing_course_basis
+outside_material_heavy
+repeated_follow_up
+student_not_resolved
+teacher_rule_violation
+```
+
+`severity`：
+
+```text
+low
+medium
+high
+```
+
+`status`：
+
+```text
+open
+confirmed_correct
+marked_incorrect
+dismissed
+```
+
+### 7.2 查询待审核项
+
+```text
+GET /api/v1/courses/{course_id}/review-flags?status=open&severity=high&limit=50
+```
+
+权限：课程教师。
+
+响应为审核项数组，每项包含：
+
+```json
+{
+  "id": "uuid",
+  "course_id": "uuid",
+  "conversation_id": "uuid",
+  "message_id": "uuid",
+  "student_id": "uuid",
+  "student_display_name": "学生姓名",
+  "reason": "missing_course_basis",
+  "severity": "high",
+  "status": "open",
+  "details": {},
+  "question": "学生问题",
+  "answer": "AI 回答",
+  "teacher_note": null,
+  "corrected_answer": null,
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "created_at": "2026-09-16T00:00:00Z",
+  "updated_at": "2026-09-16T00:00:00Z"
+}
+```
+
+### 7.3 查询单条
+
+```text
+GET /api/v1/courses/{course_id}/review-flags/{flag_id}
+```
+
+权限：课程教师。
+
+### 7.4 教师审核
+
+```text
+POST /api/v1/courses/{course_id}/review-flags/{flag_id}/review
+```
+
+权限：课程教师。
+
+请求示例：
+
+```json
+{
+  "decision": "mark_incorrect",
+  "note": "回答与教材定义冲突。",
+  "corrected_answer": "修正后的标准回答。"
+}
+```
+
+`decision`：
+
+```text
+confirm_correct
+mark_incorrect
+dismiss
+```
+
+约束：
+
+- `mark_incorrect` 可以携带 `corrected_answer`。
+- `confirm_correct` 和 `dismiss` 不得携带 `corrected_answer`。
+- 审核会写入 `reviewed_by` 和 `reviewed_at`。
+
+### 7.5 学生标记未解决
+
+```text
+POST /api/v1/courses/{course_id}/messages/{message_id}/not-resolved
+```
+
+权限：该助手消息所属会话的学生。
+
+请求示例：
+
+```json
+{
+  "note": "这个解释没有解决我的问题。"
+}
+```
+
+行为：
+
+- 仅允许标记属于当前学生和课程的助手消息。
+- 同一消息重复标记时保持幂等。
+- 已关闭的审核项会重新变为 `open`，严重级别升为 `high`。
+
+### 7.6 自动检测
+
+当前基础版自动检测：
+
+- AI 回答没有引用任何课程来源：`missing_course_basis`。
+- 回答包含明显的课程外补充标记：`outside_material_heavy`。
+- 学生重复相同问题，或明确表示“没解决/还是不懂”：`repeated_follow_up`。
+- 学生主动点击“没解决”：`student_not_resolved`。
+
+`teacher_rule_violation` 已保留为稳定枚举，但自动检测将在后续审核版本中启用。
+
+## 8. 接口冻结规则
+
+- 已登记的方法、路径和枚举值视为稳定契约。
+- 新功能只能新增可选字段、新枚举值或新路径。
+- 不得无迁移地改名或删除现有字段。
+- 破坏性变更必须提升版本并同步本文档与 `INDEX.md`。
+- 前端不得依赖未登记字段。 

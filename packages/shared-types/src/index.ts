@@ -119,8 +119,47 @@ export interface CourseDashboard {
   active_student_count: number;
   question_count_7d: number;
   total_learning_events: number;
+  pending_review_count: number;
   average_mastery: number | null;
   high_risk_knowledge_points: HighRiskKnowledgePoint[];
+}
+
+export type ReviewReason =
+  | "missing_course_basis"
+  | "outside_material_heavy"
+  | "repeated_follow_up"
+  | "student_not_resolved"
+  | "teacher_rule_violation";
+
+export type ReviewSeverity = "low" | "medium" | "high";
+
+export type ReviewStatus =
+  | "open"
+  | "confirmed_correct"
+  | "marked_incorrect"
+  | "dismissed";
+
+export type ReviewDecision = "confirm_correct" | "mark_incorrect" | "dismiss";
+
+export interface ReviewFlag {
+  id: string;
+  course_id: string;
+  conversation_id: string;
+  message_id: string;
+  student_id: string;
+  student_display_name: string;
+  reason: ReviewReason;
+  severity: ReviewSeverity;
+  status: ReviewStatus;
+  details: Record<string, unknown>;
+  question: string | null;
+  answer: string;
+  teacher_note: string | null;
+  corrected_answer: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Conversation {

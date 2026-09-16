@@ -169,8 +169,24 @@ GET /api/v1/courses/{course_id}/students/{student_id}/learning
 
 Course teachers receive student counts, seven-day active students, seven-day
 question volume, total events, average mastery, and high-risk knowledge points.
+The dashboard also includes the number of open AI review flags.
 Additional drill-down endpoints return chapter averages, per-knowledge-point
 student distributions, and a student's recent learning evidence.
+
+## AI answer review
+
+```text
+GET  /api/v1/courses/{course_id}/review-flags
+GET  /api/v1/courses/{course_id}/review-flags/{flag_id}
+POST /api/v1/courses/{course_id}/review-flags/{flag_id}/review
+POST /api/v1/courses/{course_id}/messages/{message_id}/not-resolved
+```
+
+Assistant answers are flagged when they lack course citations, rely on
+course-external material, or follow an unresolved repeated question. Students
+can explicitly report an answer as not resolved. Teachers can filter open
+flags and mark them correct, incorrect, or dismissed. Full request and response
+contracts are frozen in `docs/API契约.md`.
 
 Tests and lint:
 
@@ -204,6 +220,7 @@ Implemented domain models:
 - `LearningEvent`: append-only evidence of student learning behavior.
 - `StudentKnowledgeState`: current explainable mastery score per knowledge point.
 - `MasterySnapshot`: historical score record linked to an event.
+- `AIReviewFlag`: explainable assistant-answer anomaly with teacher review state.
 
 Migrations:
 
@@ -215,6 +232,7 @@ Migrations:
 - `f5a6b7c8d9e0`: conversation, message, and citation tables.
 - `a6b7c8d9e0f1`: per-course teaching policy table.
 - `b7c8d9e0f1a2`: learning events, knowledge state, and mastery snapshots.
+- `c8d9e0f1a2b3`: AI answer review flags and teacher decisions.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

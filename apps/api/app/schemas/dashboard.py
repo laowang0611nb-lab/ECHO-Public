@@ -16,5 +16,6 @@ class CourseDashboardResponse(BaseModel):
     active_student_count: int
     question_count_7d: int
     total_learning_events: int
+    pending_review_count: int
     average_mastery: float | None
     high_risk_knowledge_points: list[HighRiskKnowledgePoint]

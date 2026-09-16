@@ -11,6 +11,7 @@ from app.api.routes import (
     health,
     knowledge,
     learning,
+    review,
     search,
     teaching_policy,
 )
@@ -25,6 +26,7 @@ api_router.include_router(courses.router)
 api_router.include_router(documents.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(learning.router)
+api_router.include_router(review.router)
 api_router.include_router(search.router)
 api_router.include_router(teaching_policy.router)
 api_router.include_router(health.router)

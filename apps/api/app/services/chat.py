@@ -2,7 +2,7 @@ import json
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -25,6 +25,7 @@ from app.services.chat_provider import ChatProvider
 from app.services.course import get_course_for_member
 from app.services.embedding import EmbeddingProvider
 from app.services.learning import record_learning_event
+from app.services.review import attach_auto_review_flags
 from app.services.search import search_course_chunks
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
@@ -219,11 +220,20 @@ async def stream_chat_response(
         yield ChatEvent("error", {"detail": str(exc)})
         return
 
+    user_created_at = (
+        user_message.created_at
+        if user_message.created_at.tzinfo is not None
+        else user_message.created_at.replace(tzinfo=UTC)
+    )
+    assistant_created_at = max(
+        datetime.now(UTC),
+        user_created_at + timedelta(microseconds=1),
+    )
     assistant_message = Message(
         conversation_id=conversation.id,
         role=MessageRole.ASSISTANT,
         content="".join(collected),
-        created_at=datetime.now(UTC),
+        created_at=assistant_created_at,
     )
     used_sources = _referenced_sources(assistant_message.content, sources)
     assistant_message.citations = [
@@ -237,6 +247,16 @@ async def stream_chat_response(
         for source in used_sources
     ]
     session.add(assistant_message)
+    await session.flush()
+    await attach_auto_review_flags(
+        session,
+        assistant_message,
+        conversation.course_id,
+        user_id,
+        content,
+        history,
+        len(used_sources),
+    )
     conversation.updated_at = datetime.now(UTC)
     await session.commit()
     await session.refresh(assistant_message)

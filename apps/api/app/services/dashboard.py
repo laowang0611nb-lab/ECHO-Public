@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.course import CourseMember
 from app.models.knowledge import KnowledgePoint
 from app.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
+from app.models.review import AIReviewFlag, ReviewStatus
 from app.models.user import UserRole
 from app.schemas.dashboard import CourseDashboardResponse, HighRiskKnowledgePoint
 from app.services.learning import ensure_course_teacher
@@ -51,6 +52,14 @@ async def get_course_dashboard(
             StudentKnowledgeState.course_id == course_id
         )
     )
+    pending_review_count = await session.scalar(
+        select(func.count())
+        .select_from(AIReviewFlag)
+        .where(
+            AIReviewFlag.course_id == course_id,
+            AIReviewFlag.status == ReviewStatus.OPEN,
+        )
+    )
 
     risk_rows = await session.execute(
         select(
@@ -77,6 +86,7 @@ async def get_course_dashboard(
         question_count_7d=int(question_count or 0),
         total_learning_events=int(total_events or 0),
         average_mastery=round(float(average_mastery), 2) if average_mastery is not None else None,
+        pending_review_count=int(pending_review_count or 0),
         high_risk_knowledge_points=[
             HighRiskKnowledgePoint(
                 knowledge_point_id=point_id,
