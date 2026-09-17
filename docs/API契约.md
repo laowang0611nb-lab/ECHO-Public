@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.48`
+> 冻结版本：`v0.0.57`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -51,7 +51,15 @@
 | POST | `/documents/{document_id}/embeddings` | 课程教师 | 生成 1024 维向量 |
 | POST | `/courses/{course_id}/search` | 课程成员 | 课程范围相似度检索 |
 
-### 3.1 知识点合并
+### 3.1 长文档结构生成
+
+- `qwen3.8-flash` 的上下文窗口按 `1,000,000 Token` 配置。
+- 单次输入安全预算为上下文的 `0.7`，即 `700,000 Token`，其余预算留给系统提示词、输出和安全余量。
+- 请求超过安全预算时，服务按页码分段抽取，再递归合并章节与知识点；不会静默截断。
+- 只有不可继续拆分的单个片段仍超过预算时，才返回 `422`。
+- 可通过 `ECHO_LLM_CONTEXT_WINDOW_TOKENS` 和 `ECHO_LLM_CONTEXT_SAFETY_RATIO` 调整。
+
+### 3.2 知识点合并
 
 ```text
 POST /api/v1/courses/{course_id}/knowledge-points/merge

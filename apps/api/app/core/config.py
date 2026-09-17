@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.48"
+    app_version: str = "0.0.57"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -25,7 +25,8 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.8-flash"
     llm_timeout_seconds: float = 60.0
-    llm_max_context_chars: int = 60000
+    llm_context_window_tokens: int = 1_000_000
+    llm_context_safety_ratio: float = 0.7
     chat_api_key: str | None = None
     chat_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     chat_model: str = "qwen3.8-flash"
@@ -61,6 +62,20 @@ class Settings(BaseSettings):
             raise ValueError("embedding_dimension must remain 1024 until a migration is applied")
         return value
 
+    @field_validator("llm_context_window_tokens")
+    @classmethod
+    def require_positive_context_window(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("llm_context_window_tokens must be positive")
+        return value
+
+    @field_validator("llm_context_safety_ratio")
+    @classmethod
+    def require_context_safety_ratio(cls, value: float) -> float:
+        if value <= 0 or value >= 1:
+            raise ValueError("llm_context_safety_ratio must be between 0 and 1")
+        return value
+
     @field_validator("business_timezone")
     @classmethod
     def require_valid_business_timezone(cls, value: str) -> str:
@@ -75,6 +90,10 @@ class Settings(BaseSettings):
         if self.environment == "production" and self.development_auth_enabled:
             raise ValueError("development authentication must be disabled in production")
         return self
+
+    @property
+    def llm_max_input_tokens(self) -> int:
+        return int(self.llm_context_window_tokens * self.llm_context_safety_ratio)
 
 
 @lru_cache

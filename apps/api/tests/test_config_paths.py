@@ -14,6 +14,14 @@ def test_qwen_model_defaults_match_runtime_limits() -> None:
     assert settings.llm_model == "qwen3.8-flash"
     assert settings.chat_model == "qwen3.8-flash"
     assert settings.embedding_batch_size <= 10
+    assert settings.llm_context_window_tokens == 1_000_000
+    assert settings.llm_context_safety_ratio == 0.7
+    assert settings.llm_max_input_tokens == 700_000
+
+
+def test_llm_context_ratio_must_stay_below_full_window() -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, llm_context_safety_ratio=1.0)
 
 
 def test_embedding_dimension_must_match_database_vector() -> None:

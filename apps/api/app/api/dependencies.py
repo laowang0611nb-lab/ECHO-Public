@@ -28,7 +28,7 @@ def get_knowledge_structure_provider() -> QwenKnowledgeStructureProvider:
         base_url=settings.llm_base_url,
         model=settings.llm_model,
         timeout_seconds=settings.llm_timeout_seconds,
-        max_context_chars=settings.llm_max_context_chars,
+        max_input_tokens=settings.llm_max_input_tokens,
     )
 
 

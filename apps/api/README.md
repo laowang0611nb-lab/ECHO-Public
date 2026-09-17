@@ -105,7 +105,10 @@ Generation uses a Qwen-compatible chat completions endpoint configured by
 model is `qwen3.8-flash`. Regeneration replaces the previous structure for
 that document.
 Duplicate knowledge-point names are normalized within a chapter. Documents above
-the configured context limit return `422` instead of being silently truncated.
+the configured context limit are processed by a segmented extraction and
+recursive merge workflow. The default input budget is 70% of the model's
+1,000,000-token context window (`700,000` tokens). A `422` is reserved for an
+irreducible single segment that still exceeds the budget.
 
 ## Knowledge chunks
 
