@@ -13,9 +13,9 @@ export function WizardStepper({ currentStep }: { currentStep: WizardStep }) {
         const completed = step < currentStep;
         const active = step === currentStep;
         return (
-          <li className="relative flex min-w-0 items-center gap-2" key={label}>
+          <li className="relative flex min-w-0 flex-col items-center text-center" key={label}>
             {index < steps.length - 1 ? (
-              <span className={cn("absolute left-[32px] right-[-8px] top-4 h-px bg-border", completed && "bg-primary")} />
+              <span className={cn("absolute left-[calc(50%+20px)] right-[calc(-50%+20px)] top-4 h-px bg-border", completed && "bg-primary")} />
             ) : null}
             <span
               className={cn(
@@ -27,7 +27,7 @@ export function WizardStepper({ currentStep }: { currentStep: WizardStep }) {
             >
               {completed ? <Check className="size-4" /> : step}
             </span>
-            <span className={cn("truncate text-sm", active ? "font-semibold text-primary" : "text-muted-foreground")}>{label}</span>
+            <span className={cn("mt-2 max-w-full text-sm", active ? "font-semibold text-primary" : "text-muted-foreground")}>{label}</span>
           </li>
         );
       })}
