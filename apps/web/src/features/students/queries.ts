@@ -1,7 +1,16 @@
-import type { Chapter, ChapterAnalytics, Course, CourseMember, ReviewFlag, StudentLearningDetail } from "@echo/shared-types";
+import type {
+  Chapter,
+  ChapterAnalytics,
+  Conversation,
+  Course,
+  CourseMember,
+  ReviewFlag,
+  StudentLearningDetail,
+  TeacherMessage,
+} from "@echo/shared-types";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
-import { buildStudentAnalyticsItem, groupConversationEvidence, summarizeStudents } from "@/features/students/view-model";
+import { buildConversationEvidenceGroups, buildStudentAnalyticsItem, summarizeStudents } from "@/features/students/view-model";
 import { apiClient } from "@/lib/api";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
@@ -14,8 +23,12 @@ export const studentQueryKeys = {
   chapterAnalytics: (userId: string, courseId: string) =>
     ["teacher", "students", "chapter-analytics", userId, courseId] as const,
   reviewFlags: (userId: string, courseId: string) => ["teacher", "students", "review-flags", userId, courseId] as const,
+  studentConversations: (userId: string, courseId: string, studentId: string) =>
+    ["teacher", "students", "conversations", userId, courseId, studentId] as const,
   conversationEvidence: (userId: string, courseId: string, studentId: string) =>
     ["teacher", "students", "conversation-evidence", userId, courseId, studentId] as const,
+  conversationMessages: (userId: string, courseId: string, conversationId: string) =>
+    ["teacher", "students", "conversation-messages", userId, courseId, conversationId] as const,
 };
 
 export function useStudentAnalytics(courseId: string | null) {
@@ -143,8 +156,15 @@ export function useStudentDetail(studentId: string) {
     enabled: Boolean(userId && match),
     staleTime: 30_000,
   });
+  const studentConversationsQuery = useQuery({
+    queryKey: studentQueryKeys.studentConversations(userId ?? "anonymous", match?.course.id ?? "none", studentId),
+    queryFn: () => apiClient.listStudentConversations(userId!, match!.course.id, studentId),
+    enabled: Boolean(userId && match),
+    staleTime: 30_000,
+  });
 
   const reviewFlags = (reviewFlagsQuery.data ?? []).filter((flag) => flag.student_id === studentId);
+  const studentConversations = (studentConversationsQuery.data ?? []) as Conversation[];
   const studentIndex = match?.students.findIndex((item) => item.user_id === studentId) ?? -1;
   const previousStudent = studentIndex > 0 ? match?.students[studentIndex - 1] ?? null : null;
   const nextStudent = studentIndex >= 0 && match && studentIndex < match.students.length - 1 ? match.students[studentIndex + 1] : null;
@@ -159,27 +179,43 @@ export function useStudentDetail(studentId: string) {
     masteryStates: detailQuery.data?.mastery_states ?? [],
     recentEvidence: detailQuery.data?.recent_evidence ?? [],
     reviewFlags: reviewFlags as ReviewFlag[],
-    conversations: groupConversationEvidence(reviewFlags),
+    studentConversations,
+    conversations: buildConversationEvidenceGroups(studentConversations, reviewFlags),
     isLoading:
       memberQueries.some((query) => query.isPending) ||
       (Boolean(match) &&
-        (detailQuery.isPending || chaptersQuery.isPending || chapterAnalyticsQuery.isPending || reviewFlagsQuery.isPending)),
+        (detailQuery.isPending || chaptersQuery.isPending || chapterAnalyticsQuery.isPending || reviewFlagsQuery.isPending || studentConversationsQuery.isPending)),
     isError:
       memberQueries.some((query) => query.isError) ||
       detailQuery.isError ||
       chaptersQuery.isError ||
       chapterAnalyticsQuery.isError ||
-      reviewFlagsQuery.isError,
+      reviewFlagsQuery.isError ||
+      studentConversationsQuery.isError,
     refetch: () => {
       memberQueries.forEach((query) => void query.refetch());
       void detailQuery.refetch();
       void chaptersQuery.refetch();
       void chapterAnalyticsQuery.refetch();
       void reviewFlagsQuery.refetch();
+      void studentConversationsQuery.refetch();
     },
   };
 }
 
+export function useTeacherConversationMessages(courseId: string | null, conversationId: string) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery({
+    queryKey: studentQueryKeys.conversationMessages(userId ?? "anonymous", courseId ?? "none", conversationId),
+    queryFn: () => apiClient.listTeacherConversationMessages(userId!, courseId!, conversationId),
+    enabled: Boolean(userId && courseId),
+    staleTime: 30_000,
+  });
+}
+
 export type StudentAnalyticsData = ReturnType<typeof useStudentAnalytics>;
+export type TeacherConversationMessagesData = ReturnType<typeof useTeacherConversationMessages>;
+export type TeacherConversationMessage = TeacherMessage;
 export type StudentDetailData = ReturnType<typeof useStudentDetail>;
 export type StudentDetailRecord = StudentLearningDetail;

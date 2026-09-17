@@ -95,7 +95,7 @@ export interface ConversationEvidenceGroup {
   updatedAt: string;
   flags: ReviewFlag[];
   messageIds: string[];
-  status: "reviewed" | "pending" | "rejected";
+  status: "unreviewed" | "reviewed" | "pending" | "rejected";
 }
 
 export interface StudentDetailContext {

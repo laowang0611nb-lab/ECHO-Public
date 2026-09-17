@@ -1,11 +1,11 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Bot, CircleUserRound, FileText, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import type { ReviewFlag, ReviewReason, ReviewSeverity, ReviewStatus } from "@echo/shared-types";
+import type { ReviewFlag, ReviewReason, ReviewSeverity, ReviewStatus, TeacherMessage } from "@echo/shared-types";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -16,7 +16,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useStudentDetail } from "@/features/students/queries";
+import { useStudentDetail, useTeacherConversationMessages } from "@/features/students/queries";
 import { buildSourceHref } from "@/features/knowledge/view-model";
 import type {
   ConversationEvidenceQuery,
@@ -25,7 +25,6 @@ import type {
   ConversationStatusFilter,
   ConversationEvidenceGroup,
 } from "@/features/students/types";
-import { groupConversationEvidence } from "@/features/students/view-model";
 import { cn } from "@/lib/utils";
 
 export function StudentConversationPage({
@@ -45,23 +44,39 @@ export function StudentConversationPage({
 }) {
   const router = useRouter();
   const data = useStudentDetail(studentId);
+  const messagesQuery = useTeacherConversationMessages(data.course?.id ?? null, conversationId);
+  const messages = useMemo(() => messagesQuery.data ?? [], [messagesQuery.data]);
   const [search, setSearch] = useState(initialQuery.search);
   const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>(initialQuery.status);
   const [reasonFilter, setReasonFilter] = useState<ConversationReasonFilter>(initialQuery.reason);
   const [severityFilter, setSeverityFilter] = useState<ConversationSeverityFilter>(initialQuery.severity);
-  const conversations = useMemo(() => groupConversationEvidence(data.reviewFlags), [data.reviewFlags]);
+  const conversations = data.conversations;
   const query = useMemo<ConversationEvidenceQuery>(
     () => ({ search, status: statusFilter, reason: reasonFilter, severity: severityFilter }),
     [reasonFilter, search, severityFilter, statusFilter],
   );
   const current = conversations.find((conversation) => conversation.conversationId === conversationId) ?? null;
+  const conversationTitle = current?.title || messages.find((message) => message.role === "user")?.content.slice(0, 40) || "完整对话";
+  const flagByMessageId = useMemo(() => new Map(data.reviewFlags.map((flag) => [flag.message_id, flag])), [data.reviewFlags]);
   const visibleConversations = useMemo(
     () => conversations.filter((conversation) => conversationMatchesQuery(conversation, query)),
     [conversations, query],
   );
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => messageMatchesQuery(message, flagByMessageId.get(message.id), query, conversationTitle)),
+    [conversationTitle, flagByMessageId, messages, query],
+  );
   const currentFlags = useMemo(
-    () => current ? current.flags.filter((flag) => flagMatchesQuery(flag, query, current.title)) : [],
-    [current, query],
+    () => current ? current.flags.filter((flag) => flagMatchesQuery(flag, query, conversationTitle)) : [],
+    [conversationTitle, current, query],
+  );
+  const visibleKnowledgePointIds = useMemo(
+    () => new Set(visibleMessages.flatMap((message) => message.knowledgePointIds)),
+    [visibleMessages],
+  );
+  const visibleCitationCount = useMemo(
+    () => visibleMessages.reduce((total, message) => total + message.citations.length, 0),
+    [visibleMessages],
   );
 
   function replaceQuery(patch: Partial<ConversationEvidenceQuery>) {
@@ -109,10 +124,12 @@ export function StudentConversationPage({
       delete element.dataset.highlighted;
     }, 1600);
     return () => window.clearTimeout(timer);
-  }, [current?.conversationId, messageId]);
+  }, [current?.conversationId, messageId, messagesQuery.dataUpdatedAt, visibleMessages.length]);
 
-  if (data.isLoading) return <LoadingState label="正在加载对话证据..." />;
-  if (data.isError) return <ErrorState description="对话证据加载失败，请确认后端服务后重试。" onRetry={data.refetch} />;
+  if (data.isLoading || (data.course && messagesQuery.isPending)) return <LoadingState label="正在加载完整对话证据..." />;
+  if (data.isError || messagesQuery.isError) {
+    return <ErrorState description="完整对话证据加载失败，请确认教师会话权限和后端服务。" onRetry={() => { data.refetch(); void messagesQuery.refetch(); }} />;
+  }
   if (!data.course || !data.member) {
     return <EmptyState description="学生不存在，或不属于当前教师账号。" title="无法打开对话" />;
   }
@@ -126,13 +143,13 @@ export function StudentConversationPage({
       <PageHeader
         actions={<Button onClick={() => router.back()} type="button" variant="ghost"><ArrowLeft data-icon="inline-start" />返回</Button>}
         breadcrumbs={breadcrumbs}
-        description="教师侧对话证据查看器，展示后端当前开放的审核证据，不冒充完整消息流。"
-        title={current?.title ?? "对话证据"}
+        description="教师侧完整对话证据查看器；消息、Citation 和知识点均来自教师权限接口。"
+        title={conversationTitle}
       />
 
-      <div className="flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50/60 px-4 py-3 text-sm text-orange-800">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-        <p>P0 能力缺口：后端只允许学生会话所有者读取完整消息，教师账号会返回 403。当前页面展示真实 ReviewFlag 中的问题、回答、messageId 和审核状态，不伪造多轮消息与 Citation。</p>
+      <div className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-sm text-blue-900">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+        <p>完整消息、Citation、知识点和审核状态均来自真实教师权限接口；引用缺失时保持明确空状态，不补造来源。</p>
       </div>
 
       <div className="grid gap-2 rounded-xl border border-border bg-card p-4 lg:grid-cols-[minmax(240px,1fr)_180px_220px_150px_auto] lg:items-center">
@@ -224,9 +241,7 @@ export function StudentConversationPage({
                 >
                   <p className="line-clamp-2 text-sm font-medium">{conversation.title}</p>
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <StatusBadge tone={conversation.status === "pending" ? "warning" : conversation.status === "rejected" ? "danger" : "success"}>
-                      {conversation.status === "pending" ? "待审核" : conversation.status === "rejected" ? "已判错" : "已审核"}
-                    </StatusBadge>
+                    <StatusBadge tone={conversationStatusTone(conversation.status)}>{conversationStatusLabel(conversation.status)}</StatusBadge>
                     <span className="text-xs text-muted-foreground">{conversation.flags.length} 条证据</span>
                   </div>
                 </Link>
@@ -238,35 +253,20 @@ export function StudentConversationPage({
 
         <Card className="gap-4 py-5">
           <CardHeader className="px-5">
-            <CardTitle>{current?.title ?? "对话证据"}</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">{data.member.display_name} · {data.course.name} · 筛选后 {currentFlags.length} / {current?.flags.length ?? 0} 条审核证据</p>
+            <CardTitle>{conversationTitle}</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">{data.member.display_name} · {data.course.name} · 筛选后 {visibleMessages.length} / {messages.length} 条消息 · {current?.flags.length ?? 0} 条审核证据</p>
           </CardHeader>
           <CardContent className="space-y-5 px-5">
-            {current && currentFlags.length ? currentFlags.map((flag) => (
-              <div className="space-y-3" key={flag.id}>
-                <div className="rounded-xl bg-muted/70 px-4 py-3">
-                  <p className="text-xs font-medium text-muted-foreground">学生问题</p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{flag.question || "当前审核记录没有保存学生问题。"}</p>
-                </div>
-                <div
-                  className="rounded-xl border border-border bg-card px-4 py-4 transition-shadow data-[highlighted=true]:border-blue-400 data-[highlighted=true]:ring-2 data-[highlighted=true]:ring-blue-200"
-                  id={`message-${flag.message_id}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 text-xs font-medium text-primary"><Sparkles className="size-3.5" />AI 回答</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <StatusBadge tone={reviewStatusTone(flag.status)}>{reviewStatusLabel(flag.status)}</StatusBadge>
-                      <StatusBadge tone={reviewSeverityTone(flag.severity)}>{reviewSeverityLabel(flag.severity)}</StatusBadge>
-                    </div>
-                  </div>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{flag.corrected_answer || flag.answer}</p>
-                  <p className="mt-3 text-xs text-muted-foreground">审核原因：{reviewReasonLabel(flag.reason)}</p>
-                  {flag.teacher_note ? <div className="mt-3 rounded-lg border border-orange-100 bg-orange-50/60 px-3 py-2 text-sm leading-6 text-orange-900">教师备注：{flag.teacher_note}</div> : null}
-<ReviewCitationLinks conversationId={conversationId} flag={flag} />
-                  <p className="mt-2 break-all text-[11px] text-muted-foreground">messageId: {flag.message_id}</p>
-                </div>
-              </div>
-            )) : <EmptyState description={current ? "当前筛选条件下没有匹配的审核证据。" : "当前 conversationId 没有可访问的审核证据。"} title="暂无对话证据" />}
+            {visibleMessages.length ? visibleMessages.map((message) => (
+              <ConversationMessageCard
+                conversationId={conversationId}
+                courseId={data.course!.id}
+                flag={flagByMessageId.get(message.id) ?? null}
+                key={message.id}
+                message={message}
+                studentId={studentId}
+              />
+            )) : <EmptyState description="当前筛选条件下没有匹配的消息。" title="暂无对话消息" />}
           </CardContent>
         </Card>
 
@@ -286,17 +286,23 @@ export function StudentConversationPage({
           <Card className="gap-3 py-5">
             <CardHeader className="px-5"><CardTitle>对话概览</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 px-5">
-              <Metric label="筛选后证据" value={currentFlags.length} />
+              <Metric label="完整消息" value={`${visibleMessages.length}/${messages.length}`} />
               <Metric label="待审核" value={currentFlags.filter((flag) => flag.status === "open").length} />
-              <Metric label="高严重级" value={currentFlags.filter((flag) => flag.severity === "high").length} />
-              <Metric label="教师修正" value={currentFlags.filter((flag) => flag.corrected_answer).length} />
+              <Metric label="关联知识点" value={visibleKnowledgePointIds.size} />
+              <Metric label="教材引用" value={visibleCitationCount} />
             </CardContent>
           </Card>
 
           <Card className="gap-3 py-5">
             <CardHeader className="px-5"><CardTitle>知识点与来源</CardTitle></CardHeader>
             <CardContent className="space-y-3 px-5 text-sm text-muted-foreground">
-              <ReviewKnowledgeLinks conversationId={conversationId} explicitPointId={knowledgePointId} flags={current?.flags ?? []} studentId={studentId} />
+              <MessageEvidenceLinks
+                conversationId={conversationId}
+                courseId={data.course.id}
+                explicitPointId={knowledgePointId}
+                messages={messages}
+                studentId={studentId}
+              />
             </CardContent>
           </Card>
 
@@ -349,6 +355,20 @@ function reviewSeverityTone(severity: ReviewSeverity) {
   return "info" as const;
 }
 
+function conversationStatusLabel(status: ConversationEvidenceGroup["status"]) {
+  if (status === "pending") return "待审核";
+  if (status === "rejected") return "已判错";
+  if (status === "reviewed") return "已审核";
+  return "未审核";
+}
+
+function conversationStatusTone(status: ConversationEvidenceGroup["status"]) {
+  if (status === "pending") return "warning" as const;
+  if (status === "rejected") return "danger" as const;
+  if (status === "reviewed") return "success" as const;
+  return "neutral" as const;
+}
+
 function flagMatchesQuery(flag: ReviewFlag, query: ConversationEvidenceQuery, conversationTitle: string) {
   const keyword = query.search.trim().toLowerCase();
   const searchText = [conversationTitle, flag.question ?? "", flag.answer, flag.teacher_note ?? ""].join("\n").toLowerCase();
@@ -360,54 +380,127 @@ function flagMatchesQuery(flag: ReviewFlag, query: ConversationEvidenceQuery, co
 }
 
 function conversationMatchesQuery(conversation: ConversationEvidenceGroup, query: ConversationEvidenceQuery) {
+  if (!conversation.flags.length) {
+    return query.status === "all" && query.reason === "all" && query.severity === "all"
+      && (!query.search.trim() || conversation.title.toLowerCase().includes(query.search.trim().toLowerCase()));
+  }
   return conversation.flags.some((flag) => flagMatchesQuery(flag, query, conversation.title));
 }
 
-function extractReviewLinks(flag: { details: Record<string, unknown> }) {
-  const knowledgePointIds = Array.isArray(flag.details.knowledge_point_ids)
-    ? flag.details.knowledge_point_ids.filter((value): value is string => typeof value === "string")
-    : [];
-  const citations = Array.isArray(flag.details.citations)
-    ? flag.details.citations.flatMap((value) => {
-        if (!value || typeof value !== "object") return [];
-        const item = value as Record<string, unknown>;
-        if (typeof item.document_id !== "string" || typeof item.page_start !== "number") return [];
-        return [{ documentId: item.document_id, page: item.page_start, chunkId: typeof item.chunk_id === "string" ? item.chunk_id : undefined }];
-      })
-    : [];
-  return { knowledgePointIds, citations };
+function messageMatchesQuery(message: TeacherMessage, flag: ReviewFlag | undefined, query: ConversationEvidenceQuery, conversationTitle: string) {
+  const keyword = query.search.trim().toLowerCase();
+  const searchText = [conversationTitle, message.content, flag?.question ?? "", flag?.answer ?? "", flag?.teacher_note ?? ""].join("\n").toLowerCase();
+  const matchesSearch = !keyword || searchText.includes(keyword);
+  const matchesStatus = query.status === "all" || flag?.status === query.status;
+  const matchesReason = query.reason === "all" || flag?.reason === query.reason;
+  const matchesSeverity = query.severity === "all" || flag?.severity === query.severity;
+  return matchesSearch && matchesStatus && matchesReason && matchesSeverity;
 }
 
-function ReviewCitationLinks({ flag, conversationId }: { flag: { id: string; message_id: string; details: Record<string, unknown> }; conversationId: string }) {
-  const { citations } = extractReviewLinks(flag);
-  if (!citations.length) {
-    return <div className="mt-4 border-t border-border pt-3"><p className="text-xs text-muted-foreground">当前后端未向教师返回该消息的 Citation，因此不能生成教材来源链接。</p></div>;
-  }
+function ConversationMessageCard({
+  message,
+  flag,
+  studentId,
+  conversationId,
+  courseId,
+}: {
+  message: TeacherMessage;
+  flag: ReviewFlag | null;
+  studentId: string;
+  conversationId: string;
+  courseId: string;
+}) {
+  const isAssistant = message.role === "assistant";
+  const isSystem = message.role === "system";
+  const Icon = isAssistant ? Bot : isSystem ? FileText : CircleUserRound;
+  const label = isAssistant ? "AI 回答" : isSystem ? "系统教学事件" : "学生消息";
+  const citationLinks = message.citations.filter((citation) => citation.document_id);
+
   return (
-    <div className="mt-4 border-t border-border pt-3">
-      <p className="text-xs font-medium">引用来源（{citations.length}）</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {citations.map((citation, index) => (
-          <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={buildSourceHref(citation.documentId, { from: "conversation", page: citation.page, chunkId: citation.chunkId, messageId: flag.message_id, conversationId })} key={`${flag.id}-${index}`}>
-            来源 {index + 1} · 第 {citation.page} 页
-          </Link>
-        ))}
+    <article
+      className={cn(
+        "rounded-xl border px-4 py-4 transition-shadow data-[highlighted=true]:border-blue-400 data-[highlighted=true]:ring-2 data-[highlighted=true]:ring-blue-200",
+        isAssistant ? "border-border bg-card" : isSystem ? "border-dashed border-border bg-muted/40" : "border-blue-100 bg-blue-50/40",
+      )}
+      id={`message-${message.id}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className={cn("flex items-center gap-2 text-xs font-medium", isAssistant ? "text-primary" : "text-foreground")}><Icon className="size-3.5" />{label}</p>
+        <span className="text-[11px] text-muted-foreground">{message.created_at.slice(0, 19).replace("T", " ")}</span>
       </div>
-    </div>
+      <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{message.content}</p>
+
+      {flag ? (
+        <div className="mt-4 border-t border-border pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone={reviewStatusTone(flag.status)}>{reviewStatusLabel(flag.status)}</StatusBadge>
+            <StatusBadge tone={reviewSeverityTone(flag.severity)}>{reviewSeverityLabel(flag.severity)}</StatusBadge>
+            <span className="text-xs text-muted-foreground">审核原因：{reviewReasonLabel(flag.reason)}</span>
+          </div>
+          {flag.teacher_note ? <div className="mt-3 rounded-lg border border-orange-100 bg-orange-50/60 px-3 py-2 text-sm leading-6 text-orange-900">教师备注：{flag.teacher_note}</div> : null}
+        </div>
+      ) : null}
+
+      {message.knowledgePointIds.length ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {message.knowledgePointIds.map((pointId) => (
+            <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={`/knowledge/points/${pointId}?from=conversation&studentId=${studentId}&conversationId=${conversationId}&messageId=${message.id}`} key={pointId}>关联知识点</Link>
+          ))}
+        </div>
+      ) : null}
+
+      {citationLinks.length ? (
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="text-xs font-medium">引用来源（{citationLinks.length}）</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {citationLinks.map((citation) => (
+              <Link
+                className={buttonVariants({ size: "sm", variant: "outline" })}
+                href={buildSourceHref(citation.document_id!, { from: "conversation", courseId, knowledgePointId: message.knowledgePointIds[0], page: citation.page_start, chunkId: citation.chunk_id ?? undefined, conversationId, messageId: message.id })}
+                key={`${message.id}-${citation.citation_index}`}
+              >
+                来源 {citation.citation_index} · 第 {citation.page_start} 页
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : isAssistant ? (
+        <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">本条回答没有可追溯 Citation。</p>
+      ) : null}
+      <p className="mt-3 break-all text-[11px] text-muted-foreground">messageId: {message.id}</p>
+    </article>
   );
 }
 
-function ReviewKnowledgeLinks({ flags, explicitPointId, studentId, conversationId }: { flags: Array<{ details: Record<string, unknown> }>; explicitPointId?: string; studentId: string; conversationId: string }) {
+function MessageEvidenceLinks({
+  messages,
+  explicitPointId,
+  studentId,
+  conversationId,
+  courseId,
+}: {
+  messages: TeacherMessage[];
+  explicitPointId?: string;
+  studentId: string;
+  conversationId: string;
+  courseId: string;
+}) {
   const pointIds = new Set<string>(explicitPointId ? [explicitPointId] : []);
-  flags.forEach((flag) => extractReviewLinks(flag).knowledgePointIds.forEach((id) => pointIds.add(id)));
-  if (!pointIds.size) return <p>当前审核数据没有返回 knowledgePointIds 和 Citation，因此不生成猜测链接。</p>;
-  return <div className="flex flex-wrap gap-2">{Array.from(pointIds).map((id) => <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={`/knowledge/points/${id}?from=conversation&studentId=${studentId}&conversationId=${conversationId}`} key={id}>查看知识点</Link>)}</div>;
+  messages.forEach((message) => message.knowledgePointIds.forEach((id) => pointIds.add(id)));
+  const citations = messages.flatMap((message) => message.citations.map((citation) => ({ ...citation, messageId: message.id, knowledgePointId: message.knowledgePointIds[0] })));
+  if (!pointIds.size && !citations.length) return <p>当前对话没有返回知识点或 Citation，因此不生成猜测链接。</p>;
+  return (
+    <div className="space-y-3">
+      {pointIds.size ? <div className="flex flex-wrap gap-2">{Array.from(pointIds).map((id) => <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={`/knowledge/points/${id}?from=conversation&studentId=${studentId}&conversationId=${conversationId}`} key={id}>查看知识点</Link>)}</div> : null}
+      {citations.length ? <div className="flex flex-wrap gap-2">{citations.map((citation) => citation.document_id ? <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={buildSourceHref(citation.document_id, { from: "conversation", courseId, knowledgePointId: citation.knowledgePointId, page: citation.page_start, chunkId: citation.chunk_id ?? undefined, conversationId, messageId: citation.messageId })} key={`${citation.messageId}-${citation.citation_index}`}>第 {citation.page_start} 页来源</Link> : null)}</div> : null}
+    </div>
+  );
 }
 
 function InfoLine({ label, value }: { label: string; value: string }) {
   return <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">{label}</span><span className="font-medium">{value}</span></div>;
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({ label, value }: { label: string; value: number | string }) {
   return <div className="rounded-lg bg-muted/60 px-3 py-3"><p className="text-lg font-semibold">{value}</p><p className="mt-1 text-xs text-muted-foreground">{label}</p></div>;
 }

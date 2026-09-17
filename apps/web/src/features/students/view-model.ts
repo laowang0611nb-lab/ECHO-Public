@@ -1,4 +1,4 @@
-import type { Chapter, ChapterAnalytics, LearningEvidence, MasteryState, ReviewFlag } from "@echo/shared-types";
+import type { Chapter, ChapterAnalytics, Conversation, LearningEvidence, MasteryState, ReviewFlag } from "@echo/shared-types";
 
 import type {
   ChapterMasteryItem,
@@ -158,31 +158,58 @@ export function buildWeakPoints(states: MasteryState[], chapters: Chapter[]) {
     .map((state) => ({ ...state, name: names.get(state.knowledge_point_id) ?? "未命名知识点" }));
 }
 
-export function groupConversationEvidence(flags: ReviewFlag[]): ConversationEvidenceGroup[] {
-  const grouped = new Map<string, ReviewFlag[]>();
-  for (const flag of flags) {
-    const items = grouped.get(flag.conversation_id) ?? [];
-    items.push(flag);
-    grouped.set(flag.conversation_id, items);
+export function buildConversationEvidenceGroups(
+  conversations: Conversation[],
+  flags: ReviewFlag[],
+): ConversationEvidenceGroup[] {
+  const grouped = new Map<string, ConversationEvidenceGroup>();
+  for (const conversation of conversations) {
+    grouped.set(conversation.id, {
+      conversationId: conversation.id,
+      title: conversation.title?.trim() || "对话记录",
+      updatedAt: conversation.updated_at,
+      flags: [],
+      messageIds: [],
+      status: "unreviewed",
+    });
   }
-  return [...grouped.entries()]
-    .map(([conversationId, items]) => {
-      const sorted = [...items].sort((a, b) => a.created_at.localeCompare(b.created_at));
-      const status = items.some((item) => item.status === "open")
-        ? "pending"
-        : items.some((item) => item.status === "marked_incorrect")
-          ? "rejected"
-          : "reviewed";
+  for (const flag of flags) {
+    const existing = grouped.get(flag.conversation_id) ?? {
+      conversationId: flag.conversation_id,
+      title: "对话记录",
+      updatedAt: flag.updated_at,
+      flags: [],
+      messageIds: [],
+      status: "unreviewed" as const,
+    };
+    existing.flags.push(flag);
+    grouped.set(flag.conversation_id, existing);
+  }
+
+  return [...grouped.values()]
+    .map((conversation) => {
+      const sorted = [...conversation.flags].sort((a, b) => a.created_at.localeCompare(b.created_at));
+      const status = sorted.length === 0
+        ? "unreviewed"
+        : sorted.some((item) => item.status === "open")
+          ? "pending"
+          : sorted.some((item) => item.status === "marked_incorrect")
+            ? "rejected"
+            : "reviewed";
       return {
-        conversationId,
-        title: sorted[0]?.question || sorted[0]?.answer.slice(0, 24) || "对话记录",
-        updatedAt: sorted.at(-1)?.created_at ?? "",
+        ...conversation,
+        title: sorted[0]?.question || sorted[0]?.answer.slice(0, 24) || conversation.title,
+        updatedAt: [conversation.updatedAt, sorted.at(-1)?.updated_at ?? ""].sort().at(-1) ?? conversation.updatedAt,
         flags: sorted,
-        messageIds: sorted.map((item) => item.message_id),
+        messageIds: [...new Set(sorted.map((item) => item.message_id))],
         status: status as ConversationEvidenceGroup["status"],
       };
     })
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+export function groupConversationEvidence(flags: ReviewFlag[]): ConversationEvidenceGroup[] {
+  return buildConversationEvidenceGroups([], flags);
 }
 
 export function eventCategoryCounts(items: LearningEvidence[]) {
