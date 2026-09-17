@@ -1,0 +1,92 @@
+"use client";
+
+import type { DevelopmentLoginRequest, User } from "@echo/shared-types";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+
+import { apiClient } from "@/lib/api";
+
+const SESSION_KEY = "echo.teacher.user-id";
+
+interface TeacherSessionContextValue {
+  ready: boolean;
+  user: User | null;
+  login: (payload: DevelopmentLoginRequest) => Promise<User>;
+  establishSession: (user: User) => void;
+  logout: () => void;
+}
+
+const TeacherSessionContext = createContext<TeacherSessionContextValue | null>(null);
+
+export function TeacherSessionProvider({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const storedUserId = window.localStorage.getItem(SESSION_KEY);
+      if (!storedUserId) {
+        setReady(true);
+        return;
+      }
+
+      try {
+        const currentUser = await apiClient.me(storedUserId);
+        if (!cancelled) {
+          setUser(currentUser);
+        }
+      } catch {
+        window.localStorage.removeItem(SESSION_KEY);
+      } finally {
+        if (!cancelled) {
+          setReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const establishSession = useCallback((currentUser: User) => {
+    window.localStorage.setItem(SESSION_KEY, currentUser.id);
+    setUser(currentUser);
+  }, []);
+
+  const login = useCallback(async (payload: DevelopmentLoginRequest) => {
+    const currentUser = await apiClient.login(payload);
+    window.localStorage.setItem(SESSION_KEY, currentUser.id);
+    setUser(currentUser);
+    return currentUser;
+  }, []);
+
+  const logout = useCallback(() => {
+    window.localStorage.removeItem(SESSION_KEY);
+    setUser(null);
+  }, []);
+
+  const value = useMemo(
+    () => ({ ready, user, login, establishSession, logout }),
+    [establishSession, login, logout, ready, user],
+  );
+
+  return <TeacherSessionContext.Provider value={value}>{children}</TeacherSessionContext.Provider>;
+}
+
+export function useTeacherSession() {
+  const context = useContext(TeacherSessionContext);
+  if (!context) {
+    throw new Error("useTeacherSession must be used within TeacherSessionProvider");
+  }
+  return context;
+}

@@ -2,18 +2,12 @@
 
 import { ApiClientError } from "@echo/api-client";
 import type { Course, CourseDashboard, User } from "@echo/shared-types";
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { KnowledgeEditor } from "@/components/knowledge-editor";
 import { ReviewQueue } from "@/components/review-queue";
 import { apiClient } from "@/lib/api";
-const SESSION_KEY = "echo.teacher.user-id";
+import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiClientError) {
@@ -58,47 +52,7 @@ function EmptyState({ children }: { children: ReactNode }) {
 }
 
 export function TeacherWorkspace() {
-  const [sessionReady, setSessionReady] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      const storedUserId = window.localStorage.getItem(SESSION_KEY);
-      if (!storedUserId) {
-        setSessionReady(true);
-        return;
-      }
-
-      try {
-        const currentUser = await apiClient.me(storedUserId);
-        if (!cancelled) {
-          setUser(currentUser);
-        }
-      } catch {
-        window.localStorage.removeItem(SESSION_KEY);
-      } finally {
-        if (!cancelled) {
-          setSessionReady(true);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  function handleAuthenticated(currentUser: User) {
-    window.localStorage.setItem(SESSION_KEY, currentUser.id);
-    setUser(currentUser);
-  }
-
-  const handleLogout = useCallback(() => {
-    window.localStorage.removeItem(SESSION_KEY);
-    setUser(null);
-  }, []);
+  const { ready: sessionReady, user, establishSession, logout } = useTeacherSession();
 
   if (!sessionReady) {
     return (
@@ -109,10 +63,10 @@ export function TeacherWorkspace() {
   }
 
   if (!user) {
-    return <LoginPanel onAuthenticated={handleAuthenticated} />;
+    return <LoginPanel onAuthenticated={establishSession} />;
   }
 
-  return <Dashboard user={user} onLogout={handleLogout} />;
+  return <Dashboard user={user} onLogout={logout} />;
 }
 
 function LoginPanel({ onAuthenticated }: { onAuthenticated: (user: User) => void }) {
