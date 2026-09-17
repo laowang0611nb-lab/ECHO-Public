@@ -11,6 +11,7 @@ from app.schemas.learning import (
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 from app.services.learning import (
     KnowledgePointNotFoundError,
+    LearningEventConflictError,
     LearningEventForbiddenError,
     LearningEventReferenceMismatchError,
     LearningEventStudentNotFoundError,
@@ -66,6 +67,11 @@ async def create_learning_event(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Learning event references do not belong to the student and course",
+        ) from exc
+    except LearningEventConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Learning event conflicted with another concurrent update",
         ) from exc
 
 

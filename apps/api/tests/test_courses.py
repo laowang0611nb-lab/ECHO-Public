@@ -37,6 +37,18 @@ async def test_student_cannot_create_course(client: AsyncClient) -> None:
     assert response.status_code == 403
 
 
+async def test_blank_course_name_returns_validation_error(client: AsyncClient) -> None:
+    teacher = await login(client, "blank-course@example.com", "teacher")
+
+    response = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "   "},
+    )
+
+    assert response.status_code == 422
+
+
 async def test_teacher_creates_course_and_becomes_member(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

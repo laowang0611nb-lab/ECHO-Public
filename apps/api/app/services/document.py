@@ -134,7 +134,9 @@ async def parse_document(
     document_id: UUID,
     requester_id: UUID,
 ) -> Document:
-    document = await session.get(Document, document_id)
+    document = await session.scalar(
+        select(Document).where(Document.id == document_id).with_for_update()
+    )
     if document is None:
         raise DocumentNotFoundError
 
@@ -155,7 +157,7 @@ async def parse_document(
 
     document.status = DocumentStatus.PARSING
     await session.execute(delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id))
-    await session.commit()
+    await session.flush()
 
     try:
         page_texts = await anyio.to_thread.run_sync(_extract_pdf_pages, path)

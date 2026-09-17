@@ -12,9 +12,17 @@ class CourseCreate(BaseModel):
     description: str | None = Field(default=None, max_length=5000)
     term: str | None = Field(default=None, max_length=80)
 
-    @field_validator("name", "description", "term")
+    @field_validator("name")
     @classmethod
-    def strip_text(cls, value: str | None) -> str | None:
+    def strip_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("course name must not be blank")
+        return normalized
+
+    @field_validator("description", "term")
+    @classmethod
+    def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
         normalized = value.strip()

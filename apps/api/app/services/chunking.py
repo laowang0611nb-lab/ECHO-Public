@@ -69,7 +69,9 @@ async def chunk_document(
     chunk_size: int,
     overlap: int,
 ) -> list[KnowledgeChunk]:
-    document = await session.get(Document, document_id)
+    document = await session.scalar(
+        select(Document).where(Document.id == document_id).with_for_update()
+    )
     if document is None:
         raise KnowledgeDocumentNotFoundError
 

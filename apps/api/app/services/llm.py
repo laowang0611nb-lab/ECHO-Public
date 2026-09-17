@@ -51,10 +51,10 @@ def estimate_tokens(text: str) -> int:
     if not text:
         return 0
     cjk_count = len(CJK_PATTERN.findall(text))
-    word_count = len(WORD_PATTERN.findall(text))
+    word_tokens = sum(max(1.0, len(word) + 0.5) for word in WORD_PATTERN.findall(text))
     remainder = WORD_PATTERN.sub("", CJK_PATTERN.sub("", text))
     symbol_count = sum(1 for character in remainder if not character.isspace())
-    return max(1, math.ceil(cjk_count * 1.5 + word_count * 1.3 + symbol_count))
+    return max(1, math.ceil(cjk_count * 1.5 + word_tokens + symbol_count))
 
 
 def _request_tokens(system_prompt: str, prompt: str) -> int:

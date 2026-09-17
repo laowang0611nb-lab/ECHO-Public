@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import Conversation, Message
@@ -48,6 +49,10 @@ class LearningEventReferenceMismatchError(Exception):
     pass
 
 
+class LearningEventConflictError(Exception):
+    pass
+
+
 async def ensure_course_teacher(
     session: AsyncSession,
     course_id: UUID,
@@ -69,6 +74,28 @@ def clamp_score(score: float) -> float:
 
 
 async def record_learning_event(
+    session: AsyncSession,
+    course_id: UUID,
+    payload: LearningEventCreate,
+    *,
+    require_student_membership: bool = True,
+) -> LearningEvent:
+    for attempt in range(3):
+        try:
+            return await _record_learning_event_once(
+                session,
+                course_id,
+                payload,
+                require_student_membership=require_student_membership,
+            )
+        except IntegrityError as exc:
+            await session.rollback()
+            if payload.knowledge_point_id is None or attempt == 2:
+                raise LearningEventConflictError from exc
+    raise LearningEventConflictError
+
+
+async def _record_learning_event_once(
     session: AsyncSession,
     course_id: UUID,
     payload: LearningEventCreate,
@@ -137,11 +164,13 @@ async def record_learning_event(
 
     if knowledge_point_id is not None:
         state = await session.scalar(
-            select(StudentKnowledgeState).where(
+            select(StudentKnowledgeState)
+            .where(
                 StudentKnowledgeState.course_id == course_id,
                 StudentKnowledgeState.user_id == payload.student_id,
                 StudentKnowledgeState.knowledge_point_id == knowledge_point_id,
             )
+            .with_for_update()
         )
         if state is None:
             state = StudentKnowledgeState(

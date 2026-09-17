@@ -1,12 +1,17 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import TeachingPolicy
 from app.models.course import CourseMember
 from app.models.user import User, UserRole
 from app.services.course import get_course_for_member
+
+
+class TeachingPolicyConflictError(Exception):
+    pass
 
 
 class TeachingPolicyForbiddenError(Exception):
@@ -28,6 +33,27 @@ async def upsert_teaching_policy(
     updater: User,
     content: str,
 ) -> TeachingPolicy:
+    for attempt in range(3):
+        try:
+            return await _upsert_teaching_policy_once(
+                session,
+                course_id,
+                updater,
+                content,
+            )
+        except IntegrityError as exc:
+            await session.rollback()
+            if attempt == 2:
+                raise TeachingPolicyConflictError from exc
+    raise TeachingPolicyConflictError
+
+
+async def _upsert_teaching_policy_once(
+    session: AsyncSession,
+    course_id: UUID,
+    updater: User,
+    content: str,
+) -> TeachingPolicy:
     await get_course_for_member(session, course_id, updater.id)
     membership = await session.scalar(
         select(CourseMember).where(
@@ -39,7 +65,7 @@ async def upsert_teaching_policy(
         raise TeachingPolicyForbiddenError
 
     policy = await session.scalar(
-        select(TeachingPolicy).where(TeachingPolicy.course_id == course_id)
+        select(TeachingPolicy).where(TeachingPolicy.course_id == course_id).with_for_update()
     )
     if policy is None:
         policy = TeachingPolicy(

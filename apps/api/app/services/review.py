@@ -72,6 +72,13 @@ QUESTION_INTENT_MARKERS = (
     "计算",
     "分析",
     "评价",
+    "总结",
+    "概括",
+    "说明",
+    "举个例子",
+    "举一个",
+    "示例",
+    "推导",
     "what",
     "how",
     "why",
@@ -83,6 +90,12 @@ QUESTION_INTENT_MARKERS = (
     "compare",
     "calculate",
     "analyze",
+    "summarize",
+    "summary",
+    "example",
+    "describe",
+    "outline",
+    "illustrate",
 )
 
 
@@ -114,11 +127,11 @@ def _is_substantive_question(question: str) -> bool:
         normalized = stripped
     if not normalized:
         return False
-    if normalized.endswith(("?", "？")):
-        return True
     compact = re.sub(r"[\s\W_]+", "", normalized)
     if any(compact.startswith(pattern) for pattern in TRIVIAL_QUESTION_PATTERNS):
         return False
+    if normalized.endswith(("?", "？")):
+        return True
     return any(marker in normalized for marker in QUESTION_INTENT_MARKERS)
 
 

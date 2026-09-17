@@ -2,6 +2,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DBSession, DocumentStorageDep
 from app.core.config import settings
@@ -115,4 +116,9 @@ async def parse_uploaded_document(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Unable to parse PDF document",
+        ) from exc
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document pages were updated concurrently",
         ) from exc

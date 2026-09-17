@@ -7,9 +7,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.course import CourseMember
+from app.models.document import Document
 from app.models.knowledge import Chapter, KnowledgePoint
 from app.models.learning import MasterySnapshot, StudentKnowledgeState
 from app.models.user import UserRole
+from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft
+from app.services.knowledge import _replace_document_structure
 
 
 def make_pdf(page_count: int = 2) -> bytes:
@@ -82,6 +85,51 @@ async def test_teacher_generates_and_lists_structure(
     assert len(generated.json()[0]["knowledge_points"]) == 2
     assert listed.status_code == 200
     assert listed.json()[0]["knowledge_points"][0]["name"] == "Point 1"
+
+
+async def test_regeneration_reuses_point_when_chapter_title_changes(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "knowledge-title-change@example.com", "teacher")
+    course, document = await create_ready_document(client, teacher)
+    async with session_factory() as session:
+        chapter = Chapter(
+            course_id=UUID(course["id"]),
+            document_id=UUID(document["id"]),
+            title="Old Chapter",
+            order_index=0,
+        )
+        session.add(chapter)
+        await session.flush()
+        point = KnowledgePoint(
+            course_id=UUID(course["id"]),
+            chapter_id=chapter.id,
+            name="Shared Point",
+            order_index=0,
+        )
+        session.add(point)
+        await session.commit()
+        await session.refresh(point)
+        point_id = point.id
+    async with session_factory() as session:
+        stored_document = await session.get(Document, UUID(document["id"]))
+        assert stored_document is not None
+        chapters = await _replace_document_structure(
+            session,
+            stored_document,
+            [
+                ChapterDraft(
+                    title="New Chapter",
+                    knowledge_points=[KnowledgePointDraft(name="Shared Point")],
+                )
+            ],
+        )
+        await session.commit()
+        assert chapters[0].id is not None
+        reused = await session.get(KnowledgePoint, point_id)
+        assert reused is not None
+        assert reused.chapter_id == chapters[0].id
 
 
 async def test_regeneration_preserves_mastery_for_matching_points(

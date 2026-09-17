@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DBSession
 from app.core.config import settings
@@ -47,4 +48,9 @@ async def create_document_chunks(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only course teachers can chunk documents",
+        ) from exc
+    except IntegrityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document chunks were updated concurrently",
         ) from exc

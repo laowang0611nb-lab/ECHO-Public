@@ -143,7 +143,7 @@ async def _replace_document_structure(
                 )
                 session.add(point)
             else:
-                point.chapter_id = chapter.id
+                point.chapter = chapter
                 point.name = point_draft.name
                 point.description = point_draft.description
                 point.order_index = point_index

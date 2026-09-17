@@ -17,6 +17,8 @@ from app.services.review import _detect_review_reasons
         "白盒测试怎么做",
         "解释一下软件测试",
         "什么是边界值分析",
+        "总结第三章",
+        "Give an example of black-box testing",
         "你好，请解释一下黑盒测试",
     ],
 )
@@ -31,7 +33,10 @@ def test_short_chinese_questions_require_course_basis(question: str) -> None:
     assert ReviewReason.MISSING_COURSE_BASIS in {reason for reason, _, _ in reasons}
 
 
-@pytest.mark.parametrize("question", ["你好", "谢谢", "你是谁", "hello"])
+@pytest.mark.parametrize(
+    "question",
+    ["你好", "谢谢", "你是谁", "你是谁？", "你能做什么？", "hello"],
+)
 def test_trivial_messages_do_not_require_course_basis(question: str) -> None:
     reasons = _detect_review_reasons(
         question,

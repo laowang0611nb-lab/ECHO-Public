@@ -17,6 +17,7 @@ from app.services.llm import (
 def test_token_estimator_counts_cjk_content_conservatively() -> None:
     assert estimate_tokens("什么是黑盒测试") >= 6
     assert estimate_tokens("") == 0
+    assert estimate_tokens("a" * 10_000) >= 10_000
 
 
 def test_material_partition_respects_token_budget() -> None:
@@ -37,7 +38,7 @@ def test_agentic_generation_splits_and_merges_large_material() -> None:
                 base_url="https://example.invalid/v1",
                 model="test-model",
                 timeout_seconds=1,
-                max_input_tokens=400,
+                max_input_tokens=1000,
             )
             self.extraction_calls = 0
             self.merge_calls = 0
@@ -62,7 +63,7 @@ def test_agentic_generation_splits_and_merges_large_material() -> None:
             ]
 
     provider = RecordingProvider()
-    drafts = asyncio.run(provider.generate(["中" * 160, "文" * 160, "课" * 160]))
+    drafts = asyncio.run(provider.generate(["中" * 400, "文" * 400, "课" * 400]))
 
     assert provider.extraction_calls >= 3
     assert provider.merge_calls >= 1

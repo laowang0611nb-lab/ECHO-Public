@@ -6,6 +6,7 @@ from app.api.dependencies import CurrentUser, DBSession
 from app.schemas.teaching_policy import TeachingPolicyResponse, TeachingPolicyUpdate
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 from app.services.teaching_policy import (
+    TeachingPolicyConflictError,
     TeachingPolicyForbiddenError,
     get_teaching_policy,
     upsert_teaching_policy,
@@ -74,4 +75,9 @@ async def update_teaching_policy(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only course teachers can update the teaching policy",
+        ) from exc
+    except TeachingPolicyConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Teaching policy update conflicted with another request",
         ) from exc
