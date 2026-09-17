@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.chat import MessageRole
+from app.models.review import ReviewStatus
 
 
 class ConversationCreate(BaseModel):
@@ -41,6 +42,16 @@ class MessageResponse(BaseModel):
     citations: list[CitationResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class TeacherMessageResponse(MessageResponse):
+    knowledge_point_ids: list[UUID] = Field(
+        default_factory=list,
+        alias="knowledgePointIds",
+    )
+    review_status: ReviewStatus | None = Field(default=None, alias="reviewStatus")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class ChatStreamRequest(BaseModel):

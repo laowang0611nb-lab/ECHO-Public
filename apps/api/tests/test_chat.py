@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -5,9 +6,16 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.models.chat import Message, MessageCitation, MessageRole
 from app.models.document import Document, DocumentPage, DocumentStatus
-from app.models.knowledge import KnowledgeChunk
+from app.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from app.models.learning import LearningEvent, LearningEventType
+from app.models.review import (
+    AIReviewFlag,
+    ReviewReason,
+    ReviewSeverity,
+    ReviewStatus,
+)
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -244,3 +252,119 @@ async def test_conversation_list_is_user_scoped(
     assert teacher_list.status_code == 200
     assert len(teacher_list.json()) == 1
     assert other_access.status_code == 403
+
+
+async def test_teacher_can_read_student_conversation_evidence(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "chat-evidence-teacher@example.com", "teacher")
+    student = await login(client, "chat-evidence-student@example.com", "student")
+    course = await create_searchable_course(client, session_factory, teacher)
+    published = await client.post(
+        f"/api/v1/courses/{course['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": published.json()["code"]},
+    )
+    conversation_response = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(student),
+        json={"title": "学生对话证据"},
+    )
+    conversation_id = UUID(conversation_response.json()["id"])
+
+    async with session_factory() as session:
+        document = await session.scalar(
+            select(Document).where(Document.course_id == UUID(course["id"]))
+        )
+        chunk = await session.scalar(
+            select(KnowledgeChunk).where(KnowledgeChunk.course_id == UUID(course["id"]))
+        )
+        assert document is not None
+        assert chunk is not None
+        chapter = Chapter(
+            course_id=UUID(course["id"]),
+            document_id=document.id,
+            title="测试章节",
+            order_index=0,
+        )
+        session.add(chapter)
+        await session.flush()
+        point = KnowledgePoint(
+            course_id=UUID(course["id"]),
+            chapter_id=chapter.id,
+            name="等价类划分",
+            order_index=0,
+        )
+        user_message = Message(
+            conversation_id=conversation_id,
+            role=MessageRole.USER,
+            content="等价类划分应该怎么做？",
+            created_at=datetime.now(UTC) - timedelta(minutes=2),
+        )
+        assistant_message = Message(
+            conversation_id=conversation_id,
+            role=MessageRole.ASSISTANT,
+            content="先按有效和无效输入划分等价类。",
+            created_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        session.add_all([point, user_message, assistant_message])
+        await session.flush()
+        session.add_all(
+            [
+                LearningEvent(
+                    course_id=UUID(course["id"]),
+                    user_id=UUID(student["id"]),
+                    knowledge_point_id=point.id,
+                    conversation_id=conversation_id,
+                    message_id=user_message.id,
+                    event_type=LearningEventType.QUESTION_ASKED,
+                    evidence=user_message.content,
+                ),
+                MessageCitation(
+                    message_id=assistant_message.id,
+                    citation_index=1,
+                    chunk_id=chunk.id,
+                    document_id=document.id,
+                    page_start=chunk.page_start,
+                    page_end=chunk.page_end,
+                    quote=chunk.content[:80],
+                ),
+                AIReviewFlag(
+                    course_id=UUID(course["id"]),
+                    conversation_id=conversation_id,
+                    message_id=assistant_message.id,
+                    student_id=UUID(student["id"]),
+                    reason=ReviewReason.MISSING_COURSE_BASIS,
+                    severity=ReviewSeverity.HIGH,
+                    status=ReviewStatus.OPEN,
+                ),
+            ]
+        )
+        await session.commit()
+
+    conversations = await client.get(
+        f"/api/v1/courses/{course['id']}/students/{student['id']}/conversations",
+        headers=auth_headers(teacher),
+    )
+    messages = await client.get(
+        f"/api/v1/courses/{course['id']}/conversations/{conversation_id}/messages",
+        headers=auth_headers(teacher),
+    )
+    student_access = await client.get(
+        f"/api/v1/courses/{course['id']}/students/{student['id']}/conversations",
+        headers=auth_headers(student),
+    )
+
+    assert conversations.status_code == 200
+    assert conversations.json()[0]["id"] == str(conversation_id)
+    assert messages.status_code == 200
+    assistant = messages.json()[1]
+    assert assistant["knowledgePointIds"] == [str(point.id)]
+    assert assistant["reviewStatus"] == ReviewStatus.OPEN
+    assert assistant["citations"][0]["chunk_id"] == str(chunk.id)
+    assert student_access.status_code == 403

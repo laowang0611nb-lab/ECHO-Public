@@ -140,11 +140,16 @@ POST /api/v1/courses/{course_id}/conversations
 GET  /api/v1/courses/{course_id}/conversations
 GET  /api/v1/conversations/{conversation_id}/messages
 POST /api/v1/conversations/{conversation_id}/messages/stream
+GET  /api/v1/courses/{course_id}/students/{student_id}/conversations
+GET  /api/v1/courses/{course_id}/conversations/{conversation_id}/messages
 ```
 
 The stream endpoint retrieves course chunks, builds a teaching prompt, emits
 `text_delta`, `citation`, `done`, or `error` SSE events, and persists the user
 message plus assistant message citations.
+Course teachers can also read a student's conversation list and complete message
+evidence. Teacher message responses include `knowledgePointIds`, `citations`, and
+`reviewStatus`.
 
 ## Teaching policy
 
@@ -201,6 +206,15 @@ course-external material, or follow an unresolved repeated question. Students
 can explicitly report an answer as not resolved. Teachers can filter open
 flags and mark them correct, incorrect, or dismissed. Full request and response
 contracts are frozen in `docs/API契约.md`.
+
+Seed repeatable teacher student analytics demo data:
+
+```powershell
+python -m app.scripts.seed_teacher_student_analytics
+```
+
+The seed script writes the full ID manifest to
+`tmp/teacher_student_analytics_seed.json`.
 
 Tests and lint:
 

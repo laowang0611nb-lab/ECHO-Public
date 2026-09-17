@@ -33,6 +33,7 @@ import type {
   ReviewSeverity,
   ReviewStatus,
   StudentLearningDetail,
+  TeacherMessage,
   TeachingPolicy,
   TeachingPolicyUpdateRequest,
   TeacherDashboardOverview,
@@ -462,6 +463,22 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       ),
     listMessages: (userId: string, conversationId: string) =>
       request<Message[]>(`/api/v1/conversations/${conversationId}/messages`, undefined, userId),
+    listStudentConversations: (userId: string, courseId: string, studentId: string) =>
+      request<Conversation[]>(
+        `/api/v1/courses/${courseId}/students/${studentId}/conversations`,
+        undefined,
+        userId,
+      ),
+    listTeacherConversationMessages: (
+      userId: string,
+      courseId: string,
+      conversationId: string,
+    ) =>
+      request<TeacherMessage[]>(
+        `/api/v1/courses/${courseId}/conversations/${conversationId}/messages`,
+        undefined,
+        userId,
+      ),
     streamConversationMessage: async function* (
       userId: string,
       conversationId: string,

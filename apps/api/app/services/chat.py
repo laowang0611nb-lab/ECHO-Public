@@ -16,17 +16,23 @@ from app.models.chat import (
     MessageRole,
     TeachingPolicy,
 )
+from app.models.course import CourseMember
 from app.models.document import Document, DocumentStatus
 from app.models.knowledge import KnowledgeChunk
-from app.models.learning import LearningEventType
+from app.models.learning import LearningEvent, LearningEventType
+from app.models.review import AIReviewFlag, ReviewStatus
 from app.models.user import User, UserRole
-from app.schemas.chat import ConversationCreate
+from app.schemas.chat import ConversationCreate, TeacherMessageResponse
 from app.schemas.learning import LearningEventCreate
 from app.schemas.search import ChunkSearchResult
 from app.services.chat_provider import ChatProvider
 from app.services.course import get_course_for_member
 from app.services.embedding import EmbeddingProvider
-from app.services.learning import record_learning_event
+from app.services.learning import (
+    LearningEventForbiddenError,
+    ensure_course_teacher,
+    record_learning_event,
+)
 from app.services.review import attach_auto_review_flags
 from app.services.search import search_course_chunks
 
@@ -62,6 +68,10 @@ class ConversationNotFoundError(Exception):
 
 
 class ConversationForbiddenError(Exception):
+    pass
+
+
+class StudentConversationTargetNotFoundError(Exception):
     pass
 
 
@@ -127,6 +137,126 @@ async def list_messages(
         .order_by(Message.created_at, Message.id)
     )
     return list(messages)
+
+
+async def list_student_conversations(
+    session: AsyncSession,
+    course_id: UUID,
+    student_id: UUID,
+    requester_id: UUID,
+) -> list[Conversation]:
+    try:
+        await ensure_course_teacher(session, course_id, requester_id)
+    except LearningEventForbiddenError as exc:
+        raise ConversationForbiddenError from exc
+    membership = await session.scalar(
+        select(CourseMember.id).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == student_id,
+            CourseMember.role == UserRole.STUDENT,
+        )
+    )
+    if membership is None:
+        raise StudentConversationTargetNotFoundError
+    conversations = await session.scalars(
+        select(Conversation)
+        .where(
+            Conversation.course_id == course_id,
+            Conversation.user_id == student_id,
+        )
+        .order_by(Conversation.updated_at.desc(), Conversation.created_at.desc())
+    )
+    return list(conversations)
+
+
+async def list_conversation_messages_for_teacher(
+    session: AsyncSession,
+    course_id: UUID,
+    conversation_id: UUID,
+    requester_id: UUID,
+) -> list[TeacherMessageResponse]:
+    try:
+        await ensure_course_teacher(session, course_id, requester_id)
+    except LearningEventForbiddenError as exc:
+        raise ConversationForbiddenError from exc
+    conversation = await session.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.course_id == course_id,
+        )
+    )
+    if conversation is None:
+        raise ConversationNotFoundError
+    student_membership = await session.scalar(
+        select(CourseMember.id).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == conversation.user_id,
+            CourseMember.role == UserRole.STUDENT,
+        )
+    )
+    if student_membership is None:
+        raise StudentConversationTargetNotFoundError
+    messages = list(
+        await session.scalars(
+            select(Message)
+            .options(selectinload(Message.citations))
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at, Message.id)
+        )
+    )
+    if not messages:
+        return []
+    message_ids = [message.id for message in messages]
+    event_rows = await session.execute(
+        select(LearningEvent.message_id, LearningEvent.knowledge_point_id).where(
+            LearningEvent.message_id.in_(message_ids),
+            LearningEvent.knowledge_point_id.is_not(None),
+        )
+    )
+    knowledge_points_by_message: dict[UUID, set[UUID]] = {}
+    for message_id, knowledge_point_id in event_rows.all():
+        if message_id is not None and knowledge_point_id is not None:
+            knowledge_points_by_message.setdefault(message_id, set()).add(knowledge_point_id)
+
+    flags = list(
+        await session.scalars(
+            select(AIReviewFlag)
+            .where(AIReviewFlag.message_id.in_(message_ids))
+            .order_by(AIReviewFlag.created_at.desc(), AIReviewFlag.id.desc())
+        )
+    )
+    flag_priority = {
+        ReviewStatus.OPEN: 0,
+        ReviewStatus.MARKED_INCORRECT: 1,
+        ReviewStatus.CONFIRMED_CORRECT: 2,
+        ReviewStatus.DISMISSED: 3,
+    }
+    review_status_by_message: dict[UUID, ReviewStatus] = {}
+    for flag in flags:
+        current = review_status_by_message.get(flag.message_id)
+        if current is None or flag_priority[flag.status] < flag_priority[current]:
+            review_status_by_message[flag.message_id] = flag.status
+
+    responses: list[TeacherMessageResponse] = []
+    context_knowledge_point_ids: set[UUID] = set()
+    for message in messages:
+        exact_ids = knowledge_points_by_message.get(message.id, set())
+        if exact_ids:
+            context_knowledge_point_ids = set(exact_ids)
+        knowledge_point_ids = exact_ids or context_knowledge_point_ids
+        responses.append(
+            TeacherMessageResponse(
+                id=message.id,
+                conversation_id=message.conversation_id,
+                role=message.role,
+                content=message.content,
+                created_at=message.created_at,
+                citations=message.citations,
+                knowledge_point_ids=sorted(knowledge_point_ids, key=str),
+                review_status=review_status_by_message.get(message.id),
+            )
+        )
+    return responses
 
 
 def _build_prompt(

@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.59`
+> 冻结版本：`v0.0.65`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -94,6 +94,8 @@ POST /api/v1/courses/{course_id}/knowledge-points/merge
 | GET | `/courses/{course_id}/conversations` | 课程成员 | 当前用户的课程会话 |
 | GET | `/conversations/{conversation_id}/messages` | 会话所有者 | 历史消息和引用 |
 | POST | `/conversations/{conversation_id}/messages/stream` | 会话所有者 | RAG 流式回答 |
+| GET | `/courses/{course_id}/students/{student_id}/conversations` | 课程教师 | 查看指定学生会话列表 |
+| GET | `/courses/{course_id}/conversations/{conversation_id}/messages` | 课程教师 | 查看完整对话证据、知识点、引用和审核状态 |
 
 SSE 事件：
 
@@ -105,6 +107,18 @@ SSE 事件：
 | `done` | `{"conversation_id": "...", "message_id": "..."}` |
 
 历史消息中的引用包含 `citation_index`，表示模型回答使用的原始来源编号。若回答只引用 `[2]`，刷新历史后仍保留编号 `2`，不会重新编号为 `1`。
+
+教师查看学生会话消息时，每条消息额外包含：
+
+```json
+{
+  "knowledgePointIds": ["uuid"],
+  "reviewStatus": "open",
+  "citations": []
+}
+```
+
+知识点关联从现有 `LearningEvent.message_id -> knowledge_point_id` 推导；助手消息会继承最近一条学生问题所关联的知识点。
 
 ## 5. 教学规则与学习分析
 

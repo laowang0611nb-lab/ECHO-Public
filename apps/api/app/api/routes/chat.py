@@ -9,13 +9,17 @@ from app.schemas.chat import (
     ConversationCreate,
     ConversationResponse,
     MessageResponse,
+    TeacherMessageResponse,
 )
 from app.services.chat import (
     ConversationForbiddenError,
     ConversationNotFoundError,
+    StudentConversationTargetNotFoundError,
     create_conversation,
+    list_conversation_messages_for_teacher,
     list_conversations,
     list_messages,
+    list_student_conversations,
     stream_chat_response,
 )
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
@@ -91,6 +95,89 @@ async def get_conversation_messages(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Conversation access denied",
+        ) from exc
+
+
+@router.get(
+    "/courses/{course_id}/students/{student_id}/conversations",
+    response_model=list[ConversationResponse],
+)
+async def get_student_conversations_for_teacher(
+    course_id: UUID,
+    student_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+):
+    try:
+        return await list_student_conversations(
+            session,
+            course_id,
+            student_id,
+            current_user.id,
+        )
+    except CourseNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        ) from exc
+    except CourseMembershipRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Course membership required",
+        ) from exc
+    except ConversationForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can view student conversations",
+        ) from exc
+    except StudentConversationTargetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student is not a member of this course",
+        ) from exc
+
+
+@router.get(
+    "/courses/{course_id}/conversations/{conversation_id}/messages",
+    response_model=list[TeacherMessageResponse],
+)
+async def get_conversation_messages_for_teacher(
+    course_id: UUID,
+    conversation_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+):
+    try:
+        return await list_conversation_messages_for_teacher(
+            session,
+            course_id,
+            conversation_id,
+            current_user.id,
+        )
+    except CourseNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found",
+        ) from exc
+    except CourseMembershipRequiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Course membership required",
+        ) from exc
+    except ConversationForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can view conversation evidence",
+        ) from exc
+    except ConversationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found",
+        ) from exc
+    except StudentConversationTargetNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation owner is not a student in this course",
         ) from exc
 
 

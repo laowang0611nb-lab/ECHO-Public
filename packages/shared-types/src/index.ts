@@ -329,6 +329,12 @@ export interface Message {
   citations: MessageCitation[];
 }
 
+
+export interface TeacherMessage extends Message {
+  knowledgePointIds: string[];
+  reviewStatus: ReviewStatus | null;
+}
+
 export interface ChatStreamRequest {
   content: string;
   retrieval_limit?: number;
