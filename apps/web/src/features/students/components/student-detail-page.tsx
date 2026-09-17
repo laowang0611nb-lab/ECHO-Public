@@ -83,7 +83,7 @@ export function StudentDetailPage({
   const status = masteryStatus(context.detail.average_mastery);
   const breadcrumbs = from === "course"
     ? [{ label: "课程管理", href: "/courses" }, { label: context.course.name, href: `/courses/${context.course.id}?tab=students` }, { label: context.member.display_name }]
-    : [{ label: "学生学情", href: "/students" }, { label: context.member.display_name }];
+    : [{ label: "学生学情", href: "/students" }, { label: "学生详情" }];
 
   return (
     <div className="space-y-5">

@@ -137,7 +137,7 @@ export function StudentConversationPage({
 
   const breadcrumbs = from === "ai-review"
     ? [{ label: "AI 回答审核", href: "/ai-review" }, { label: "审核工作台" }, { label: "完整对话" }]
-    : [{ label: "学生学情", href: "/students" }, { label: data.member.display_name, href: `/students/${studentId}?from=student&courseId=${data.course.id}&tab=conversations` }, { label: "对话证据" }];
+    : [{ label: "学生学情", href: "/students" }, { label: "学生详情", href: `/students/${studentId}?from=student&courseId=${data.course.id}&tab=conversations` }, { label: "完整对话" }];
 
   return (
     <div className="space-y-5">
