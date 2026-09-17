@@ -1,0 +1,38 @@
+import type { LucideIcon } from "lucide-react";
+
+import { AnimatedNumber } from "@/components/common/animated-number";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+export function StatCard({
+  label,
+  value,
+  suffix,
+  supporting,
+  icon: Icon,
+  tone = "default",
+}: {
+  label: string;
+  value: number | null;
+  suffix?: string;
+  supporting: string;
+  icon: LucideIcon;
+  tone?: "default" | "warning";
+}) {
+  return (
+    <Card className={cn("gap-3 py-4", tone === "warning" && "bg-orange-50/40")} size="sm">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 px-4">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
+        <Icon className={cn("size-4", tone === "warning" ? "text-orange-500" : "text-primary")} />
+      </CardHeader>
+      <CardContent className="px-4">
+        <p className="text-3xl font-semibold tracking-tight">
+          <AnimatedNumber suffix={suffix} value={value} />
+        </p>
+        <p className={cn("mt-2 text-xs", tone === "warning" ? "text-orange-700" : "text-muted-foreground")}>
+          {supporting}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
