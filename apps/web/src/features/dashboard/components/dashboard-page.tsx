@@ -118,7 +118,7 @@ export function DashboardPage() {
       </motion.section>
 
       <motion.div variants={itemVariants}>
-        <LearningAnalysisSection chapters={overview.chapter_mastery} difficulties={overview.learning_difficulties} />
+        <LearningAnalysisSection chapters={overview.chapter_mastery} courseId={selectedCourseId} difficulties={overview.learning_difficulties} />
       </motion.div>
 
       <motion.div variants={itemVariants}>

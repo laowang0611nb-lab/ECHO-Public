@@ -10,9 +10,11 @@ import { cn } from "@/lib/utils";
 export function LearningAnalysisSection({
   chapters,
   difficulties,
+  courseId,
 }: {
   chapters: ChapterAnalytics[];
   difficulties: DashboardLearningDifficulty[];
+  courseId: string;
 }) {
   return (
     <section className="space-y-4">
@@ -65,11 +67,11 @@ export function LearningAnalysisSection({
           </CardHeader>
           <CardContent className="divide-y divide-border px-5">
             {difficulties.slice(0, 5).map((item, index) => (
-              <div className="flex items-center gap-4 py-3.5" key={item.knowledge_point_id}>
+              <Link className="flex items-center gap-4 py-3.5" href={`/knowledge/points/${item.knowledge_point_id}?from=dashboard&courseId=${courseId}`} key={item.knowledge_point_id}>
                 <span className="w-6 text-xs text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
                 <span className="text-sm text-muted-foreground">{item.affected_students} 人</span>
-              </div>
+              </Link>
             ))}
             {!difficulties.length ? <p className="py-8 text-center text-sm text-muted-foreground">暂无困难知识点数据。</p> : null}
           </CardContent>

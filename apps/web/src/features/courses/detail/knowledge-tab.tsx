@@ -5,7 +5,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export function CourseKnowledgeTab({ chapters }: { chapters: Chapter[] }) {
+export function CourseKnowledgeTab({ chapters, courseId }: { chapters: Chapter[]; courseId: string }) {
   if (!chapters.length) {
     return (
       <EmptyState
@@ -46,7 +46,7 @@ export function CourseKnowledgeTab({ chapters }: { chapters: Chapter[] }) {
                   {chapter.knowledge_points.map((point) => (
                     <Link
                       className="flex items-center justify-between gap-4 px-4 py-3 text-sm transition-colors hover:bg-muted/50"
-                      href={`/knowledge/points/${point.id}`}
+                      href={`/knowledge/points/${point.id}?from=course&courseId=${courseId}&tab=knowledge`}
                       key={point.id}
                     >
                       <span className="min-w-0">

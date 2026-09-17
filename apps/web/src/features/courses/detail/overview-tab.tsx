@@ -194,7 +194,7 @@ export function CourseOverviewTab({
           </CardHeader>
           <CardContent className="space-y-3 px-5">
             {overview.teacher_actions.length ? overview.teacher_actions.slice(0, 4).map((action) => (
-              <ActionItem action={action.action_type} key={`${action.action_type}-${action.target_id ?? "general"}`} priority={action.priority} targetId={action.target_id} />
+<ActionItem action={action.action_type} courseId={course.id} key={`${action.action_type}-${action.target_id ?? "general"}`} priority={action.priority} targetId={action.target_id} />
             )) : (
               <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
                 当前没有新的待处理事项。
@@ -216,7 +216,7 @@ export function CourseOverviewTab({
               {overview.insight.summary}
             </div>
             {overview.learning_difficulties.slice(0, 3).map((difficulty) => (
-              <Link className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm transition-colors hover:border-blue-200" href={`/knowledge/points/${difficulty.knowledge_point_id}`} key={difficulty.knowledge_point_id}>
+              <Link className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm transition-colors hover:border-blue-200" href={`/knowledge/points/${difficulty.knowledge_point_id}?from=course&courseId=${course.id}`} key={difficulty.knowledge_point_id}>
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{difficulty.name}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
@@ -262,10 +262,10 @@ function MiniMetric({ label, value, suffix = "", tone = "default" }: { label: st
   );
 }
 
-function ActionItem({ action, targetId, priority }: { action: "review_flags" | "support_knowledge_point" | "encourage_inactive_students"; targetId: string | null; priority: "low" | "medium" | "high" }) {
+function ActionItem({ action, courseId, targetId, priority }: { action: "review_flags" | "support_knowledge_point" | "encourage_inactive_students"; courseId: string; targetId: string | null; priority: "low" | "medium" | "high" }) {
   const config = {
     review_flags: { title: "处理待审核 AI 回答", href: "/ai-review" },
-    support_knowledge_point: { title: "为薄弱知识点安排教学干预", href: targetId ? `/knowledge/points/${targetId}` : "/knowledge" },
+    support_knowledge_point: { title: "为薄弱知识点安排教学干预", href: targetId ? `/knowledge/points/${targetId}?from=course&courseId=${courseId}` : "/knowledge" },
     encourage_inactive_students: { title: "关注近期不活跃学生", href: "/students" },
   } as const;
   const item = config[action];

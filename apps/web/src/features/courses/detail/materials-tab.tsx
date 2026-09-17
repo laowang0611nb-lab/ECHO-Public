@@ -120,7 +120,7 @@ export function CourseMaterialsTab({
                     </TableCell>
                     <TableCell>{formatDate(document.created_at)}</TableCell>
                     <TableCell className="text-right">
-                      <Link className="inline-flex items-center gap-1 text-sm font-medium text-primary" href={`/knowledge/resources/${document.id}`}>
+                      <Link className="inline-flex items-center gap-1 text-sm font-medium text-primary" href={`/knowledge/resources/${document.id}?from=course&courseId=${courseId}&tab=materials`}>
                         查看资源 <ArrowRight className="size-4" />
                       </Link>
                     </TableCell>

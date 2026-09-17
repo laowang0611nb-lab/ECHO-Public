@@ -130,7 +130,7 @@ export function CourseDetailPage({
               onOpenKnowledge={() => handleTabChange("knowledge")}
             />
           ) : null}
-          {activeTab === "knowledge" ? <CourseKnowledgeTab chapters={detail.chapters} /> : null}
+          {activeTab === "knowledge" ? <CourseKnowledgeTab chapters={detail.chapters} courseId={course.id} /> : null}
           {activeTab === "students" ? <CourseStudentsTab course={course} members={detail.members} /> : null}
           {activeTab === "materials" ? <CourseMaterialsTab courseId={courseId} documents={detail.documents} /> : null}
           {activeTab === "strategy" ? <CourseStrategyTab course={course} policy={detail.policy} /> : null}
