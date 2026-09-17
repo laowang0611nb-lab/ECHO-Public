@@ -61,7 +61,7 @@ export function CourseStudentsTab({ course, members }: { course: Course; members
               <TableHeader>
                 <TableRow>
                   <TableHead className="px-5">学生</TableHead>
-                  <TableHead>邮箱</TableHead>
+<TableHead>学生标识</TableHead>
                   <TableHead>加入时间</TableHead>
                   <TableHead>角色</TableHead>
                   <TableHead className="text-right">操作</TableHead>
@@ -71,11 +71,11 @@ export function CourseStudentsTab({ course, members }: { course: Course; members
                 {students.map((member) => (
                   <TableRow key={member.id}>
                     <TableCell className="px-5 font-medium">{member.display_name}</TableCell>
-                    <TableCell className="text-muted-foreground">{member.email}</TableCell>
+<TableCell className="font-mono text-xs text-muted-foreground">{member.user_id.slice(0, 8)}</TableCell>
                     <TableCell>{formatDate(member.joined_at)}</TableCell>
                     <TableCell><StatusBadge tone="info">学生</StatusBadge></TableCell>
                     <TableCell className="text-right">
-                      <Link className="inline-flex items-center gap-1 text-sm font-medium text-primary" href={`/students/${member.user_id}`}>
+<Link className="inline-flex items-center gap-1 text-sm font-medium text-primary" href={`/students/${member.user_id}?from=course&courseId=${course.id}&tab=overview`}>
                         查看学情 <ArrowRight className="size-4" />
                       </Link>
                     </TableCell>

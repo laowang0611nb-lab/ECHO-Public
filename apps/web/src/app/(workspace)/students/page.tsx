@@ -1,5 +1,22 @@
-import { PlaceholderPage } from "@/components/common/placeholder-page";
+import { StudentLearningPage } from "@/features/students/components/student-learning-page";
+import type { StudentAnalyticsTab } from "@/features/students/types";
 
-export default function StudentsPage() {
-  return <PlaceholderPage breadcrumbs={[{ label: "学生学情" }]} description="学生学情列表将在后续阶段实现。" title="学生学情" />;
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeTab(value: string | string[] | undefined): StudentAnalyticsTab {
+  const tab = first(value);
+  return tab === "students" || tab === "behavior" || tab === "mastery" || tab === "difficulty" || tab === "segments"
+    ? tab
+    : "overview";
+}
+
+export default async function StudentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ courseId?: string | string[]; tab?: string | string[] }>;
+}) {
+  const query = await searchParams;
+  return <StudentLearningPage initialCourseId={first(query.courseId)} initialTab={normalizeTab(query.tab)} />;
 }

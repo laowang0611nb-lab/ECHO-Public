@@ -5,6 +5,7 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDashboardDate } from "@/features/dashboard/view-model";
+import { useStudentAnalytics } from "@/features/students/queries";
 import { cn } from "@/lib/utils";
 
 function ActionCard({
@@ -38,7 +39,12 @@ function ActionCard({
   );
 }
 
-export function TeacherActionSection({ overview }: { overview: TeacherDashboardOverview }) {
+export function TeacherActionSection({ courseId, overview }: { courseId: string; overview: TeacherDashboardOverview }) {
+  const studentAnalytics = useStudentAnalytics(courseId);
+  const attentionStudent = studentAnalytics.items.find((item) => item.status === "risk" || item.status === "attention");
+  const studentHref = attentionStudent
+    ? `/students/${attentionStudent.member.user_id}?from=dashboard&courseId=${courseId}&tab=overview`
+    : `/students?courseId=${courseId}&tab=students`;
   const topDifficulties = overview.learning_difficulties.slice(0, 2);
   const supportPoint = overview.learning_difficulties[0];
   const reviewAction = overview.teacher_actions.find((action) => action.action_type === "review_flags");
@@ -52,7 +58,7 @@ export function TeacherActionSection({ overview }: { overview: TeacherDashboardO
         <p className="mt-1 text-sm text-muted-foreground">根据近期学习数据，为你整理值得关注的事项。</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-        <ActionCard action="查看学生学情" href="/students" icon={Users} title="待关注学生">
+<ActionCard action="查看学生学情" href={studentHref} icon={Users} title="待关注学生">
           {topDifficulties.length ? (
             <div className="space-y-2">
               {topDifficulties.map((item) => (
@@ -73,7 +79,7 @@ export function TeacherActionSection({ overview }: { overview: TeacherDashboardO
           </p>
         </ActionCard>
 
-        <ActionCard action="查看全部" href="/students" icon={MessageSquareText} title="最近学习动态">
+<ActionCard action="查看全部" href={`/students?courseId=${courseId}&tab=behavior`} icon={MessageSquareText} title="最近学习动态">
           <div className="space-y-2">
             {recent.map((point) => (
               <p key={point.date}>

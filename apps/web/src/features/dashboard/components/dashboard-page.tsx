@@ -122,7 +122,7 @@ export function DashboardPage() {
       </motion.div>
 
       <motion.div variants={itemVariants}>
-        <TeacherActionSection overview={overview} />
+        <TeacherActionSection courseId={selectedCourseId} overview={overview} />
       </motion.div>
 
       <DashboardFooter />
