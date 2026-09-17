@@ -73,7 +73,7 @@ export function SourceViewerPage({
       <PageHeader
         actions={
           <>
-            <Button onClick={() => router.back()} type="button" variant="ghost"><ArrowLeft data-icon="inline-start" />返回</Button>
+            <Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>
             <Link className={buttonVariants({ variant: "outline" })} href={buildResourceHref(resourceId, { from: "source", courseId: data.course.id })}>资源详情</Link>
           </>
         }

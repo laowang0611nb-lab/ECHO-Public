@@ -52,11 +52,13 @@ export function LearningTrendChart({
       return currentMastery ?? 0;
     });
     const metricName = metric === "mastery" ? "当前综合掌握度" : metric === "active" ? "活跃学生" : "学习交互";
+    const numericMax = Math.max(1, ...values);
+    const yAxisMax = metric === "mastery" ? 100 : Math.max(2, Math.ceil(numericMax * 1.25));
 
     chart.setOption({
       animationDuration: 420,
       animationEasing: "cubicOut",
-      grid: { left: 42, right: 18, top: 18, bottom: 32 },
+      grid: { left: 8, right: 18, top: 20, bottom: 10, containLabel: true },
       tooltip: {
         trigger: "axis",
         backgroundColor: "#ffffff",
@@ -64,20 +66,23 @@ export function LearningTrendChart({
         borderWidth: 1,
         textStyle: { color: "#182236", fontSize: 12 },
         extraCssText: "border-radius:10px;box-shadow:0 10px 24px rgba(23,37,58,.10);",
+        valueFormatter: (value: number) => metric === "mastery" ? `${value}%` : String(value),
       },
       xAxis: {
         type: "category",
         boundaryGap: false,
         data: data.map((point) => formatDashboardDate(point.date)),
-        axisLine: { lineStyle: { color: "#E5EAF2" } },
+        axisLine: { lineStyle: { color: "#D5DFEC" } },
         axisTick: { show: false },
         axisLabel: { color: "#667085", fontSize: 11 },
       },
       yAxis: {
         type: "value",
         min: 0,
-        max: metric === "mastery" ? 100 : undefined,
-        splitLine: { lineStyle: { color: "#EDF2F7" } },
+        max: yAxisMax,
+        minInterval: 1,
+        splitNumber: metric === "mastery" ? 5 : Math.min(5, yAxisMax),
+        splitLine: { lineStyle: { color: "#E8EEF7" } },
         axisLabel: { color: "#98A2B3", fontSize: 11 },
       },
       series: [
@@ -89,23 +94,23 @@ export function LearningTrendChart({
           data: values,
           lineStyle: { color: "#2F7CF6", width: 2.5 },
           itemStyle: { color: "#2F7CF6" },
-          areaStyle: { color: "rgba(47,124,246,0.12)" },
+          areaStyle: {
+            color: {
+              type: "linear",
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: "rgba(47,124,246,0.24)" },
+                { offset: 1, color: "rgba(47,124,246,0.015)" },
+              ],
+            },
+          },
         },
-        ...(metric !== "mastery" && currentMastery !== null
-          ? [
-              {
-                name: "当前综合掌握度",
-                type: "line" as const,
-                smooth: true,
-                symbol: "none",
-                data: data.map(() => currentMastery),
-                lineStyle: { color: "#7CAFFF", width: 1.5, type: "dashed" as const },
-              },
-            ]
-          : []),
       ],
     });
   }, [currentMastery, data, metric]);
 
-  return <div aria-label="学习状态趋势图" className="h-[320px] w-full" ref={elementRef} role="img" />;
+  return <div aria-label="学习状态趋势图" className="h-[240px] min-h-[220px] w-full sm:h-[280px] lg:h-[320px]" ref={elementRef} role="img" />;
 }

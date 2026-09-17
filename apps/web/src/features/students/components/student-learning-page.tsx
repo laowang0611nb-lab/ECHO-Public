@@ -341,7 +341,7 @@ function AttentionStudents({ courseId, items }: { courseId: string; items: Retur
       <CardContent className="space-y-2 px-5">
         {items.length ? items.map((item) => (
           <Link className="flex items-center gap-3 rounded-lg border border-border px-3 py-3 hover:border-orange-200" href={`/students/${item.member.user_id}?from=students&courseId=${courseId}`} key={item.member.id}>
-            <span className="flex size-8 items-center justify-center rounded-full bg-orange-50 text-xs font-semibold text-orange-700">{item.member.display_name.slice(0, 1)}</span>
+            <span className="flex size-8 items-center justify-center rounded-full border border-orange-200 bg-orange-50 text-xs font-semibold text-orange-700">{item.member.display_name.slice(0, 1)}</span>
             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.member.display_name}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{item.riskReason}</span></span>
             <ChevronRight className="size-4 text-muted-foreground" />
           </Link>
@@ -355,7 +355,7 @@ function StudentCompactRow({ courseId, item, index }: { courseId: string; item: 
   return (
     <Link className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/40" href={`/students/${item.member.user_id}?from=students&courseId=${courseId}`}>
       <span className="w-5 text-xs text-muted-foreground">{index}</span>
-      <span className="flex size-8 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-primary">{item.member.display_name.slice(0, 1)}</span>
+      <span className="flex size-8 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-xs font-semibold text-primary">{item.member.display_name.slice(0, 1)}</span>
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.member.display_name}</span>
       <span className="text-sm font-semibold">{item.mastery === null ? "暂无" : `${Math.round(item.mastery)}%`}</span>
     </Link>
@@ -377,7 +377,7 @@ function StudentList({ courseId, items }: { courseId: string; items: ReturnType<
         {items.map((item) => (
           <Link className="grid gap-3 px-5 py-4 transition-colors hover:bg-muted/40 xl:grid-cols-[minmax(230px,1.4fr)_110px_140px_100px_minmax(150px,1fr)_minmax(150px,0.9fr)]" href={`/students/${item.member.user_id}?from=students&courseId=${courseId}`} key={item.member.id}>
             <span className="flex items-start gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-primary">{item.member.display_name.slice(0, 1)}</span>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-blue-200 bg-blue-50 text-sm font-semibold text-primary">{item.member.display_name.slice(0, 1)}</span>
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{item.member.display_name}</span>
                 <span className="mt-1 block text-xs text-muted-foreground">学号 {item.member.user_id.slice(0, 8)} · {item.member.joined_at.slice(0, 10)} 加入</span>

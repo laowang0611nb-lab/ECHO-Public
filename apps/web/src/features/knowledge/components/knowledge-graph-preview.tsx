@@ -5,17 +5,21 @@ import { useMemo } from "react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const chapterColors = ["#DBEAFE", "#DCFCE7", "#E0F2FE", "#FEF3C7", "#FCE7F3", "#EDE9FE", "#CCFBF1", "#FFE4E6"] as const;
-const positions = [
-  [300, 34],
-  [458, 82],
-  [500, 160],
-  [438, 236],
-  [300, 260],
-  [164, 236],
-  [100, 158],
-  [142, 80],
+const chapterPalette = [
+  { fill: "#EAF3FF", stroke: "#8CB8F7", text: "#1859B8" },
+  { fill: "#EAFBF2", stroke: "#72D6A4", text: "#157347" },
+  { fill: "#FFF7E7", stroke: "#F2C56B", text: "#9A6200" },
+  { fill: "#F3EEFF", stroke: "#B9A2F5", text: "#6941C6" },
+  { fill: "#FFF0F5", stroke: "#EDA7C1", text: "#B4236A" },
+  { fill: "#EAF9FA", stroke: "#72CDD5", text: "#0F7580" },
 ] as const;
+
+const VIEWBOX_WIDTH = 900;
+const VIEWBOX_HEIGHT = 520;
+const CENTER_X = 450;
+const CENTER_Y = 260;
+const CHAPTER_NODE_WIDTH = 176;
+const CHAPTER_NODE_HEIGHT = 64;
 
 export function KnowledgeGraphPreview({
   courseId,
@@ -28,8 +32,9 @@ export function KnowledgeGraphPreview({
   chapters: Chapter[];
   compact?: boolean;
 }) {
-  const nodes = useMemo(() => chapters.slice(0, positions.length), [chapters]);
+  const nodes = useMemo(() => chapters.slice(0, 8), [chapters]);
   const totalPoints = chapters.reduce((total, chapter) => total + chapter.knowledge_points.length, 0);
+  const chapterPositions = useMemo(() => buildChapterPositions(nodes.length), [nodes.length]);
 
   if (!nodes.length) {
     return (
@@ -54,62 +59,70 @@ export function KnowledgeGraphPreview({
 
   return (
     <div className="space-y-4">
-      <div className={cn("relative overflow-hidden rounded-xl border border-border bg-[linear-gradient(180deg,#FBFDFF_0%,#F4F8FF_100%)]", compact ? "h-[280px]" : "h-[430px]")}>
-        <div className="absolute inset-0 opacity-40 [background-image:radial-gradient(#DBEAFE_1px,transparent_1px)] [background-size:22px_22px]" />
-        <div className="absolute right-4 top-4 z-10 flex flex-wrap gap-3 rounded-lg border border-white/80 bg-white/85 px-3 py-2 text-[11px] text-muted-foreground shadow-sm backdrop-blur">
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <div className={cn("relative min-w-[700px] overflow-hidden bg-[radial-gradient(circle_at_50%_45%,#FFFFFF_0%,#F5F9FF_46%,#EDF4FF_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]", compact ? "h-[300px]" : "h-[500px]")}>
+        <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(#BFD7FA_1px,transparent_1px)] [background-size:24px_24px]" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/55 to-transparent" />
+        <div className="absolute right-4 top-4 z-10 flex flex-wrap gap-3 rounded-lg border border-border bg-white/92 px-3 py-2 text-[11px] text-muted-foreground shadow-sm backdrop-blur">
           <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-primary" />课程</span>
-          <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#7CAFFF]" />章节</span>
+          <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#72A9F5]" />章节</span>
           <span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-[#BFDBFE]" />知识点</span>
         </div>
-        <svg className="size-full" viewBox="0 0 600 294" aria-label="课程知识结构预览">
-          {nodes.map((chapter, index) => (
-            <line
-              key={`line-${chapter.id}`}
-              stroke="#BFDBFE"
-              strokeOpacity="0.15"
-              strokeWidth="1.5"
-              x1="300"
-              x2={positions[index][0]}
-              y1="147"
-              y2={positions[index][1] + 12}
-            />
-          ))}
-          {nodes.map((chapter, index) => (
-            <g key={`points-${chapter.id}`}>
-              {chapter.knowledge_points.slice(0, 5).map((point, pointIndex) => {
-                const visiblePoints = chapter.knowledge_points.slice(0, 5);
-                const pointAngle = -Math.PI / 2 + (Math.PI * 2 * pointIndex) / Math.max(5, visiblePoints.length);
-                const pointX = positions[index][0] + Math.cos(pointAngle) * 42;
-                const pointY = positions[index][1] + 12 + Math.sin(pointAngle) * 34;
-                return (
-                  <g key={point.id}>
-                    <line stroke="#DBEAFE" strokeOpacity="0.9" strokeWidth="1" x1={positions[index][0]} x2={pointX} y1={positions[index][1] + 12} y2={pointY} />
-                    <circle cx={pointX} cy={pointY} fill="#BFDBFE" r="3.8" stroke="#FFFFFF" strokeWidth="1.2"><title>{point.name}</title></circle>
-                  </g>
-                );
-              })}
-            </g>
-          ))}
-          <circle cx="300" cy="147" fill="#2F7CF6" fillOpacity="0.12" r="50" />
-          <circle cx="300" cy="147" fill="#2f7cf6" r="38" stroke="#FFFFFF" strokeWidth="3" />
-          <text fill="white" fontSize="13" fontWeight="600" textAnchor="middle" x="300" y="142">
-            {courseName.length > 8 ? `${courseName.slice(0, 8)}…` : courseName}
-          </text>
-          <text fill="white" fillOpacity="0.72" fontSize="9" textAnchor="middle" x="300" y="158">
-            课程知识
-          </text>
-          {nodes.map((chapter, index) => (
-            <g key={chapter.id}>
-              <circle cx={positions[index][0]} cy={positions[index][1] + 12} fill={chapterColors[index % chapterColors.length]} r="30" stroke="#FFFFFF" strokeWidth="2" />
-              <text fill="#182236" fontSize="10" fontWeight="600" textAnchor="middle" x={positions[index][0]} y={positions[index][1] + 9}>
-                {chapter.title.length > 7 ? `${chapter.title.slice(0, 7)}…` : chapter.title}
-              </text>
-              <text fill="#667085" fontSize="8" textAnchor="middle" x={positions[index][0]} y={positions[index][1] + 22}>
-                {chapter.knowledge_points.length} 点
-              </text>
-            </g>
-          ))}
+        <svg className="size-full" viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} aria-label="课程知识结构预览" role="img">
+          <defs>
+            <filter id="course-node-shadow" x="-40%" y="-40%" width="180%" height="180%">
+              <feDropShadow dx="0" dy="10" floodColor="#2F7CF6" floodOpacity="0.22" stdDeviation="12" />
+            </filter>
+            <filter id="chapter-node-shadow" x="-30%" y="-30%" width="160%" height="160%">
+              <feDropShadow dx="0" dy="5" floodColor="#496C9C" floodOpacity="0.13" stdDeviation="7" />
+            </filter>
+            <linearGradient id="edge-gradient" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0%" stopColor="#2F7CF6" stopOpacity="0.34" />
+              <stop offset="100%" stopColor="#8CB8F7" stopOpacity="0.08" />
+            </linearGradient>
+          </defs>
+
+          {nodes.map((chapter, index) => {
+            const position = chapterPositions[index];
+            return (
+              <line key={`edge-${chapter.id}`} stroke="url(#edge-gradient)" strokeLinecap="round" strokeWidth="2" x1={CENTER_X} x2={position.x} y1={CENTER_Y} y2={position.y} />
+            );
+          })}
+
+          <circle cx={CENTER_X} cy={CENTER_Y} fill="#DCEAFF" r="84" />
+          <circle cx={CENTER_X} cy={CENTER_Y} fill="#2F7CF6" filter="url(#course-node-shadow)" r="64" stroke="#FFFFFF" strokeWidth="4" />
+          <text fill="white" fontSize="14" fontWeight="700" textAnchor="middle" x={CENTER_X} y={CENTER_Y - 5}>{truncate(courseName, 8)}</text>
+          <text fill="white" fillOpacity="0.76" fontSize="11" textAnchor="middle" x={CENTER_X} y={CENTER_Y + 18}>课程知识</text>
+
+          {nodes.map((chapter, index) => {
+            const position = chapterPositions[index];
+            const color = chapterPalette[index % chapterPalette.length];
+            return (
+              <g key={chapter.id}>
+                <rect fill={color.fill} filter="url(#chapter-node-shadow)" height={CHAPTER_NODE_HEIGHT} rx="16" stroke={color.stroke} strokeWidth="1.5" width={CHAPTER_NODE_WIDTH} x={position.x - CHAPTER_NODE_WIDTH / 2} y={position.y - CHAPTER_NODE_HEIGHT / 2} />
+                <text fill={color.text} fontSize="13" fontWeight="700" textAnchor="middle" x={position.x} y={position.y - 5}>{truncate(chapter.title, 10)}</text>
+                <text fill="#667085" fontSize="10" textAnchor="middle" x={position.x} y={position.y + 15}>{chapter.knowledge_points.length} 个知识点</text>
+                {chapter.knowledge_points.slice(0, 6).map((point, pointIndex) => {
+                  const visiblePoints = chapter.knowledge_points.slice(0, 6);
+                  const arcStart = -110;
+                  const arcEnd = 110;
+                  const angle = ((arcStart + ((arcEnd - arcStart) * pointIndex) / Math.max(visiblePoints.length - 1, 1)) * Math.PI) / 180;
+                  const baseAngle = angleFromCenter(position) + angle * 0.55;
+                  const pointX = position.x + Math.cos(baseAngle) * (CHAPTER_NODE_WIDTH / 2 + 34);
+                  const pointY = position.y + Math.sin(baseAngle) * (CHAPTER_NODE_HEIGHT / 2 + 26);
+                  return (
+                    <g key={point.id}>
+                      <line stroke={color.stroke} strokeOpacity="0.5" strokeWidth="1" x1={position.x} x2={pointX} y1={position.y} y2={pointY} />
+                      <circle cx={pointX} cy={pointY} fill="#FFFFFF" r="7" stroke={color.stroke} strokeWidth="2"><title>{point.name}</title></circle>
+                      <circle cx={pointX} cy={pointY} fill={color.stroke} r="2.6" />
+                    </g>
+                  );
+                })}
+              </g>
+            );
+          })}
         </svg>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -130,9 +143,28 @@ export function KnowledgeGraphPreview({
   );
 }
 
+function buildChapterPositions(count: number) {
+  if (count === 1) return [{ x: CENTER_X, y: 78 }];
+  if (count === 2) return [{ x: 680, y: 140 }, { x: 220, y: 380 }];
+  const radiusX = count <= 3 ? 282 : 312;
+  const radiusY = count <= 3 ? 182 : 188;
+  return Array.from({ length: count }, (_, index) => {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / count;
+    return { x: CENTER_X + Math.cos(angle) * radiusX, y: CENTER_Y + Math.sin(angle) * radiusY };
+  });
+}
+
+function angleFromCenter(position: { x: number; y: number }) {
+  return Math.atan2(position.y - CENTER_Y, position.x - CENTER_X);
+}
+
+function truncate(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
 function GraphMetric({ icon: Icon, label, value }: { icon: typeof Network; label: string; value: number | string }) {
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-3">
+    <div className="rounded-lg border border-border bg-card px-3 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
       <Icon className="size-4 text-primary" />
       <p className="mt-2 text-lg font-semibold">{value}</p>
       <p className="mt-1 text-[11px] text-muted-foreground">{label}</p>

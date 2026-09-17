@@ -90,7 +90,7 @@ export function StudentDetailPage({
       <PageHeader
         actions={
           <div className="flex flex-wrap gap-2">
-            <button className={cn(buttonVariants({ variant: "ghost" }))} onClick={() => router.back()} type="button"><ArrowLeft data-icon="inline-start" />返回</button>
+            <button className={cn(buttonVariants({ variant: "outline" }))} onClick={() => router.back()} type="button"><ArrowLeft data-icon="inline-start" />返回</button>
             {data.previousStudent ? <Link className={buttonVariants({ variant: "outline" })} href={`/students/${data.previousStudent.user_id}?from=${from}&courseId=${context.course.id}&tab=${activeTab}`}>上一个学生</Link> : null}
             {data.nextStudent ? <Link className={buttonVariants({ variant: "outline" })} href={`/students/${data.nextStudent.user_id}?from=${from}&courseId=${context.course.id}&tab=${activeTab}`}>下一个学生</Link> : null}
           </div>
@@ -138,7 +138,7 @@ function StudentProfileHeader({
   return (
     <section className="grid gap-4 rounded-xl border border-border bg-card p-5 xl:grid-cols-[minmax(0,1fr)_520px] xl:p-6">
       <div className="flex min-w-0 gap-4">
-        <span className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-xl font-semibold text-primary">{context.member.display_name.slice(0, 1)}</span>
+        <span className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 text-xl font-semibold text-primary shadow-sm">{context.member.display_name.slice(0, 1)}</span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge tone={statusTone(status)}>{statusLabel(status)}</StatusBadge>

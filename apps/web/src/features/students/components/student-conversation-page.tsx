@@ -142,7 +142,7 @@ export function StudentConversationPage({
   return (
     <div className="space-y-5">
       <PageHeader
-        actions={<Button onClick={() => router.back()} type="button" variant="ghost"><ArrowLeft data-icon="inline-start" />返回</Button>}
+        actions={<Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>}
         breadcrumbs={breadcrumbs}
         description="教师侧完整对话证据查看器；消息、Citation 和知识点均来自教师权限接口。"
         title={conversationTitle}

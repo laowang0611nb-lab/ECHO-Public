@@ -111,7 +111,7 @@ export function KnowledgePointDetailPage({
       <PageHeader
         actions={
           <>
-            <Button onClick={() => router.back()} type="button" variant="ghost"><ArrowLeft data-icon="inline-start" />返回</Button>
+            <Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>
             <EditKnowledgePointDialog context={context} onChanged={data.refetch} />
           </>
         }
