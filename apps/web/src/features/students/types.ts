@@ -6,6 +6,9 @@ import type {
   LearningEvidence,
   MasteryState,
   ReviewFlag,
+  ReviewReason,
+  ReviewSeverity,
+  ReviewStatus,
   StudentLearningDetail,
 } from "@echo/shared-types";
 
@@ -71,6 +74,19 @@ export interface ChapterMasteryItem {
   score: number | null;
   pointCount: number;
   classAverage: number | null;
+}
+
+export type ConversationStatusFilter = ReviewStatus | "all";
+
+export type ConversationReasonFilter = ReviewReason | "all";
+
+export type ConversationSeverityFilter = ReviewSeverity | "all";
+
+export interface ConversationEvidenceQuery {
+  search: string;
+  status: ConversationStatusFilter;
+  reason: ConversationReasonFilter;
+  severity: ConversationSeverityFilter;
 }
 
 export interface ConversationEvidenceGroup {

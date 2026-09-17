@@ -3,7 +3,9 @@
 import { AlertTriangle, ArrowLeft, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import type { ReviewFlag, ReviewReason, ReviewSeverity, ReviewStatus } from "@echo/shared-types";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -13,8 +15,16 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStudentDetail } from "@/features/students/queries";
 import { buildSourceHref } from "@/features/knowledge/view-model";
+import type {
+  ConversationEvidenceQuery,
+  ConversationReasonFilter,
+  ConversationSeverityFilter,
+  ConversationStatusFilter,
+  ConversationEvidenceGroup,
+} from "@/features/students/types";
 import { groupConversationEvidence } from "@/features/students/view-model";
 import { cn } from "@/lib/utils";
 
@@ -24,22 +34,70 @@ export function StudentConversationPage({
   from,
   messageId,
   knowledgePointId,
+  initialQuery,
 }: {
   studentId: string;
   conversationId: string;
   from: string;
   messageId?: string;
   knowledgePointId?: string;
+  initialQuery: ConversationEvidenceQuery;
 }) {
   const router = useRouter();
   const data = useStudentDetail(studentId);
-  const [search, setSearch] = useState("");
-  const conversations = groupConversationEvidence(data.reviewFlags);
+  const [search, setSearch] = useState(initialQuery.search);
+  const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>(initialQuery.status);
+  const [reasonFilter, setReasonFilter] = useState<ConversationReasonFilter>(initialQuery.reason);
+  const [severityFilter, setSeverityFilter] = useState<ConversationSeverityFilter>(initialQuery.severity);
+  const conversations = useMemo(() => groupConversationEvidence(data.reviewFlags), [data.reviewFlags]);
+  const query = useMemo<ConversationEvidenceQuery>(
+    () => ({ search, status: statusFilter, reason: reasonFilter, severity: severityFilter }),
+    [reasonFilter, search, severityFilter, statusFilter],
+  );
   const current = conversations.find((conversation) => conversation.conversationId === conversationId) ?? null;
-  const keyword = search.trim().toLowerCase();
-  const visibleConversations = keyword
-    ? conversations.filter((conversation) => conversation.title.toLowerCase().includes(keyword))
-    : conversations;
+  const visibleConversations = useMemo(
+    () => conversations.filter((conversation) => conversationMatchesQuery(conversation, query)),
+    [conversations, query],
+  );
+  const currentFlags = useMemo(
+    () => current ? current.flags.filter((flag) => flagMatchesQuery(flag, query, current.title)) : [],
+    [current, query],
+  );
+
+  function replaceQuery(patch: Partial<ConversationEvidenceQuery>) {
+    const next = {
+      search: patch.search ?? search,
+      status: patch.status ?? statusFilter,
+      reason: patch.reason ?? reasonFilter,
+      severity: patch.severity ?? severityFilter,
+    };
+    if (patch.search !== undefined) setSearch(patch.search);
+    if (patch.status !== undefined) setStatusFilter(patch.status);
+    if (patch.reason !== undefined) setReasonFilter(patch.reason);
+    if (patch.severity !== undefined) setSeverityFilter(patch.severity);
+
+    const params = new URLSearchParams();
+    params.set("from", from);
+    if (messageId) params.set("messageId", messageId);
+    if (knowledgePointId) params.set("knowledgePointId", knowledgePointId);
+    if (next.search.trim()) params.set("q", next.search.trim());
+    if (next.status !== "all") params.set("status", next.status);
+    if (next.reason !== "all") params.set("reason", next.reason);
+    if (next.severity !== "all") params.set("severity", next.severity);
+    router.replace(`/students/${studentId}/conversations/${conversationId}?${params.toString()}`, { scroll: false });
+  }
+
+  function buildConversationHref(nextConversationId: string) {
+    const params = new URLSearchParams();
+    params.set("from", from);
+    if (messageId && nextConversationId === conversationId) params.set("messageId", messageId);
+    if (knowledgePointId) params.set("knowledgePointId", knowledgePointId);
+    if (search.trim()) params.set("q", search.trim());
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (reasonFilter !== "all") params.set("reason", reasonFilter);
+    if (severityFilter !== "all") params.set("severity", severityFilter);
+    return `/students/${studentId}/conversations/${nextConversationId}?${params.toString()}`;
+  }
 
   useEffect(() => {
     if (!messageId) return;
@@ -77,16 +135,91 @@ export function StudentConversationPage({
         <p>P0 能力缺口：后端只允许学生会话所有者读取完整消息，教师账号会返回 403。当前页面展示真实 ReviewFlag 中的问题、回答、messageId 和审核状态，不伪造多轮消息与 Citation。</p>
       </div>
 
+      <div className="grid gap-2 rounded-xl border border-border bg-card p-4 lg:grid-cols-[minmax(240px,1fr)_180px_220px_150px_auto] lg:items-center">
+        <div className="relative">
+          <Input className="pl-3" onChange={(event) => replaceQuery({ search: event.target.value })} placeholder="搜索问题、回答或备注..." value={search} />
+        </div>
+        <Select
+          items={[
+            { value: "all", label: "全部审核状态" },
+            { value: "open", label: "待审核" },
+            { value: "confirmed_correct", label: "确认正确" },
+            { value: "marked_incorrect", label: "已判错" },
+            { value: "dismissed", label: "已忽略" },
+          ]}
+          onValueChange={(value) => value && replaceQuery({ status: value as ConversationStatusFilter })}
+          value={statusFilter}
+        >
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup>
+            <SelectItem value="all">全部审核状态</SelectItem>
+            <SelectItem value="open">待审核</SelectItem>
+            <SelectItem value="confirmed_correct">确认正确</SelectItem>
+            <SelectItem value="marked_incorrect">已判错</SelectItem>
+            <SelectItem value="dismissed">已忽略</SelectItem>
+          </SelectGroup></SelectContent>
+        </Select>
+        <Select
+          items={[
+            { value: "all", label: "全部审核原因" },
+            { value: "missing_course_basis", label: "缺少课程依据" },
+            { value: "outside_material_heavy", label: "课程外内容偏重" },
+            { value: "repeated_follow_up", label: "多次追问" },
+            { value: "student_not_resolved", label: "学生未解决" },
+            { value: "teacher_rule_violation", label: "违反教师规则" },
+          ]}
+          onValueChange={(value) => value && replaceQuery({ reason: value as ConversationReasonFilter })}
+          value={reasonFilter}
+        >
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup>
+            <SelectItem value="all">全部审核原因</SelectItem>
+            <SelectItem value="missing_course_basis">缺少课程依据</SelectItem>
+            <SelectItem value="outside_material_heavy">课程外内容偏重</SelectItem>
+            <SelectItem value="repeated_follow_up">多次追问</SelectItem>
+            <SelectItem value="student_not_resolved">学生未解决</SelectItem>
+            <SelectItem value="teacher_rule_violation">违反教师规则</SelectItem>
+          </SelectGroup></SelectContent>
+        </Select>
+        <Select
+          items={[
+            { value: "all", label: "全部严重级别" },
+            { value: "high", label: "高" },
+            { value: "medium", label: "中" },
+            { value: "low", label: "低" },
+          ]}
+          onValueChange={(value) => value && replaceQuery({ severity: value as ConversationSeverityFilter })}
+          value={severityFilter}
+        >
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectGroup>
+            <SelectItem value="all">全部严重级别</SelectItem>
+            <SelectItem value="high">高</SelectItem>
+            <SelectItem value="medium">中</SelectItem>
+            <SelectItem value="low">低</SelectItem>
+          </SelectGroup></SelectContent>
+        </Select>
+        <Button
+          disabled={!search && statusFilter === "all" && reasonFilter === "all" && severityFilter === "all"}
+          onClick={() => replaceQuery({ search: "", status: "all", reason: "all", severity: "all" })}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          清除筛选
+        </Button>
+      </div>
+
       <div className="grid gap-4 xl:grid-cols-[250px_minmax(0,1fr)_320px]">
         <Card className="gap-3 py-5">
           <CardHeader className="px-4"><CardTitle>对话证据</CardTitle></CardHeader>
           <CardContent className="space-y-3 px-4">
-            <Input onChange={(event) => setSearch(event.target.value)} placeholder="搜索对话..." value={search} />
+            <p className="text-xs text-muted-foreground">筛选后 {visibleConversations.length} / {conversations.length} 个会话</p>
             <div className="space-y-2">
               {visibleConversations.map((conversation) => (
                 <Link
                   className={cn("block rounded-lg border px-3 py-3 transition-colors", conversation.conversationId === conversationId ? "border-blue-200 bg-blue-50" : "border-border hover:bg-muted/50")}
-                  href={`/students/${studentId}/conversations/${conversation.conversationId}?from=${from}${messageId ? `&messageId=${messageId}` : ""}`}
+                  href={buildConversationHref(conversation.conversationId)}
                   key={conversation.conversationId}
                 >
                   <p className="line-clamp-2 text-sm font-medium">{conversation.title}</p>
@@ -106,10 +239,10 @@ export function StudentConversationPage({
         <Card className="gap-4 py-5">
           <CardHeader className="px-5">
             <CardTitle>{current?.title ?? "对话证据"}</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">{data.member.display_name} · {data.course.name} · {current?.flags.length ?? 0} 条审核证据</p>
+            <p className="mt-1 text-xs text-muted-foreground">{data.member.display_name} · {data.course.name} · 筛选后 {currentFlags.length} / {current?.flags.length ?? 0} 条审核证据</p>
           </CardHeader>
           <CardContent className="space-y-5 px-5">
-            {current ? current.flags.map((flag) => (
+            {current && currentFlags.length ? currentFlags.map((flag) => (
               <div className="space-y-3" key={flag.id}>
                 <div className="rounded-xl bg-muted/70 px-4 py-3">
                   <p className="text-xs font-medium text-muted-foreground">学生问题</p>
@@ -121,16 +254,19 @@ export function StudentConversationPage({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="flex items-center gap-2 text-xs font-medium text-primary"><Sparkles className="size-3.5" />AI 回答</p>
-                    <StatusBadge tone={flag.status === "open" ? "warning" : flag.status === "marked_incorrect" ? "danger" : "success"}>
-                      {flag.status === "open" ? "待审核" : flag.status === "marked_incorrect" ? "已判错" : "已审核"}
-                    </StatusBadge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge tone={reviewStatusTone(flag.status)}>{reviewStatusLabel(flag.status)}</StatusBadge>
+                      <StatusBadge tone={reviewSeverityTone(flag.severity)}>{reviewSeverityLabel(flag.severity)}</StatusBadge>
+                    </div>
                   </div>
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{flag.corrected_answer || flag.answer}</p>
+                  <p className="mt-3 text-xs text-muted-foreground">审核原因：{reviewReasonLabel(flag.reason)}</p>
+                  {flag.teacher_note ? <div className="mt-3 rounded-lg border border-orange-100 bg-orange-50/60 px-3 py-2 text-sm leading-6 text-orange-900">教师备注：{flag.teacher_note}</div> : null}
 <ReviewCitationLinks conversationId={conversationId} flag={flag} />
                   <p className="mt-2 break-all text-[11px] text-muted-foreground">messageId: {flag.message_id}</p>
                 </div>
               </div>
-            )) : <EmptyState description="当前 conversationId 没有可访问的审核证据。" title="暂无对话证据" />}
+            )) : <EmptyState description={current ? "当前筛选条件下没有匹配的审核证据。" : "当前 conversationId 没有可访问的审核证据。"} title="暂无对话证据" />}
           </CardContent>
         </Card>
 
@@ -150,10 +286,10 @@ export function StudentConversationPage({
           <Card className="gap-3 py-5">
             <CardHeader className="px-5"><CardTitle>对话概览</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-3 px-5">
-              <Metric label="审核证据" value={current?.flags.length ?? 0} />
-              <Metric label="消息标识" value={current?.messageIds.length ?? 0} />
-              <Metric label="待审核" value={current?.flags.filter((flag) => flag.status === "open").length ?? 0} />
-              <Metric label="教师修正" value={current?.flags.filter((flag) => flag.corrected_answer).length ?? 0} />
+              <Metric label="筛选后证据" value={currentFlags.length} />
+              <Metric label="待审核" value={currentFlags.filter((flag) => flag.status === "open").length} />
+              <Metric label="高严重级" value={currentFlags.filter((flag) => flag.severity === "high").length} />
+              <Metric label="教师修正" value={currentFlags.filter((flag) => flag.corrected_answer).length} />
             </CardContent>
           </Card>
 
@@ -174,6 +310,57 @@ export function StudentConversationPage({
       </div>
     </div>
   );
+}
+
+function reviewStatusLabel(status: ReviewStatus) {
+  if (status === "open") return "待审核";
+  if (status === "confirmed_correct") return "确认正确";
+  if (status === "marked_incorrect") return "已判错";
+  return "已忽略";
+}
+
+function reviewStatusTone(status: ReviewStatus) {
+  if (status === "open") return "warning" as const;
+  if (status === "marked_incorrect") return "danger" as const;
+  if (status === "confirmed_correct") return "success" as const;
+  return "neutral" as const;
+}
+
+function reviewReasonLabel(reason: ReviewReason) {
+  const labels: Record<ReviewReason, string> = {
+    missing_course_basis: "缺少课程依据",
+    outside_material_heavy: "课程外内容偏重",
+    repeated_follow_up: "多次追问",
+    student_not_resolved: "学生未解决",
+    teacher_rule_violation: "违反教师规则",
+  };
+  return labels[reason];
+}
+
+function reviewSeverityLabel(severity: ReviewSeverity) {
+  if (severity === "high") return "高严重级";
+  if (severity === "medium") return "中严重级";
+  return "低严重级";
+}
+
+function reviewSeverityTone(severity: ReviewSeverity) {
+  if (severity === "high") return "danger" as const;
+  if (severity === "medium") return "warning" as const;
+  return "info" as const;
+}
+
+function flagMatchesQuery(flag: ReviewFlag, query: ConversationEvidenceQuery, conversationTitle: string) {
+  const keyword = query.search.trim().toLowerCase();
+  const searchText = [conversationTitle, flag.question ?? "", flag.answer, flag.teacher_note ?? ""].join("\n").toLowerCase();
+  const matchesSearch = !keyword || searchText.includes(keyword);
+  const matchesStatus = query.status === "all" || flag.status === query.status;
+  const matchesReason = query.reason === "all" || flag.reason === query.reason;
+  const matchesSeverity = query.severity === "all" || flag.severity === query.severity;
+  return matchesSearch && matchesStatus && matchesReason && matchesSeverity;
+}
+
+function conversationMatchesQuery(conversation: ConversationEvidenceGroup, query: ConversationEvidenceQuery) {
+  return conversation.flags.some((flag) => flagMatchesQuery(flag, query, conversation.title));
 }
 
 function extractReviewLinks(flag: { details: Record<string, unknown> }) {
