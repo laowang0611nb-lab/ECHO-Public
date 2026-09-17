@@ -92,6 +92,7 @@ export function buildSourceHref(
     knowledgePointId?: string;
     page?: number;
     chunkId?: string;
+    conversationId?: string;
     messageId?: string;
   } = {},
 ) {
@@ -101,6 +102,7 @@ export function buildSourceHref(
   if (options.knowledgePointId) params.set("knowledgePointId", options.knowledgePointId);
   if (options.page) params.set("page", String(options.page));
   if (options.chunkId) params.set("chunkId", options.chunkId);
+  if (options.conversationId) params.set("conversationId", options.conversationId);
   if (options.messageId) params.set("messageId", options.messageId);
   return `/knowledge/resources/${resourceId}/source?${params.toString()}`;
 }

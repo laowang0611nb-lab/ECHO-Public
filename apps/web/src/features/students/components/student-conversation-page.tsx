@@ -14,6 +14,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useStudentDetail } from "@/features/students/queries";
+import { buildSourceHref } from "@/features/knowledge/view-model";
 import { groupConversationEvidence } from "@/features/students/view-model";
 import { cn } from "@/lib/utils";
 
@@ -125,9 +126,7 @@ export function StudentConversationPage({
                     </StatusBadge>
                   </div>
                   <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{flag.corrected_answer || flag.answer}</p>
-                  <div className="mt-4 border-t border-border pt-3">
-                    <p className="text-xs text-muted-foreground">当前后端未向教师返回该消息的 Citation，因此不能生成教材来源链接。</p>
-                  </div>
+<ReviewCitationLinks conversationId={conversationId} flag={flag} />
                   <p className="mt-2 break-all text-[11px] text-muted-foreground">messageId: {flag.message_id}</p>
                 </div>
               </div>
@@ -161,8 +160,7 @@ export function StudentConversationPage({
           <Card className="gap-3 py-5">
             <CardHeader className="px-5"><CardTitle>知识点与来源</CardTitle></CardHeader>
             <CardContent className="space-y-3 px-5 text-sm text-muted-foreground">
-              <p>当前审核数据没有返回 knowledgePointIds 和 Citation，因此不生成猜测链接。</p>
-              {knowledgePointId ? <Link className={buttonVariants({ variant: "outline" })} href={`/knowledge/points/${knowledgePointId}?from=conversation&studentId=${studentId}&conversationId=${conversationId}${messageId ? `&messageId=${messageId}` : ""}`}>查看指定知识点</Link> : null}
+              <ReviewKnowledgeLinks conversationId={conversationId} explicitPointId={knowledgePointId} flags={current?.flags ?? []} studentId={studentId} />
             </CardContent>
           </Card>
 
@@ -176,6 +174,47 @@ export function StudentConversationPage({
       </div>
     </div>
   );
+}
+
+function extractReviewLinks(flag: { details: Record<string, unknown> }) {
+  const knowledgePointIds = Array.isArray(flag.details.knowledge_point_ids)
+    ? flag.details.knowledge_point_ids.filter((value): value is string => typeof value === "string")
+    : [];
+  const citations = Array.isArray(flag.details.citations)
+    ? flag.details.citations.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const item = value as Record<string, unknown>;
+        if (typeof item.document_id !== "string" || typeof item.page_start !== "number") return [];
+        return [{ documentId: item.document_id, page: item.page_start, chunkId: typeof item.chunk_id === "string" ? item.chunk_id : undefined }];
+      })
+    : [];
+  return { knowledgePointIds, citations };
+}
+
+function ReviewCitationLinks({ flag, conversationId }: { flag: { id: string; message_id: string; details: Record<string, unknown> }; conversationId: string }) {
+  const { citations } = extractReviewLinks(flag);
+  if (!citations.length) {
+    return <div className="mt-4 border-t border-border pt-3"><p className="text-xs text-muted-foreground">当前后端未向教师返回该消息的 Citation，因此不能生成教材来源链接。</p></div>;
+  }
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      <p className="text-xs font-medium">引用来源（{citations.length}）</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {citations.map((citation, index) => (
+          <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={buildSourceHref(citation.documentId, { from: "conversation", page: citation.page, chunkId: citation.chunkId, messageId: flag.message_id, conversationId })} key={`${flag.id}-${index}`}>
+            来源 {index + 1} · 第 {citation.page} 页
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewKnowledgeLinks({ flags, explicitPointId, studentId, conversationId }: { flags: Array<{ details: Record<string, unknown> }>; explicitPointId?: string; studentId: string; conversationId: string }) {
+  const pointIds = new Set<string>(explicitPointId ? [explicitPointId] : []);
+  flags.forEach((flag) => extractReviewLinks(flag).knowledgePointIds.forEach((id) => pointIds.add(id)));
+  if (!pointIds.size) return <p>当前审核数据没有返回 knowledgePointIds 和 Citation，因此不生成猜测链接。</p>;
+  return <div className="flex flex-wrap gap-2">{Array.from(pointIds).map((id) => <Link className={buttonVariants({ size: "sm", variant: "outline" })} href={`/knowledge/points/${id}?from=conversation&studentId=${studentId}&conversationId=${conversationId}`} key={id}>查看知识点</Link>)}</div>;
 }
 
 function InfoLine({ label, value }: { label: string; value: string }) {
