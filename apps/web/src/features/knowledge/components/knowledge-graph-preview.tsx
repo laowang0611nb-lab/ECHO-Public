@@ -57,9 +57,13 @@ export function KnowledgeGraphPreview({
     );
   }
 
+  if (compact) {
+    return <CompactKnowledgePreview chapters={nodes} courseId={courseId} courseName={courseName} totalPoints={totalPoints} />;
+  }
+
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded-xl border border-border">
+      <div className="overflow-x-auto rounded-xl border-2 border-border">
         <div className={cn("relative min-w-[700px] overflow-hidden bg-[radial-gradient(circle_at_50%_45%,#FFFFFF_0%,#F5F9FF_46%,#EDF4FF_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]", compact ? "h-[300px]" : "h-[500px]")}>
         <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(#BFD7FA_1px,transparent_1px)] [background-size:24px_24px]" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/55 to-transparent" />
@@ -139,6 +143,50 @@ export function KnowledgeGraphPreview({
           </Link>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function CompactKnowledgePreview({
+  chapters,
+  courseId,
+  courseName,
+  totalPoints,
+}: {
+  chapters: Chapter[];
+  courseId: string;
+  courseName: string;
+  totalPoints: number;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="relative h-[320px] overflow-hidden rounded-xl border-2 border-border bg-[radial-gradient(circle_at_50%_20%,#FFFFFF_0%,#F5F9FF_52%,#EDF4FF_100%)] p-4">
+        <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(#BFD7FA_1px,transparent_1px)] [background-size:22px_22px]" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
+        <div className="relative flex h-full flex-col">
+          <div className="mx-auto max-w-full truncate rounded-full border-2 border-blue-200 bg-primary px-4 py-2 text-xs font-semibold text-white shadow-[0_6px_16px_rgba(47,124,246,0.2)]">{courseName}</div>
+          <div className="mx-auto h-4 w-px bg-primary/35" />
+          <div className="flex flex-1 flex-col justify-center gap-2">
+            {chapters.slice(0, 3).map((chapter, index) => {
+              const color = chapterPalette[index % chapterPalette.length];
+              return (
+                <div className="flex items-center gap-3 rounded-lg border-2 bg-white px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)]" key={chapter.id} style={{ borderColor: color.stroke }}>
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color.stroke }} />
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold" style={{ color: color.text }}>{chapter.title}</span>
+                  <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{chapter.knowledge_points.length} 点</span>
+                </div>
+              );
+            })}
+            {chapters.length > 3 ? <p className="text-center text-[11px] text-muted-foreground">另有 {chapters.length - 3} 个章节</p> : null}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <GraphMetric icon={Network} label="章节" value={chapters.length} />
+        <GraphMetric icon={Layers3} label="知识点" value={totalPoints} />
+        <GraphMetric icon={GitBranch} label="知识关联" value="待接口" />
+      </div>
+      <Link className={buttonVariants({ variant: "outline", size: "sm" })} href={`/knowledge?courseId=${courseId}&tab=graph`}>查看完整图谱</Link>
     </div>
   );
 }
