@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, case, distinct, func, select
@@ -9,7 +9,17 @@ from app.models.knowledge import KnowledgePoint
 from app.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
 from app.models.review import AIReviewFlag, ReviewStatus
 from app.models.user import UserRole
-from app.schemas.dashboard import CourseDashboardResponse, HighRiskKnowledgePoint
+from app.schemas.dashboard import (
+    CourseDashboardResponse,
+    DashboardInsight,
+    DashboardLearningDifficulty,
+    DashboardOverviewStats,
+    DashboardTeacherAction,
+    DashboardTrendPoint,
+    HighRiskKnowledgePoint,
+    TeacherDashboardOverviewResponse,
+)
+from app.services.dashboard_details import list_chapter_analytics
 from app.services.learning import ensure_course_teacher
 
 
@@ -139,4 +149,137 @@ async def get_course_dashboard(
             )
             for point_id, name, score, affected in risk_rows.all()
         ],
+    )
+
+
+async def get_teacher_dashboard_overview(
+    session: AsyncSession,
+    course_id: UUID,
+    requester_id: UUID,
+) -> TeacherDashboardOverviewResponse:
+    dashboard = await get_course_dashboard(session, course_id, requester_id)
+    chapter_mastery = await list_chapter_analytics(session, course_id, requester_id)
+    now = datetime.now(UTC)
+    start_date = now.date() - timedelta(days=6)
+    since = datetime.combine(start_date, time.min, tzinfo=UTC)
+
+    trend_rows = await session.execute(
+        select(
+            func.date(LearningEvent.created_at).label("day"),
+            func.count(LearningEvent.id).label("interaction_count"),
+            func.count(distinct(LearningEvent.user_id)).label("active_student_count"),
+        )
+        .join(
+            CourseMember,
+            and_(
+                CourseMember.course_id == LearningEvent.course_id,
+                CourseMember.user_id == LearningEvent.user_id,
+            ),
+        )
+        .where(
+            LearningEvent.course_id == course_id,
+            CourseMember.role == UserRole.STUDENT,
+            LearningEvent.created_at >= since,
+        )
+        .group_by(func.date(LearningEvent.created_at))
+        .order_by(func.date(LearningEvent.created_at))
+    )
+    trend_by_day = {
+        str(day): (int(interaction_count), int(active_student_count))
+        for day, interaction_count, active_student_count in trend_rows.all()
+    }
+    trend = [
+        DashboardTrendPoint(
+            date=day,
+            interaction_count=trend_by_day.get(str(day), (0, 0))[0],
+            active_student_count=trend_by_day.get(str(day), (0, 0))[1],
+        )
+        for day in (start_date + timedelta(days=offset) for offset in range(7))
+    ]
+
+    attention_count = await session.scalar(
+        select(func.count()).select_from(
+            select(KnowledgePoint.id)
+            .join(
+                StudentKnowledgeState,
+                StudentKnowledgeState.knowledge_point_id == KnowledgePoint.id,
+            )
+            .where(KnowledgePoint.course_id == course_id)
+            .group_by(KnowledgePoint.id)
+            .having(func.avg(StudentKnowledgeState.score) < 60)
+            .subquery()
+        )
+    )
+    attention_count = int(attention_count or 0)
+    learning_difficulties = [
+        DashboardLearningDifficulty(
+            knowledge_point_id=point.knowledge_point_id,
+            name=point.name,
+            average_score=point.average_score,
+            affected_students=point.affected_students,
+        )
+        for point in dashboard.high_risk_knowledge_points
+    ]
+
+    teacher_actions: list[DashboardTeacherAction] = []
+    if dashboard.pending_review_count:
+        teacher_actions.append(
+            DashboardTeacherAction(
+                action_type="review_flags",
+                priority="high",
+                target_id=None,
+            )
+        )
+    if dashboard.high_risk_knowledge_points:
+        weakest = dashboard.high_risk_knowledge_points[0]
+        teacher_actions.append(
+            DashboardTeacherAction(
+                action_type="support_knowledge_point",
+                priority="high" if weakest.average_score < 50 else "medium",
+                target_id=weakest.knowledge_point_id,
+            )
+        )
+    if dashboard.student_count > dashboard.active_student_count:
+        teacher_actions.append(
+            DashboardTeacherAction(
+                action_type="encourage_inactive_students",
+                priority="low",
+                target_id=None,
+            )
+        )
+
+    if dashboard.pending_review_count >= 5 or attention_count >= 3:
+        risk_level = "high"
+    elif dashboard.pending_review_count or attention_count:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+
+    if risk_level == "low":
+        summary = "No immediate teaching risks detected in the last seven days."
+    else:
+        summary = (
+            f"{attention_count} knowledge points need attention and "
+            f"{dashboard.pending_review_count} AI answers await review."
+        )
+
+    return TeacherDashboardOverviewResponse(
+        course_id=course_id,
+        stats=DashboardOverviewStats(
+            student_count=dashboard.student_count,
+            active_student_count=dashboard.active_student_count,
+            weekly_interaction_count=sum(point.interaction_count for point in trend),
+            average_mastery=dashboard.average_mastery,
+            attention_knowledge_point_count=attention_count,
+            pending_review_count=dashboard.pending_review_count,
+        ),
+        trend=trend,
+        insight=DashboardInsight(
+            risk_level=risk_level,
+            summary=summary,
+            generated_at=now,
+        ),
+        chapter_mastery=chapter_mastery,
+        learning_difficulties=learning_difficulties,
+        teacher_actions=teacher_actions,
     )

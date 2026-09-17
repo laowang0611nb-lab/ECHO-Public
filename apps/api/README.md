@@ -168,6 +168,7 @@ read their own state; teachers can read student state.
 
 ```text
 GET /api/v1/courses/{course_id}/dashboard
+GET /api/v1/dashboard/overview?courseId={courseId}
 GET /api/v1/courses/{course_id}/chapters/analytics
 GET /api/v1/courses/{course_id}/knowledge-points/{knowledge_point_id}/analytics
 GET /api/v1/courses/{course_id}/students/{student_id}/learning
@@ -176,6 +177,9 @@ GET /api/v1/courses/{course_id}/students/{student_id}/learning
 Course teachers receive student counts, seven-day active students, seven-day
 question volume, total events, average mastery, and high-risk knowledge points.
 The dashboard also includes the number of open AI review flags.
+The overview endpoint returns the teacher home payload in one request: stats,
+seven-day trend, deterministic insight, chapter mastery, learning difficulties,
+and suggested teacher actions.
 Additional drill-down endpoints return chapter averages, per-knowledge-point
 student distributions, and a student's recent learning evidence.
 

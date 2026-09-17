@@ -185,6 +185,59 @@ export interface ChapterAnalytics {
   average_mastery: number | null;
 }
 
+
+export interface DashboardOverviewStats {
+  student_count: number;
+  active_student_count: number;
+  weekly_interaction_count: number;
+  average_mastery: number | null;
+  attention_knowledge_point_count: number;
+  pending_review_count: number;
+}
+
+
+export interface DashboardTrendPoint {
+  date: string;
+  interaction_count: number;
+  active_student_count: number;
+}
+
+
+export interface DashboardInsight {
+  risk_level: "low" | "medium" | "high";
+  summary: string;
+  generated_at: string;
+}
+
+
+export interface DashboardLearningDifficulty {
+  knowledge_point_id: string;
+  name: string;
+  average_score: number;
+  affected_students: number;
+}
+
+
+export interface DashboardTeacherAction {
+  action_type:
+    | "review_flags"
+    | "support_knowledge_point"
+    | "encourage_inactive_students";
+  priority: "low" | "medium" | "high";
+  target_id: string | null;
+}
+
+
+export interface TeacherDashboardOverview {
+  course_id: string;
+  stats: DashboardOverviewStats;
+  trend: DashboardTrendPoint[];
+  insight: DashboardInsight;
+  chapter_mastery: ChapterAnalytics[];
+  learning_difficulties: DashboardLearningDifficulty[];
+  teacher_actions: DashboardTeacherAction[];
+}
+
 export interface StudentMasteryBrief {
   student_id: string;
   display_name: string;

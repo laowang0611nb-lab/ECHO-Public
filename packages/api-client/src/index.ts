@@ -35,6 +35,7 @@ import type {
   StudentLearningDetail,
   TeachingPolicy,
   TeachingPolicyUpdateRequest,
+  TeacherDashboardOverview,
   User,
 } from "@echo/shared-types";
 
@@ -296,6 +297,12 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       ),
     getCourseDashboard: (userId: string, courseId: string) =>
       request<CourseDashboard>(`/api/v1/courses/${courseId}/dashboard`, undefined, userId),
+    getDashboardOverview: (userId: string, courseId: string) =>
+      request<TeacherDashboardOverview>(
+        `/api/v1/dashboard/overview?courseId=${courseId}`,
+        undefined,
+        userId,
+      ),
     getChapterAnalytics: (userId: string, courseId: string) =>
       request<ChapterAnalytics[]>(
         `/api/v1/courses/${courseId}/chapters/analytics`,

@@ -125,6 +125,11 @@ async def test_teacher_reads_course_dashboard(
         f"/api/v1/courses/{course['id']}/dashboard",
         headers=auth_headers(teacher),
     )
+    overview_response = await client.get(
+        "/api/v1/dashboard/overview",
+        params={"courseId": course["id"]},
+        headers=auth_headers(teacher),
+    )
 
     assert response.status_code == 200
     dashboard = response.json()
@@ -134,6 +139,22 @@ async def test_teacher_reads_course_dashboard(
     assert dashboard["average_mastery"] == 56.67
     assert dashboard["high_risk_knowledge_points"][0]["name"] == "Weak Point"
     assert dashboard["high_risk_knowledge_points"][0]["affected_students"] == 2
+
+    assert overview_response.status_code == 200
+    overview = overview_response.json()
+    assert overview["stats"]["student_count"] == 3
+    assert overview["stats"]["active_student_count"] == 1
+    assert overview["stats"]["weekly_interaction_count"] == 1
+    assert overview["stats"]["attention_knowledge_point_count"] == 1
+    assert len(overview["trend"]) == 7
+    assert sum(point["interaction_count"] for point in overview["trend"]) == 1
+    assert overview["insight"]["risk_level"] == "medium"
+    assert overview["chapter_mastery"][0]["title"] == "Chapter"
+    assert overview["learning_difficulties"][0]["name"] == "Weak Point"
+    assert {action["action_type"] for action in overview["teacher_actions"]} == {
+        "support_knowledge_point",
+        "encourage_inactive_students",
+    }
 
 
 async def test_student_cannot_read_teacher_dashboard(
@@ -163,5 +184,11 @@ async def test_student_cannot_read_teacher_dashboard(
         f"/api/v1/courses/{course['id']}/dashboard",
         headers=auth_headers(student),
     )
+    overview_response = await client.get(
+        "/api/v1/dashboard/overview",
+        params={"courseId": course["id"]},
+        headers=auth_headers(student),
+    )
 
     assert response.status_code == 403
+    assert overview_response.status_code == 403

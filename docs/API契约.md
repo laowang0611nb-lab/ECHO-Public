@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.45`
+> 冻结版本：`v0.0.47`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -112,6 +112,7 @@ SSE 事件：
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
 | GET | `/courses/{course_id}/dashboard` | 课程教师 | 课程聚合指标 |
+| GET | `/dashboard/overview?courseId={courseId}` | 课程教师 | 教师首页一次性聚合读取 |
 | GET | `/courses/{course_id}/chapters/analytics` | 课程教师 | 章节掌握分析 |
 | GET | `/courses/{course_id}/knowledge-points/{knowledge_point_id}/analytics` | 课程教师 | 知识点分布 |
 | GET | `/courses/{course_id}/students/{student_id}/learning` | 课程教师 | 学生学习证据 |
@@ -121,6 +122,37 @@ Dashboard 响应新增字段：
 ```json
 {
   "pending_review_count": 3
+}
+```
+
+教师首页总览：
+
+```text
+GET /api/v1/dashboard/overview?courseId={courseId}
+```
+
+```json
+{
+  "course_id": "uuid",
+  "stats": {
+    "student_count": 36,
+    "active_student_count": 28,
+    "weekly_interaction_count": 142,
+    "average_mastery": 72.5,
+    "attention_knowledge_point_count": 3,
+    "pending_review_count": 2
+  },
+  "trend": [
+    {"date": "2026-09-17", "interaction_count": 24, "active_student_count": 18}
+  ],
+  "insight": {
+    "risk_level": "medium",
+    "summary": "3 knowledge points need attention and 2 AI answers await review.",
+    "generated_at": "2026-09-17T00:00:00Z"
+  },
+  "chapter_mastery": [],
+  "learning_difficulties": [],
+  "teacher_actions": []
 }
 ```
 
