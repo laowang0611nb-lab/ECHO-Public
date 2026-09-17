@@ -1,9 +1,11 @@
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.course import CourseMember
 from app.models.knowledge import KnowledgePoint
 from app.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
@@ -21,6 +23,21 @@ from app.schemas.dashboard import (
 )
 from app.services.dashboard_details import list_chapter_analytics
 from app.services.learning import ensure_course_teacher
+
+
+def dashboard_day_bounds(
+    now: datetime,
+    timezone_name: str,
+) -> list[tuple[date, datetime, datetime]]:
+    timezone = ZoneInfo(timezone_name)
+    start_date = now.astimezone(timezone).date() - timedelta(days=6)
+    bounds: list[tuple[date, datetime, datetime]] = []
+    for offset in range(7):
+        day = start_date + timedelta(days=offset)
+        start = datetime.combine(day, time.min, tzinfo=timezone).astimezone(UTC)
+        end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=timezone).astimezone(UTC)
+        bounds.append((day, start, end))
+    return bounds
 
 
 async def get_course_dashboard(
@@ -160,12 +177,27 @@ async def get_teacher_dashboard_overview(
     dashboard = await get_course_dashboard(session, course_id, requester_id)
     chapter_mastery = await list_chapter_analytics(session, course_id, requester_id)
     now = datetime.now(UTC)
-    start_date = now.date() - timedelta(days=6)
-    since = datetime.combine(start_date, time.min, tzinfo=UTC)
+    bounds = dashboard_day_bounds(now, settings.business_timezone)
+    start_date = bounds[0][0]
+    since = bounds[0][1]
+    until = bounds[-1][2]
+    local_day = case(
+        *(
+            (
+                and_(
+                    LearningEvent.created_at >= start,
+                    LearningEvent.created_at < end,
+                ),
+                day.isoformat(),
+            )
+            for day, start, end in bounds
+        ),
+        else_=None,
+    ).label("day")
 
     trend_rows = await session.execute(
         select(
-            func.date(LearningEvent.created_at).label("day"),
+            local_day,
             func.count(LearningEvent.id).label("interaction_count"),
             func.count(distinct(LearningEvent.user_id)).label("active_student_count"),
         )
@@ -180,9 +212,11 @@ async def get_teacher_dashboard_overview(
             LearningEvent.course_id == course_id,
             CourseMember.role == UserRole.STUDENT,
             LearningEvent.created_at >= since,
+            LearningEvent.created_at < until,
+            local_day.is_not(None),
         )
-        .group_by(func.date(LearningEvent.created_at))
-        .order_by(func.date(LearningEvent.created_at))
+        .group_by(local_day)
+        .order_by(local_day)
     )
     trend_by_day = {
         str(day): (int(interaction_count), int(active_student_count))

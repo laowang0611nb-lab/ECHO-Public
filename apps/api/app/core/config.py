@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,12 +12,13 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.47"
+    app_version: str = "0.0.48"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
     document_storage_root: Path = PROJECT_ROOT / "tmp" / "uploads"
     development_auth_enabled: bool = False
+    business_timezone: str = "Asia/Shanghai"
     retrieval_max_distance: float = 0.65
     max_upload_bytes: int = 20 * 1024 * 1024
     llm_api_key: str | None = None
@@ -57,6 +59,15 @@ class Settings(BaseSettings):
     def require_supported_embedding_dimension(cls, value: int) -> int:
         if value != 1024:
             raise ValueError("embedding_dimension must remain 1024 until a migration is applied")
+        return value
+
+    @field_validator("business_timezone")
+    @classmethod
+    def require_valid_business_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("business_timezone must be a valid IANA timezone") from exc
         return value
 
     @model_validator(mode="after")

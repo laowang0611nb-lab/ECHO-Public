@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from httpx import AsyncClient
@@ -9,6 +9,17 @@ from app.models.document import Document, DocumentStatus
 from app.models.knowledge import Chapter, KnowledgePoint
 from app.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
 from app.models.user import UserRole
+from app.services.dashboard import dashboard_day_bounds
+
+
+def test_dashboard_day_bounds_use_business_timezone() -> None:
+    bounds = dashboard_day_bounds(
+        datetime(2026, 9, 16, 17, 30, tzinfo=UTC),
+        "Asia/Shanghai",
+    )
+    assert bounds[-1][0].isoformat() == "2026-09-17"
+    assert bounds[-1][1] == datetime(2026, 9, 16, 16, 0, tzinfo=UTC)
+    assert bounds[-1][2] == datetime(2026, 9, 17, 16, 0, tzinfo=UTC)
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -41,6 +52,10 @@ async def test_teacher_reads_course_dashboard(
     document_id = uuid4()
     chapter_id = uuid4()
     point_id = uuid4()
+    trend_event_at = dashboard_day_bounds(
+        datetime.now(UTC),
+        "Asia/Shanghai",
+    )[-1][1] + timedelta(hours=1)
 
     async with session_factory() as session:
         session.add(
@@ -115,7 +130,7 @@ async def test_teacher_reads_course_dashboard(
                     event_type=LearningEventType.QUESTION_ASKED,
                     weight=1.0,
                     metadata_json={},
-                    created_at=datetime.now(UTC),
+                    created_at=trend_event_at,
                 ),
             ]
         )

@@ -30,6 +30,7 @@ export function ReviewQueue({
 }) {
   const [flags, setFlags] = useState<ReviewFlag[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [correctedAnswers, setCorrectedAnswers] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,11 +74,13 @@ export function ReviewQueue({
     setError(null);
     setNotice(null);
     const note = notes[flag.id]?.trim();
+    const correctedAnswer = correctedAnswers[flag.id]?.trim();
     try {
       await apiClient.reviewFlag(userId, courseId, flag.id, {
         decision,
         note: note || undefined,
-        corrected_answer: decision === "mark_incorrect" ? note || undefined : undefined,
+        corrected_answer:
+          decision === "mark_incorrect" ? correctedAnswer || undefined : undefined,
       });
       setFlags((current) => current.filter((item) => item.id !== flag.id));
       setNotice("审核结果已保存。");
@@ -149,14 +152,30 @@ export function ReviewQueue({
                 </div>
               </div>
 
-              <textarea
-                className="field-input mt-4 min-h-20 resize-y"
-                onChange={(event) =>
-                  setNotes((current) => ({ ...current, [flag.id]: event.target.value }))
-                }
-                placeholder="教师备注；标记错误时可填写标准回答"
-                value={notes[flag.id] ?? ""}
-              />
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <textarea
+                  aria-label="教师内部备注"
+                  className="field-input min-h-24 resize-y"
+                  onChange={(event) =>
+                    setNotes((current) => ({ ...current, [flag.id]: event.target.value }))
+                  }
+                  placeholder="教师内部备注"
+                  value={notes[flag.id] ?? ""}
+                />
+                <textarea
+                  aria-label="修正后的标准回答"
+                  className="field-input min-h-24 resize-y"
+                  disabled={pendingId !== null}
+                  onChange={(event) =>
+                    setCorrectedAnswers((current) => ({
+                      ...current,
+                      [flag.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="标记错误时填写标准回答（可选）"
+                  value={correctedAnswers[flag.id] ?? ""}
+                />
+              </div>
 
               <div className="mt-3 flex flex-wrap gap-2">
                 <button

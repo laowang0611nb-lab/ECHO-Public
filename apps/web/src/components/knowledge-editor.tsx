@@ -1,10 +1,13 @@
 "use client";
 
 import { ApiClientError } from "@echo/api-client";
-import type { Chapter, KnowledgePoint } from "@echo/shared-types";
+import type { Chapter, CourseDocument, KnowledgePoint } from "@echo/shared-types";
 import { useEffect, useState } from "react";
 
 import { apiClient } from "@/lib/api";
+
+const MAX_MERGE_SOURCES = 20;
+const MAX_MERGE_SELECTION = MAX_MERGE_SOURCES + 1;
 
 function editorError(error: unknown): string {
   if (error instanceof ApiClientError) {
@@ -49,6 +52,8 @@ export function KnowledgeEditor({
   userId: string;
 }) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [documents, setDocuments] = useState<CourseDocument[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +65,8 @@ export function KnowledgeEditor({
   const [newPoints, setNewPoints] = useState<Record<string, string>>({});
   const [selectedPointIds, setSelectedPointIds] = useState<string[]>([]);
   const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
+  const [mergeName, setMergeName] = useState("");
+  const [mergeDescription, setMergeDescription] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -67,10 +74,43 @@ export function KnowledgeEditor({
       setLoading(true);
       setError(null);
       try {
-        const items = await apiClient.listChapters(userId, courseId);
+        const [items, documentItems] = await Promise.all([
+          apiClient.listChapters(userId, courseId),
+          apiClient.listCourseDocuments(userId, courseId),
+        ]);
         if (cancelled) {
           return;
         }
+        const documentIds = new Set(documentItems.map((document) => document.id));
+        const chapterOnlyDocumentIds = Array.from(
+          new Set(
+            items
+              .map((chapter) => chapter.document_id)
+              .filter((documentId) => !documentIds.has(documentId)),
+          ),
+        );
+        const chapterOnlyDocuments: CourseDocument[] = chapterOnlyDocumentIds.map((id) => ({
+          id,
+          course_id: courseId,
+          uploaded_by: "",
+          original_name: "历史教材",
+          content_type: "application/pdf",
+          size_bytes: 0,
+          status: "ready",
+          page_count: null,
+          created_at: "",
+          updated_at: "",
+        }));
+        setDocuments([...documentItems, ...chapterOnlyDocuments]);
+        const availableDocumentIds = new Set([
+          ...documentItems.map((document) => document.id),
+          ...chapterOnlyDocumentIds,
+        ]);
+        setSelectedDocumentId((current) =>
+          current && availableDocumentIds.has(current)
+            ? current
+            : (documentItems[0]?.id ?? chapterOnlyDocumentIds[0] ?? null),
+        );
         setChapters(items);
         const pointIds = new Set(
           items.flatMap((chapter) =>
@@ -124,18 +164,27 @@ export function KnowledgeEditor({
     }
   }
 
+  const activeDocumentId =
+    selectedDocumentId && documents.some((document) => document.id === selectedDocumentId)
+      ? selectedDocumentId
+      : (documents[0]?.id ?? null);
+  const documentChapters = activeDocumentId
+    ? chapters.filter((chapter) => chapter.document_id === activeDocumentId)
+    : [];
+  const allPoints = chapters.flatMap((chapter) => chapter.knowledge_points);
+  const selectedPoints = allPoints.filter((point) => selectedPointIds.includes(point.id));
+
   function handleAddChapter() {
-    const documentId = chapters[0]?.document_id;
-    if (!documentId || !newChapterTitle.trim()) {
+    if (!activeDocumentId || !newChapterTitle.trim()) {
       return;
     }
 
     void runAction(
       "new-chapter",
       () =>
-        apiClient.createChapter(userId, documentId, {
+        apiClient.createChapter(userId, activeDocumentId, {
           title: newChapterTitle.trim(),
-          order_index: chapters.length,
+          order_index: documentChapters.length,
         }),
       "章节已创建。",
     ).then((saved) => {
@@ -170,7 +219,7 @@ export function KnowledgeEditor({
 
   function handleMoveChapter(chapter: Chapter, direction: -1 | 1) {
     const targetIndex = chapter.order_index + direction;
-    if (targetIndex < 0 || targetIndex >= chapters.length) {
+    if (targetIndex < 0 || targetIndex >= documentChapters.length) {
       return;
     }
     void runAction(
@@ -242,7 +291,7 @@ export function KnowledgeEditor({
     if (point.chapter_id === targetChapterId) {
       return;
     }
-    const targetChapter = chapters.find((chapter) => chapter.id === targetChapterId);
+    const targetChapter = documentChapters.find((chapter) => chapter.id === targetChapterId);
     if (!targetChapter) {
       return;
     }
@@ -258,15 +307,44 @@ export function KnowledgeEditor({
   }
 
   function handleTogglePoint(pointId: string) {
+    const selected = selectedPointIds.includes(pointId);
+    if (!selected && selectedPointIds.length >= MAX_MERGE_SELECTION) {
+      setError(`最多选择 ${MAX_MERGE_SOURCES} 个来源知识点。`);
+      return;
+    }
+    const point = allPoints.find((item) => item.id === pointId);
+    if (!selected && selectedPointIds.length === 0 && point) {
+      setMergeTargetId(point.id);
+      setMergeName(point.name);
+    }
     setSelectedPointIds((current) => {
       const next = current.includes(pointId)
         ? current.filter((item) => item !== pointId)
         : [...current, pointId];
       if (mergeTargetId && !next.includes(mergeTargetId)) {
         setMergeTargetId(next[0] ?? null);
+        setMergeName(
+          allPoints.find((item) => item.id === next[0])?.name ?? "",
+        );
+        if (!next.length) {
+          setMergeDescription("");
+        }
       }
       return next;
     });
+  }
+
+  function handleDocumentChange(documentId: string) {
+    setSelectedDocumentId(documentId);
+    setSelectedPointIds([]);
+    setMergeTargetId(null);
+    setMergeName("");
+    setMergeDescription("");
+  }
+
+  function handleMergeTargetChange(pointId: string) {
+    setMergeTargetId(pointId);
+    setMergeName(allPoints.find((point) => point.id === pointId)?.name ?? "");
   }
 
   function handleMergePoints() {
@@ -287,34 +365,52 @@ export function KnowledgeEditor({
         apiClient.mergeKnowledgePoints(userId, courseId, {
           target_knowledge_point_id: targetId,
           source_knowledge_point_ids: sourceIds,
+          name: mergeName.trim() || undefined,
+          description: mergeDescription.trim() || undefined,
         }),
       "知识点已合并。",
     ).then((saved) => {
       if (saved) {
         setSelectedPointIds([]);
         setMergeTargetId(null);
+        setMergeName("");
+        setMergeDescription("");
       }
     });
   }
-
-  const firstChapter = chapters[0];
-  const allPoints = chapters.flatMap((chapter) => chapter.knowledge_points);
-  const selectedPoints = allPoints.filter((point) => selectedPointIds.includes(point.id));
-
   return (
     <section className="border border-[#dde3eb] bg-white">
       <div className="border-b border-[#e5e9ef] px-5 py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-base font-semibold text-[#101828]">课程结构</h2>
-            <p className="mt-1 text-sm text-[#667085]">
-              {chapters.length} 个章节 ·{" "}
-              {chapters.reduce((count, chapter) => count + chapter.knowledge_points.length, 0)}{" "}
-              个知识点
-            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {documents.length > 0 ? (
+                <select
+                  aria-label="选择教材"
+                  className="field-input max-w-sm"
+                  onChange={(event) => handleDocumentChange(event.target.value)}
+                  value={activeDocumentId ?? ""}
+                >
+                  {documents.map((document) => (
+                    <option key={document.id} value={document.id}>
+                      {document.original_name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <p className="text-sm text-[#667085]">
+                {documentChapters.length} 个章节 ·{" "}
+                {documentChapters.reduce(
+                  (count, chapter) => count + chapter.knowledge_points.length,
+                  0,
+                )}{" "}
+                个知识点
+              </p>
+            </div>
           </div>
 
-          {firstChapter ? (
+          {activeDocumentId ? (
             <div className="flex gap-2">
               <input
                 aria-label="新章节名称"
@@ -337,38 +433,65 @@ export function KnowledgeEditor({
       </div>
 
       {selectedPointIds.length > 0 ? (
-        <div className="flex flex-col gap-3 border-b border-[#e5e9ef] bg-[#f8fafc] px-5 py-3 sm:flex-row sm:items-center">
-          <p className="text-sm text-[#475467]">已选择 {selectedPointIds.length} 个知识点</p>
-          <select
-            aria-label="合并目标知识点"
-            className="field-input sm:max-w-xs"
-            onChange={(event) => setMergeTargetId(event.target.value)}
-            value={mergeTargetId ?? selectedPointIds[0]}
-          >
-            {selectedPoints.map((point) => (
-              <option key={point.id} value={point.id}>
-                {point.name}
-              </option>
-            ))}
-          </select>
-          <button
-            className="bg-[#2563eb] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1d4ed8] disabled:opacity-40"
-            disabled={selectedPointIds.length < 2 || savingKey !== null}
-            onClick={handleMergePoints}
-            type="button"
-          >
-            合并知识点
-          </button>
-          <button
-            className="border border-[#cfd5df] bg-white px-3 py-2 text-sm font-medium text-[#344054] hover:bg-[#f8fafc]"
-            onClick={() => {
-              setSelectedPointIds([]);
-              setMergeTargetId(null);
-            }}
-            type="button"
-          >
-            取消选择
-          </button>
+        <div className="border-b border-[#e5e9ef] bg-[#f8fafc] px-5 py-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-[#475467]">
+              已选择 {selectedPointIds.length} 个知识点
+            </p>
+            <select
+              aria-label="合并目标知识点"
+              className="field-input max-w-xs"
+              onChange={(event) => handleMergeTargetChange(event.target.value)}
+              value={mergeTargetId ?? selectedPointIds[0]}
+            >
+              {selectedPoints.map((point) => (
+                <option key={point.id} value={point.id}>
+                  {point.name}
+                </option>
+              ))}
+            </select>
+            <button
+              className="bg-[#2563eb] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1d4ed8] disabled:opacity-40"
+              disabled={selectedPointIds.length < 2 || savingKey !== null}
+              onClick={handleMergePoints}
+              type="button"
+            >
+              合并知识点
+            </button>
+            <button
+              className="border border-[#cfd5df] bg-white px-3 py-2 text-sm font-medium text-[#344054] hover:bg-[#f8fafc]"
+              onClick={() => {
+                setSelectedPointIds([]);
+                setMergeTargetId(null);
+                setMergeName("");
+                setMergeDescription("");
+              }}
+              type="button"
+            >
+              取消选择
+            </button>
+            <p className="text-xs text-[#667085]">
+              最多选择 {MAX_MERGE_SOURCES} 个来源知识点
+            </p>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <input
+              aria-label="合并后知识点名称"
+              className="field-input"
+              disabled={savingKey !== null}
+              onChange={(event) => setMergeName(event.target.value)}
+              placeholder="合并后名称"
+              value={mergeName}
+            />
+            <textarea
+              aria-label="合并后知识点说明"
+              className="field-input min-h-20 resize-y"
+              disabled={savingKey !== null}
+              onChange={(event) => setMergeDescription(event.target.value)}
+              placeholder="合并后说明（可选）"
+              value={mergeDescription}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -385,13 +508,13 @@ export function KnowledgeEditor({
 
       {loading ? (
         <p className="px-5 py-10 text-center text-sm text-[#667085]">正在加载课程结构...</p>
-      ) : chapters.length === 0 ? (
+      ) : documentChapters.length === 0 ? (
         <p className="px-5 py-10 text-center text-sm text-[#667085]">
           当前课程尚未生成章节结构。
         </p>
       ) : (
         <div className="divide-y divide-[#e5e9ef]">
-          {chapters.map((chapter) => (
+          {documentChapters.map((chapter) => (
             <section className="p-4 sm:p-5" key={chapter.id}>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center bg-[#eef2f7] text-xs font-bold text-[#475467]">
@@ -417,7 +540,7 @@ export function KnowledgeEditor({
                     ↑
                   </SmallButton>
                   <SmallButton
-                    disabled={chapter.order_index === chapters.length - 1 || savingKey !== null}
+                    disabled={chapter.order_index === documentChapters.length - 1 || savingKey !== null}
                     onClick={() => handleMoveChapter(chapter, 1)}
                     title="章节下移"
                   >
@@ -457,7 +580,11 @@ export function KnowledgeEditor({
                       aria-label={`选择合并 ${point.name}`}
                       checked={selectedPointIds.includes(point.id)}
                       className="h-4 w-4 shrink-0"
-                      disabled={savingKey !== null}
+                      disabled={
+                        savingKey !== null ||
+                        (selectedPointIds.length >= MAX_MERGE_SELECTION &&
+                          !selectedPointIds.includes(point.id))
+                      }
                       onChange={() => handleTogglePoint(point.id)}
                       type="checkbox"
                     />
@@ -479,7 +606,7 @@ export function KnowledgeEditor({
                       onChange={(event) => handleMovePointToChapter(point, event.target.value)}
                       value={point.chapter_id}
                     >
-                      {chapters.map((target) => (
+                      {documentChapters.map((target) => (
                         <option key={target.id} value={target.id}>
                           {target.title}
                         </option>

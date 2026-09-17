@@ -1,11 +1,46 @@
 from uuid import UUID, uuid4
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.document import Document, DocumentStatus
 from app.models.knowledge import KnowledgeChunk
 from app.models.review import ReviewReason, ReviewStatus
+from app.services.review import _detect_review_reasons
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "什么是黑盒测试",
+        "白盒测试怎么做",
+        "解释一下软件测试",
+        "什么是边界值分析",
+        "你好，请解释一下黑盒测试",
+    ],
+)
+def test_short_chinese_questions_require_course_basis(question: str) -> None:
+    reasons = _detect_review_reasons(
+        question,
+        [],
+        "答案",
+        used_source_count=0,
+        has_course_material=True,
+    )
+    assert ReviewReason.MISSING_COURSE_BASIS in {reason for reason, _, _ in reasons}
+
+
+@pytest.mark.parametrize("question", ["你好", "谢谢", "你是谁", "hello"])
+def test_trivial_messages_do_not_require_course_basis(question: str) -> None:
+    reasons = _detect_review_reasons(
+        question,
+        [],
+        "答案",
+        used_source_count=0,
+        has_course_material=True,
+    )
+    assert reasons == []
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:

@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.47`
+> 冻结版本：`v0.0.48`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 
@@ -156,6 +156,7 @@ GET /api/v1/dashboard/overview?courseId={courseId}
 }
 ```
 
+`trend[].date` 按 `ECHO_BUSINESS_TIMEZONE` 的业务日历日分组，默认 `Asia/Shanghai`；其他时间字段仍使用 ISO 8601 UTC 表达。
 ## 7. AI 回答审核
 
 ### 7.1 枚举

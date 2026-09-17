@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -38,17 +39,50 @@ OUTSIDE_MATERIAL_MARKERS = (
     "course-external",
     "not in the course material",
 )
-TRIVIAL_QUESTION_MARKERS = (
-    "你好",
-    "您好",
-    "hello",
-    "hi",
-    "thanks",
-    "谢谢",
+CONVERSATIONAL_PREFIX_PATTERN = re.compile(
+    r"^(?:你好|您好|谢谢|hello\b|hi\b|thanks\b)[\s,，。.!！?？:：;；]*",
+    re.IGNORECASE,
+)
+TRIVIAL_QUESTION_PATTERNS = (
     "你是谁",
-    "who are you",
     "你能做什么",
-    "what can you do",
+    "whoareyou",
+    "whatcanyoudo",
+)
+QUESTION_INTENT_MARKERS = (
+    "什么",
+    "怎么",
+    "如何",
+    "为什么",
+    "为何",
+    "哪",
+    "是否",
+    "能否",
+    "能不能",
+    "请解释",
+    "解释一下",
+    "介绍一下",
+    "区别",
+    "比较",
+    "定义",
+    "含义",
+    "作用",
+    "举例",
+    "证明",
+    "计算",
+    "分析",
+    "评价",
+    "what",
+    "how",
+    "why",
+    "which",
+    "when",
+    "where",
+    "explain",
+    "define",
+    "compare",
+    "calculate",
+    "analyze",
 )
 
 
@@ -73,12 +107,19 @@ async def _ensure_review_teacher(
 
 def _is_substantive_question(question: str) -> bool:
     normalized = " ".join(question.casefold().split())
-    if len(normalized) < 12:
+    while normalized:
+        stripped, replacements = CONVERSATIONAL_PREFIX_PATTERN.subn("", normalized, count=1)
+        if replacements == 0:
+            break
+        normalized = stripped
+    if not normalized:
         return False
-    return not any(
-        normalized == marker or normalized.startswith(f"{marker} ")
-        for marker in TRIVIAL_QUESTION_MARKERS
-    )
+    if normalized.endswith(("?", "？")):
+        return True
+    compact = re.sub(r"[\s\W_]+", "", normalized)
+    if any(compact.startswith(pattern) for pattern in TRIVIAL_QUESTION_PATTERNS):
+        return False
+    return any(marker in normalized for marker in QUESTION_INTENT_MARKERS)
 
 
 def _detect_review_reasons(

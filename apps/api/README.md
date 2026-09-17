@@ -180,6 +180,7 @@ The dashboard also includes the number of open AI review flags.
 The overview endpoint returns the teacher home payload in one request: stats,
 seven-day trend, deterministic insight, chapter mastery, learning difficulties,
 and suggested teacher actions.
+Trend dates are bucketed by `ECHO_BUSINESS_TIMEZONE` (default `Asia/Shanghai`).
 Additional drill-down endpoints return chapter averages, per-knowledge-point
 student distributions, and a student's recent learning evidence.
 

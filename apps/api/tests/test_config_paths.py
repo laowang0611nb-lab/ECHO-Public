@@ -32,3 +32,9 @@ def test_production_rejects_development_auth() -> None:
 
 def test_development_auth_defaults_to_disabled() -> None:
     assert Settings.model_fields["development_auth_enabled"].default is False
+
+
+def test_business_timezone_defaults_and_validates() -> None:
+    assert Settings().business_timezone == "Asia/Shanghai"
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, business_timezone="Mars/Olympus")
