@@ -8,8 +8,8 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { TeacherNoteForm, MasteryCorrectionDialog } from "@/features/students/components/student-event-forms";
-import type { StudentDetailContext } from "@/features/students/types";
-import { buildChapterMastery, buildWeakPoints, eventCategoryCounts, eventLabel, groupConversationEvidence } from "@/features/students/view-model";
+import type { ConversationEvidenceGroup, StudentDetailContext } from "@/features/students/types";
+import { buildChapterMastery, buildConversationEvidenceGroups, buildWeakPoints, eventCategoryCounts, eventLabel } from "@/features/students/view-model";
 import { cn } from "@/lib/utils";
 
 export function StudentOverview({ context }: { context: StudentDetailContext }) {
@@ -60,7 +60,7 @@ export function StudentOverview({ context }: { context: StudentDetailContext }) 
           <CardHeader className="px-5"><CardTitle>薄弱知识点 Top 5</CardTitle></CardHeader>
           <CardContent className="space-y-2 px-5">
             {weakPoints.length ? weakPoints.map((point) => (
-              <Link className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3 hover:border-blue-200" href={`/knowledge/points/${point.knowledge_point_id}?from=student&studentId=${context.member.user_id}&tab=overview`} key={point.id}>
+              <Link className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3 hover:border-blue-200" href={`/knowledge/points/${point.knowledge_point_id}?from=student&studentId=${context.member.user_id}&tab=mastery`} key={point.id}>
                 <span className="min-w-0"><span className="block truncate text-sm font-medium">{point.name}</span><span className="mt-1 block text-xs text-muted-foreground">来自后端掌握状态</span></span>
                 <span className="text-sm font-semibold text-orange-600">{Math.round(point.score)}%</span>
               </Link>
@@ -78,7 +78,7 @@ export function StudentOverview({ context }: { context: StudentDetailContext }) 
 }
 
 export function StudentMasteryTab({ context, onChanged }: { context: StudentDetailContext; onChanged: () => void }) {
-  const pointMap = new Map(context.chapters.flatMap((chapter) => chapter.knowledge_points.map((point) => [point.id, { name: point.name, chapter: chapter.title }])));
+  const pointMap = new Map(context.chapters.flatMap((chapter) => chapter.knowledge_points.map((point) => [point.id, { id: point.id, name: point.name, chapter: chapter.title }])));
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <CardHeader className="border-b px-5 py-4">
@@ -91,7 +91,7 @@ export function StudentMasteryTab({ context, onChanged }: { context: StudentDeta
           return (
             <div className="flex flex-wrap items-center gap-3 px-5 py-4" key={state.id}>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{point?.name ?? "未命名知识点"}</span>
+                {point ? <Link className="block truncate text-sm font-medium hover:text-primary" href={`/knowledge/points/${point.id}?from=student&studentId=${context.member.user_id}&tab=mastery`}>{point.name}</Link> : <span className="block truncate text-sm font-medium">未命名知识点</span>}
                 <span className="mt-1 block text-xs text-muted-foreground">{point?.chapter ?? "未知章节"}</span>
               </span>
               <StatusBadge tone={state.score < 50 ? "danger" : state.score < 70 ? "warning" : "success"}>
@@ -117,46 +117,79 @@ export function StudentMasteryTab({ context, onChanged }: { context: StudentDeta
 export function StudentBehaviorTab({ context }: { context: StudentDetailContext }) {
   const counts = eventCategoryCounts(context.detail.recent_evidence);
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
+  const repeatedErrors = context.detail.recent_evidence.filter((event) => event.event_type === "repeated_error");
+  const recentEvents = context.detail.recent_evidence.slice(0, 8);
   return (
-    <Card className="gap-4 py-5">
-      <CardHeader className="px-5">
-        <CardTitle>学习行为分布</CardTitle>
-        <p className="text-xs text-muted-foreground">来自最近 LearningEvent，不代表学习时长或人格特征。</p>
-      </CardHeader>
-      <CardContent className="space-y-4 px-5">
-        {Object.entries(counts).length ? Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
-          <div key={type}>
-            <div className="mb-2 flex items-center justify-between gap-3 text-sm"><span>{eventLabel(type)}</span><span>{count} 次</span></div>
-            <Progress value={total ? (count / total) * 100 : 0} />
-          </div>
-        )) : <EmptyState description="当前学生还没有可展示的 LearningEvent。" title="暂无学习记录" />}
-      </CardContent>
-    </Card>
+    <div className="grid gap-4 xl:grid-cols-[minmax(300px,0.75fr)_minmax(0,1.25fr)]">
+      <Card className="gap-4 py-5">
+        <CardHeader className="px-5">
+          <CardTitle>学习行为分布</CardTitle>
+          <p className="text-xs text-muted-foreground">来自最近 LearningEvent，不代表学习时长或人格特征。</p>
+        </CardHeader>
+        <CardContent className="space-y-4 px-5">
+          {Object.entries(counts).length ? Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
+            <div key={type}>
+              <div className="mb-2 flex items-center justify-between gap-3 text-sm"><span>{eventLabel(type)}</span><span>{count} 次</span></div>
+              <Progress value={total ? (count / total) * 100 : 0} />
+            </div>
+          )) : <EmptyState description="当前学生还没有可展示的 LearningEvent。" title="暂无学习记录" />}
+        </CardContent>
+      </Card>
+
+      <div className="space-y-4">
+        <Card className="gap-3 py-5">
+          <CardHeader className="px-5"><CardTitle>重复错误</CardTitle><p className="text-xs text-muted-foreground">仅展示真实 `repeated_error` LearningEvent。</p></CardHeader>
+          <CardContent className="space-y-2 px-5">
+            {repeatedErrors.length ? repeatedErrors.slice(0, 5).map((event) => (
+              <div className="rounded-lg border border-orange-100 bg-orange-50/40 px-4 py-3" key={event.event_id}>
+                <p className="text-sm font-medium">{event.knowledge_point_name || "未关联知识点"}</p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{event.evidence || "重复错误证据"}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{event.created_at.slice(0, 16).replace("T", " ")}</p>
+              </div>
+            )) : <EmptyState description="当前没有重复错误事件。" title="暂无重复错误" />}
+          </CardContent>
+        </Card>
+
+        <Card className="gap-3 py-5">
+          <CardHeader className="px-5"><CardTitle>最近 LearningEvent</CardTitle><p className="text-xs text-muted-foreground">显示时间、事件类型、知识点和描述。</p></CardHeader>
+          <CardContent className="space-y-3 px-5">
+            {recentEvents.length ? recentEvents.map((event) => (
+              <div className="flex items-start gap-3" key={event.event_id}>
+                <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">{eventLabel(event.event_type)}</p><span className="text-[11px] text-muted-foreground">{event.created_at.slice(0, 16).replace("T", " ")}</span></div>
+                  <p className="mt-1 text-xs text-muted-foreground">{event.knowledge_point_name || "课程学习事件"} · {event.evidence || "无附加描述"}</p>
+                </div>
+              </div>
+            )) : <EmptyState description="当前学生没有可展示的学习事件。" title="暂无 LearningEvent" />}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
 
 export function StudentConversationsTab({ context }: { context: StudentDetailContext }) {
-  const conversations = groupConversationEvidence(context.reviewFlags);
+  const conversations = buildConversationEvidenceGroups(context.studentConversations, context.reviewFlags);
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50/60 px-4 py-3 text-sm text-orange-800">
-        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-        <p>当前后端仅允许教师读取审核证据，不给教师开放学生完整消息流。这里展示真实的提问、回答和 messageId，不伪装成完整对话。</p>
+      <div className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-sm text-blue-900">
+        <p>完整对话、Citation 和知识点来自教师权限接口；未审核会话也会显示，不会用 Mock 补齐消息。</p>
       </div>
       {conversations.length ? (
         <Card className="gap-0 overflow-hidden py-0">
-          <CardHeader className="border-b px-5 py-4"><CardTitle>对话证据</CardTitle></CardHeader>
+          <CardHeader className="border-b px-5 py-4"><CardTitle>完整对话</CardTitle><p className="text-xs text-muted-foreground">点击进入教师证据查看器，可定位审核消息、知识点与教材来源。</p></CardHeader>
           <CardContent className="divide-y divide-border px-0">
             {conversations.map((conversation) => (
-<Link className="grid gap-3 px-5 py-4 hover:bg-muted/40 lg:grid-cols-[minmax(0,1fr)_120px_120px]" href={`/students/${context.member.user_id}/conversations/${conversation.conversationId}?from=student&tab=conversations&messageId=${conversation.messageIds[0]}`} key={conversation.conversationId}>
+              <Link className="grid gap-3 px-5 py-4 hover:bg-muted/40 lg:grid-cols-[minmax(0,1fr)_120px_120px]" href={`/students/${context.member.user_id}/conversations/${conversation.conversationId}?from=student&tab=conversations${conversation.messageIds[0] ? `&messageId=${conversation.messageIds[0]}` : ""}`} key={conversation.conversationId}>
                 <span className="min-w-0"><span className="block truncate text-sm font-medium">{conversation.title}</span><span className="mt-1 block text-xs text-muted-foreground">{conversation.flags.length} 条审核证据 · {conversation.messageIds.length} 个消息标识</span></span>
-                <StatusBadge tone={conversation.status === "pending" ? "warning" : conversation.status === "rejected" ? "danger" : "success"}>{conversation.status === "pending" ? "待审核" : conversation.status === "rejected" ? "已判错" : "已审核"}</StatusBadge>
+                <StatusBadge tone={conversationStatusTone(conversation.status)}>{conversationStatusLabel(conversation.status)}</StatusBadge>
                 <span className="text-right text-xs text-muted-foreground">{conversation.updatedAt.slice(0, 10)}</span>
               </Link>
             ))}
           </CardContent>
         </Card>
-      ) : <EmptyState description="当前学生没有可用的审核对话证据。" title="暂无对话记录" />}
+      ) : <EmptyState description="当前学生还没有会话记录。" title="暂无对话记录" />}
     </div>
   );
 }
@@ -251,6 +284,20 @@ export function RecentEvents({ context }: { context: StudentDetailContext }) {
       </CardContent>
     </Card>
   );
+}
+
+function conversationStatusLabel(status: ConversationEvidenceGroup["status"]) {
+  if (status === "pending") return "待审核";
+  if (status === "rejected") return "已判错";
+  if (status === "reviewed") return "已审核";
+  return "未审核";
+}
+
+function conversationStatusTone(status: ConversationEvidenceGroup["status"]) {
+  if (status === "pending") return "warning" as const;
+  if (status === "rejected") return "danger" as const;
+  if (status === "reviewed") return "success" as const;
+  return "neutral" as const;
 }
 
 function SummaryCard({ icon: Icon, label, value, tone = "default" }: { icon: typeof BookOpen; label: string; value: number; tone?: "default" | "warning" }) {

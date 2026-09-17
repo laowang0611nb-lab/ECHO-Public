@@ -58,6 +58,7 @@ export function StudentDetailPage({
         chapters: data.chapters,
         chapterAnalytics: data.chapterAnalytics,
         masteryStates: data.masteryStates,
+        studentConversations: data.studentConversations,
         reviewFlags: data.reviewFlags,
       }
     : null;

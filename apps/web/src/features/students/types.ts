@@ -1,6 +1,7 @@
 import type {
   Chapter,
   ChapterAnalytics,
+  Conversation,
   Course,
   CourseMember,
   LearningEvidence,
@@ -105,6 +106,7 @@ export interface StudentDetailContext {
   chapters: Chapter[];
   chapterAnalytics: ChapterAnalytics[];
   masteryStates: MasteryState[];
+  studentConversations: Conversation[];
   reviewFlags: ReviewFlag[];
 }
 

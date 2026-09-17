@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStudentDetail, useTeacherConversationMessages } from "@/features/students/queries";
+import { eventLabel } from "@/features/students/view-model";
 import { buildSourceHref } from "@/features/knowledge/view-model";
 import type {
   ConversationEvidenceQuery,
@@ -290,6 +291,19 @@ export function StudentConversationPage({
               <Metric label="待审核" value={currentFlags.filter((flag) => flag.status === "open").length} />
               <Metric label="关联知识点" value={visibleKnowledgePointIds.size} />
               <Metric label="教材引用" value={visibleCitationCount} />
+            </CardContent>
+          </Card>
+
+          <Card className="gap-3 py-5">
+            <CardHeader className="px-5"><CardTitle>最近 LearningEvent</CardTitle><p className="text-xs text-muted-foreground">学生级最近事件；当前接口未提供会话级过滤。</p></CardHeader>
+            <CardContent className="space-y-3 px-5">
+              {data.recentEvidence.slice(0, 5).map((event) => (
+                <div className="flex items-start gap-3" key={event.event_id}>
+                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
+                  <div className="min-w-0"><p className="text-sm font-medium">{eventLabel(event.event_type)}</p><p className="mt-1 text-xs text-muted-foreground">{event.knowledge_point_name || event.evidence || "课程学习事件"}</p><p className="mt-1 text-[11px] text-muted-foreground">{event.created_at.slice(0, 16).replace("T", " ")}</p></div>
+                </div>
+              ))}
+              {!data.recentEvidence.length ? <p className="py-6 text-center text-sm text-muted-foreground">暂无 LearningEvent。</p> : null}
             </CardContent>
           </Card>
 

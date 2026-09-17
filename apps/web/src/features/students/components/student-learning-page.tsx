@@ -464,15 +464,21 @@ function SegmentsPanel({ items }: { items: ReturnType<typeof useStudentAnalytics
     { label: "基本掌握", tone: "info", values: items.filter((item) => item.status === "basic") },
     { label: "需要加强", tone: "warning", values: items.filter((item) => item.status === "attention") },
     { label: "重点关注", tone: "danger", values: items.filter((item) => item.status === "risk") },
+    { label: "低活跃", tone: "neutral", values: items.filter((item) => !item.activeRecently) },
+    { label: "知识点集中薄弱", tone: "warning", values: items.filter((item) => item.weakKnowledgePoints.length >= 2) },
+    { label: "暂无证据", tone: "neutral", values: items.filter((item) => item.status === "no_data") },
   ] as const;
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      {segments.map((segment) => (
-        <Card className="gap-3 py-5" key={segment.label}>
-          <CardHeader className="px-5"><StatusBadge tone={segment.tone}>{segment.label}</StatusBadge></CardHeader>
-          <CardContent className="px-5"><p className="text-3xl font-semibold">{segment.values.length}</p><p className="mt-2 text-sm text-muted-foreground">来自当前证据规则分组。</p></CardContent>
-        </Card>
-      ))}
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">分群只使用掌握状态、活跃度和薄弱知识点数量规则；长期进步趋势接口缺失时不生成结论。</p>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {segments.map((segment) => (
+          <Card className="gap-3 py-5" key={segment.label}>
+            <CardHeader className="px-5"><StatusBadge tone={segment.tone}>{segment.label}</StatusBadge></CardHeader>
+            <CardContent className="px-5"><p className="text-3xl font-semibold">{segment.values.length}</p><p className="mt-2 text-sm text-muted-foreground">来自当前真实证据规则分组。</p></CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
