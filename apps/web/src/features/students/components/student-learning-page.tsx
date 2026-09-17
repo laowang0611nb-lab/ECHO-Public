@@ -1,5 +1,5 @@
 "use client";
-import { Activity, AlertTriangle, ChevronRight, ClipboardCheck, GraduationCap, Search, Sparkles, TrendingUp, Users } from "lucide-react";
+import { Activity, AlertTriangle, ChevronRight, ClipboardCheck, GraduationCap, Search, Sparkles, TrendingUp, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -10,7 +10,7 @@ import { LoadingState } from "@/components/common/loading-state";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -18,7 +18,14 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LearningTrendChart } from "@/components/charts/learning-trend-chart";
 import { useStudentAnalytics } from "@/features/students/queries";
-import type { StudentAnalyticsTab } from "@/features/students/types";
+import type {
+  StudentAnalyticsTab,
+  StudentListActivityFilter,
+  StudentListQuery,
+  StudentListRiskFilter,
+  StudentListSort,
+  StudentListStatusFilter,
+} from "@/features/students/types";
 import { buildEvidenceTrend, eventLabel, statusLabel, statusTone } from "@/features/students/view-model";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { cn } from "@/lib/utils";
@@ -34,16 +41,21 @@ const tabs = [
 
 export function StudentLearningPage({
   initialCourseId,
+  initialListQuery,
   initialTab,
 }: {
   initialCourseId?: string;
+  initialListQuery: StudentListQuery;
   initialTab: StudentAnalyticsTab;
 }) {
   const router = useRouter();
   const { courses, selectedCourseId, setSelectedCourseId } = useCourseWorkspace();
   const [activeTab, setActiveTab] = useState<StudentAnalyticsTab>(initialTab);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "stable" | "attention" | "risk" | "no_data">("all");
+  const [search, setSearch] = useState(initialListQuery.search);
+  const [statusFilter, setStatusFilter] = useState<StudentListStatusFilter>(initialListQuery.status);
+  const [activityFilter, setActivityFilter] = useState<StudentListActivityFilter>(initialListQuery.activity);
+  const [riskFilter, setRiskFilter] = useState<StudentListRiskFilter>(initialListQuery.risk);
+  const [sort, setSort] = useState<StudentListSort>(initialListQuery.sort);
   const courseId = initialCourseId && courses.some((course) => course.id === initialCourseId)
     ? initialCourseId
     : selectedCourseId;
@@ -51,20 +63,61 @@ export function StudentLearningPage({
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return data.items.filter((item) => {
-      const matchesSearch = !query || item.member.display_name.toLowerCase().includes(query);
+    const items = data.items.filter((item) => {
+      const matchesSearch = !query
+        || item.member.display_name.toLowerCase().includes(query)
+        || item.member.user_id.toLowerCase().includes(query);
       const matchesStatus = statusFilter === "all" || item.status === statusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesActivity = activityFilter === "all"
+        || (activityFilter === "recent" ? item.activeRecently : !item.activeRecently);
+      const needsAttention = item.status === "attention" || item.status === "risk" || Boolean(item.riskReason);
+      const matchesRisk = riskFilter === "all"
+        || (riskFilter === "needs_attention" && needsAttention)
+        || (riskFilter === "high" && item.status === "risk")
+        || (riskFilter === "none" && !needsAttention);
+      return matchesSearch && matchesStatus && matchesActivity && matchesRisk;
     });
-  }, [data.items, search, statusFilter]);
+
+    return [...items].sort((a, b) => {
+      if (sort === "mastery_desc") return (b.mastery ?? -1) - (a.mastery ?? -1);
+      if (sort === "mastery_asc") return (a.mastery ?? 101) - (b.mastery ?? 101);
+      if (sort === "name") return a.member.display_name.localeCompare(b.member.display_name, "zh-Hans-CN");
+      const left = a.latestEvidence ? new Date(a.latestEvidence.created_at).getTime() : 0;
+      const right = b.latestEvidence ? new Date(b.latestEvidence.created_at).getTime() : 0;
+      return right - left || a.member.display_name.localeCompare(b.member.display_name, "zh-Hans-CN");
+    });
+  }, [activityFilter, data.items, riskFilter, search, sort, statusFilter]);
+
+  function replaceQuery(patch: Partial<StudentListQuery> & { courseId?: string | null; tab?: StudentAnalyticsTab }) {
+    const next = {
+      search: patch.search ?? search,
+      status: patch.status ?? statusFilter,
+      activity: patch.activity ?? activityFilter,
+      risk: patch.risk ?? riskFilter,
+      sort: patch.sort ?? sort,
+    };
+    if (patch.search !== undefined) setSearch(patch.search);
+    if (patch.status !== undefined) setStatusFilter(patch.status);
+    if (patch.activity !== undefined) setActivityFilter(patch.activity);
+    if (patch.risk !== undefined) setRiskFilter(patch.risk);
+    if (patch.sort !== undefined) setSort(patch.sort);
+
+    const nextCourseId = patch.courseId === undefined ? courseId : patch.courseId;
+    const params = new URLSearchParams();
+    if (nextCourseId) params.set("courseId", nextCourseId);
+    params.set("tab", patch.tab ?? activeTab);
+    if (next.search.trim()) params.set("q", next.search.trim());
+    if (next.status !== "all") params.set("status", next.status);
+    if (next.activity !== "all") params.set("activity", next.activity);
+    if (next.risk !== "all") params.set("risk", next.risk);
+    if (next.sort !== "recent") params.set("sort", next.sort);
+    router.replace(`/students?${params.toString()}`, { scroll: false });
+  }
 
   function handleTabChange(value: string) {
     const next = tabs.some((tab) => tab.value === value) ? (value as StudentAnalyticsTab) : "overview";
     setActiveTab(next);
-    const params = new URLSearchParams();
-    if (courseId) params.set("courseId", courseId);
-    params.set("tab", next);
-    router.replace(`/students?${params.toString()}`, { scroll: false });
+    replaceQuery({ tab: next });
   }
 
   if (!courseId) {
@@ -80,7 +133,11 @@ export function StudentLearningPage({
           <div className="flex flex-wrap items-center gap-2">
             <Select
               items={courses.map((item) => ({ value: item.id, label: item.name }))}
-              onValueChange={(value) => value && setSelectedCourseId(value)}
+              onValueChange={(value) => {
+                if (!value) return;
+                setSelectedCourseId(value);
+                replaceQuery({ courseId: value });
+              }}
               value={courseId}
             >
               <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
@@ -98,42 +155,112 @@ export function StudentLearningPage({
           {tabs.map((tab) => <TabsTrigger className="h-10 flex-none px-4" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
         </TabsList>
         <TabsContent className="mt-5" value={activeTab}>
-          {activeTab === "overview" ? <Overview items={filteredItems} summary={data.summary} /> : null}
+          {activeTab === "overview" ? <Overview items={data.items} summary={data.summary} /> : null}
           {activeTab === "students" ? (
             <div className="space-y-4">
-              <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative w-full sm:max-w-sm">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input className="pl-9" onChange={(event) => setSearch(event.target.value)} placeholder="搜索学生姓名..." value={search} />
+              <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="relative w-full lg:max-w-md">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input className="pl-9" onChange={(event) => replaceQuery({ search: event.target.value })} placeholder="搜索姓名或学号..." value={search} />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 lg:justify-end">
+                    <span className="text-xs text-muted-foreground">显示 {filteredItems.length} / {data.items.length} 名学生</span>
+                    <Button
+                      disabled={!search && statusFilter === "all" && activityFilter === "all" && riskFilter === "all" && sort === "recent"}
+                      onClick={() => replaceQuery({ search: "", status: "all", activity: "all", risk: "all", sort: "recent" })}
+                      size="sm"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <X data-icon="inline-start" />清除筛选
+                    </Button>
+                  </div>
                 </div>
-                <Select
-                  items={[
-                    { value: "all", label: "全部状态" },
-                    { value: "stable", label: "稳定掌握" },
-                    { value: "attention", label: "需要关注" },
-                    { value: "risk", label: "重点关注" },
-                    { value: "no_data", label: "暂无证据" },
-                  ]}
-                  onValueChange={(value) => value && setStatusFilter(value as typeof statusFilter)}
-                  value={statusFilter}
-                >
-                  <SelectTrigger className="w-full sm:w-36"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectGroup>
-                    <SelectItem value="all">全部状态</SelectItem>
-                    <SelectItem value="stable">稳定掌握</SelectItem>
-                    <SelectItem value="attention">需要关注</SelectItem>
-                    <SelectItem value="risk">重点关注</SelectItem>
-                    <SelectItem value="no_data">暂无证据</SelectItem>
-                  </SelectGroup></SelectContent>
-                </Select>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                  <Select
+                    items={[
+                      { value: "all", label: "全部掌握状态" },
+                      { value: "stable", label: "稳定掌握" },
+                      { value: "basic", label: "基本掌握" },
+                      { value: "attention", label: "需要关注" },
+                      { value: "risk", label: "重点关注" },
+                      { value: "no_data", label: "暂无证据" },
+                    ]}
+                    onValueChange={(value) => value && replaceQuery({ status: value as StudentListStatusFilter })}
+                    value={statusFilter}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value="all">全部掌握状态</SelectItem>
+                      <SelectItem value="stable">稳定掌握</SelectItem>
+                      <SelectItem value="basic">基本掌握</SelectItem>
+                      <SelectItem value="attention">需要关注</SelectItem>
+                      <SelectItem value="risk">重点关注</SelectItem>
+                      <SelectItem value="no_data">暂无证据</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
+                  <Select
+                    items={[
+                      { value: "all", label: "全部活跃度" },
+                      { value: "recent", label: "近期活跃" },
+                      { value: "inactive", label: "低活跃 / 无近期证据" },
+                    ]}
+                    onValueChange={(value) => value && replaceQuery({ activity: value as StudentListActivityFilter })}
+                    value={activityFilter}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value="all">全部活跃度</SelectItem>
+                      <SelectItem value="recent">近期活跃</SelectItem>
+                      <SelectItem value="inactive">低活跃 / 无近期证据</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
+                  <Select
+                    items={[
+                      { value: "all", label: "全部风险状态" },
+                      { value: "needs_attention", label: "需要关注" },
+                      { value: "high", label: "重点关注" },
+                      { value: "none", label: "暂无风险标记" },
+                    ]}
+                    onValueChange={(value) => value && replaceQuery({ risk: value as StudentListRiskFilter })}
+                    value={riskFilter}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value="all">全部风险状态</SelectItem>
+                      <SelectItem value="needs_attention">需要关注</SelectItem>
+                      <SelectItem value="high">重点关注</SelectItem>
+                      <SelectItem value="none">暂无风险标记</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
+                  <Select
+                    items={[
+                      { value: "recent", label: "最近学习优先" },
+                      { value: "mastery_desc", label: "掌握度从高到低" },
+                      { value: "mastery_asc", label: "掌握度从低到高" },
+                      { value: "name", label: "按姓名排序" },
+                    ]}
+                    onValueChange={(value) => value && replaceQuery({ sort: value as StudentListSort })}
+                    value={sort}
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup>
+                      <SelectItem value="recent">最近学习优先</SelectItem>
+                      <SelectItem value="mastery_desc">掌握度从高到低</SelectItem>
+                      <SelectItem value="mastery_asc">掌握度从低到高</SelectItem>
+                      <SelectItem value="name">按姓名排序</SelectItem>
+                    </SelectGroup></SelectContent>
+                  </Select>
+                </div>
               </div>
               <StudentList courseId={courseId} items={filteredItems} />
             </div>
           ) : null}
-          {activeTab === "behavior" ? <BehaviorPanel items={filteredItems} /> : null}
+          {activeTab === "behavior" ? <BehaviorPanel items={data.items} /> : null}
           {activeTab === "mastery" ? <ClassMasteryPanel data={data} /> : null}
-          {activeTab === "difficulty" ? <DifficultyPanel items={filteredItems} /> : null}
-          {activeTab === "segments" ? <SegmentsPanel items={filteredItems} /> : null}
+          {activeTab === "difficulty" ? <DifficultyPanel items={data.items} /> : null}
+          {activeTab === "segments" ? <SegmentsPanel items={data.items} /> : null}
         </TabsContent>
       </Tabs>
 
@@ -239,15 +366,34 @@ function StudentList({ courseId, items }: { courseId: string; items: ReturnType<
   if (!items.length) return <EmptyState description="当前筛选条件下没有学生。" title="没有匹配学生" />;
   return (
     <Card className="gap-0 overflow-hidden py-0">
-      <CardHeader className="border-b px-5 py-4"><CardTitle>学生列表</CardTitle></CardHeader>
+      <CardHeader className="border-b px-5 py-4">
+        <CardTitle>学生列表</CardTitle>
+        <p className="text-xs text-muted-foreground">仅按真实掌握状态、LearningEvent 和审核证据展示，不根据聊天次数推断。</p>
+      </CardHeader>
+      <div className="hidden grid-cols-[minmax(230px,1.4fr)_110px_140px_100px_minmax(150px,1fr)_minmax(150px,0.9fr)] gap-3 border-b bg-muted/30 px-5 py-2 text-xs font-medium text-muted-foreground xl:grid">
+        <span>学生</span><span>掌握状态</span><span>活跃情况</span><span>总体掌握</span><span>薄弱知识点</span><span>最近事件</span>
+      </div>
       <CardContent className="divide-y divide-border px-0">
         {items.map((item) => (
-          <Link className="grid gap-3 px-5 py-4 transition-colors hover:bg-muted/40 lg:grid-cols-[minmax(180px,1fr)_120px_180px_180px_110px]" href={`/students/${item.member.user_id}?from=students&courseId=${courseId}`} key={item.member.id}>
-            <span className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-primary">{item.member.display_name.slice(0, 1)}</span><span><span className="block text-sm font-medium">{item.member.display_name}</span><span className="mt-1 block text-xs text-muted-foreground">{item.member.joined_at.slice(0, 10)} 加入</span></span></span>
-            <StatusBadge tone={statusTone(item.status)}>{statusLabel(item.status)}</StatusBadge>
-            <span><span className="block text-xs text-muted-foreground">掌握度</span><span className="mt-1 block text-sm font-medium">{item.mastery === null ? "暂无" : `${Math.round(item.mastery)}%`}</span></span>
-            <span className="min-w-0"><span className="block text-xs text-muted-foreground">薄弱知识点</span><span className="mt-1 block truncate text-sm">{item.weakKnowledgePoints[0]?.name ?? "暂无"}</span></span>
-            <span className="text-right text-xs text-muted-foreground">{item.latestEvidence ? item.latestEvidence.created_at.slice(0, 10) : "暂无证据"}</span>
+          <Link className="grid gap-3 px-5 py-4 transition-colors hover:bg-muted/40 xl:grid-cols-[minmax(230px,1.4fr)_110px_140px_100px_minmax(150px,1fr)_minmax(150px,0.9fr)]" href={`/students/${item.member.user_id}?from=students&courseId=${courseId}`} key={item.member.id}>
+            <span className="flex items-start gap-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-primary">{item.member.display_name.slice(0, 1)}</span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{item.member.display_name}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">学号 {item.member.user_id.slice(0, 8)} · {item.member.joined_at.slice(0, 10)} 加入</span>
+                {item.riskReason ? <span className="mt-1 block truncate text-xs text-orange-600">{item.riskReason}</span> : null}
+              </span>
+            </span>
+            <span className="flex items-center xl:block"><StatusBadge tone={statusTone(item.status)}>{statusLabel(item.status)}</StatusBadge></span>
+            <span className="flex items-center gap-2 xl:block">
+              <StatusBadge tone={item.latestEvidence && item.activeRecently ? "success" : "neutral"}>
+                {item.latestEvidence ? (item.activeRecently ? "近期活跃" : "低活跃") : "暂无证据"}
+              </StatusBadge>
+              <span className="text-xs text-muted-foreground xl:mt-1 xl:block">{item.latestEvidence ? item.latestEvidence.created_at.slice(0, 10) : "无学习记录"}</span>
+            </span>
+            <span><span className="text-xs text-muted-foreground xl:block">掌握度</span><span className="text-sm font-medium xl:mt-1 xl:block">{item.mastery === null ? "暂无" : `${Math.round(item.mastery)}%`}</span></span>
+            <span className="min-w-0"><span className="text-xs text-muted-foreground xl:block">薄弱知识点</span><span className="block truncate text-sm xl:mt-1">{item.weakKnowledgePoints[0]?.name ?? "暂无"}</span></span>
+            <span className="min-w-0"><span className="text-xs text-muted-foreground xl:block">最近事件</span><span className="block truncate text-sm xl:mt-1">{item.latestEvidence ? eventLabel(item.latestEvidence.event_type) : "暂无 LearningEvent"}</span></span>
           </Link>
         ))}
       </CardContent>

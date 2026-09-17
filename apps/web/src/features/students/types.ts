@@ -28,6 +28,22 @@ export type StudentDetailTab =
 
 export type StudentLearningStatus = "stable" | "basic" | "attention" | "risk" | "no_data";
 
+export type StudentListStatusFilter = StudentLearningStatus | "all";
+
+export type StudentListActivityFilter = "all" | "recent" | "inactive";
+
+export type StudentListRiskFilter = "all" | "needs_attention" | "high" | "none";
+
+export type StudentListSort = "recent" | "mastery_desc" | "mastery_asc" | "name";
+
+export interface StudentListQuery {
+  search: string;
+  status: StudentListStatusFilter;
+  activity: StudentListActivityFilter;
+  risk: StudentListRiskFilter;
+  sort: StudentListSort;
+}
+
 export interface StudentAnalyticsItem {
   member: CourseMember;
   detail: StudentLearningDetail | null;
