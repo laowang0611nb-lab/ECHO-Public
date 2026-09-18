@@ -18,6 +18,13 @@ import type {
   DocumentIndexStatus,
   DocumentPageEvidence,
   DocumentUploadSource,
+  ExecutionPlanAction,
+  ExecutionPlanCreateRequest,
+  ExecutionPlanDetail,
+  ExecutionPlanListItem,
+  ExecutionPlanPage,
+  ExecutionPlanStatus,
+  ExecutionPlanUpdateRequest,
   ErrorPatternReport,
   ExternalResource,
   ExternalResourceCreateRequest,
@@ -26,6 +33,24 @@ import type {
   ExternalResourceUpdateRequest,
   KnowledgeGraph,
   MasteryTrend,
+  PlanEffect,
+  PlanLearningEventPage,
+  PlanTaskItem,
+  PlanTaskPage,
+  PlanTaskStatus,
+  PlanTaskUpdateRequest,
+  TeachingStrategyAction,
+  TeachingStrategyCreateRequest,
+  TeachingStrategyDetail,
+  TeachingStrategyGenerateRequest,
+  TeachingStrategyPage,
+  TeachingStrategyPriority,
+  TeachingStrategyStatus,
+  TeachingStrategyType,
+  TeachingStrategyUpdateRequest,
+  TeachingStrategyVersion,
+  WeeklyPlanGenerateRequest,
+  WeeklyPlanGeneration,
   PermanentDeleteResult,
   QuestionItem,
   QuestionItemCreateRequest,
@@ -43,6 +68,7 @@ import type {
   KnowledgePointMergeRequest,
   KnowledgePointUpdateRequest,
   LearningEventCreateRequest,
+  LearningEventType,
   LearningEventRecord,
   MasteryState,
   Message,
@@ -323,6 +349,216 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
           method: "PUT",
           body: JSON.stringify(payload),
         },
+        userId,
+      ),
+    listTeachingStrategies: (
+      userId: string,
+      courseId: string,
+      options?: {
+        status?: TeachingStrategyStatus;
+        type?: TeachingStrategyType;
+        priority?: TeachingStrategyPriority;
+        cursor?: string;
+        limit?: number;
+      },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.type) params.set("type", options.type);
+      if (options?.priority) params.set("priority", options.priority);
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<TeachingStrategyPage>(
+        `/api/v1/courses/${courseId}/teaching-strategies${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    generateTeachingStrategy: (
+      userId: string,
+      courseId: string,
+      payload: TeachingStrategyGenerateRequest,
+    ) =>
+      request<TeachingStrategyDetail>(
+        `/api/v1/courses/${courseId}/teaching-strategies/generate`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    createTeachingStrategy: (
+      userId: string,
+      courseId: string,
+      payload: TeachingStrategyCreateRequest,
+    ) =>
+      request<TeachingStrategyDetail>(
+        `/api/v1/courses/${courseId}/teaching-strategies`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    getTeachingStrategy: (userId: string, strategyId: string) =>
+      request<TeachingStrategyDetail>(
+        `/api/v1/teaching-strategies/${strategyId}`,
+        undefined,
+        userId,
+      ),
+    updateTeachingStrategy: (
+      userId: string,
+      strategyId: string,
+      payload: TeachingStrategyUpdateRequest,
+    ) =>
+      request<TeachingStrategyDetail>(
+        `/api/v1/teaching-strategies/${strategyId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+        userId,
+      ),
+    actOnTeachingStrategy: (
+      userId: string,
+      strategyId: string,
+      action: TeachingStrategyAction,
+    ) =>
+      request<TeachingStrategyDetail>(
+        `/api/v1/teaching-strategies/${strategyId}/actions`,
+        { method: "POST", body: JSON.stringify({ action }) },
+        userId,
+      ),
+    listTeachingStrategyVersions: (userId: string, strategyId: string) =>
+      request<TeachingStrategyVersion[]>(
+        `/api/v1/teaching-strategies/${strategyId}/versions`,
+        undefined,
+        userId,
+      ),
+    getTeachingStrategyEffect: (userId: string, strategyId: string) =>
+      request<PlanEffect>(
+        `/api/v1/teaching-strategies/${strategyId}/effect`,
+        undefined,
+        userId,
+      ),
+    listExecutionPlans: (
+      userId: string,
+      courseId: string,
+      options?: {
+        strategyId?: string;
+        status?: ExecutionPlanStatus;
+        cursor?: string;
+        limit?: number;
+      },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.strategyId) params.set("strategyId", options.strategyId);
+      if (options?.status) params.set("status", options.status);
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<ExecutionPlanPage>(
+        `/api/v1/courses/${courseId}/execution-plans${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    createExecutionPlan: (
+      userId: string,
+      courseId: string,
+      payload: ExecutionPlanCreateRequest,
+    ) =>
+      request<ExecutionPlanDetail>(
+        `/api/v1/courses/${courseId}/execution-plans`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    getExecutionPlan: (userId: string, planId: string) =>
+      request<ExecutionPlanDetail>(
+        `/api/v1/execution-plans/${planId}`,
+        undefined,
+        userId,
+      ),
+    updateExecutionPlan: (
+      userId: string,
+      planId: string,
+      payload: ExecutionPlanUpdateRequest,
+    ) =>
+      request<ExecutionPlanDetail>(
+        `/api/v1/execution-plans/${planId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+        userId,
+      ),
+    actOnExecutionPlan: (
+      userId: string,
+      planId: string,
+      action: ExecutionPlanAction,
+    ) =>
+      request<ExecutionPlanDetail>(
+        `/api/v1/execution-plans/${planId}/actions`,
+        { method: "POST", body: JSON.stringify({ action }) },
+        userId,
+      ),
+    generateExecutionPlanWeeklyPlan: (
+      userId: string,
+      planId: string,
+      payload: WeeklyPlanGenerateRequest,
+    ) =>
+      request<WeeklyPlanGeneration>(
+        `/api/v1/execution-plans/${planId}/generate-weekly-plan`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    listPlanTasks: (
+      userId: string,
+      planId: string,
+      options?: { status?: PlanTaskStatus; week?: number; cursor?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.week) params.set("week", String(options.week));
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<PlanTaskPage>(
+        `/api/v1/execution-plans/${planId}/tasks${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    updatePlanTask: (
+      userId: string,
+      taskId: string,
+      payload: PlanTaskUpdateRequest,
+    ) =>
+      request<PlanTaskItem>(
+        `/api/v1/plan-tasks/${taskId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+        userId,
+      ),
+    listPlanLearningEvents: (
+      userId: string,
+      planId: string,
+      options?: {
+        studentId?: string;
+        taskId?: string;
+        knowledgePointId?: string;
+        eventType?: LearningEventType;
+        cursor?: string;
+        limit?: number;
+      },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.studentId) params.set("studentId", options.studentId);
+      if (options?.taskId) params.set("taskId", options.taskId);
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.eventType) params.set("eventType", options.eventType);
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<PlanLearningEventPage>(
+        `/api/v1/execution-plans/${planId}/learning-events${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getExecutionPlanEffect: (userId: string, planId: string) =>
+      request<PlanEffect>(
+        `/api/v1/execution-plans/${planId}/effect`,
+        undefined,
         userId,
       ),
     getCourseDashboard: (userId: string, courseId: string) =>

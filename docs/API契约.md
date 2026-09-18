@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.81`
+> 冻结版本：`v0.0.84`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
@@ -463,7 +463,68 @@ GET /api/v1/courses/{course_id}/knowledge-graph?chapterId=&pointId=
 
 永久删除文档在一个事务内清理章节、知识点、学习状态、Chunk 和页面，并解除 QuestionItem 与 Citation 的文档引用；失败时整体回滚，不保留部分删除结果。
 
-## 9. 接口冻结规则
+## 9. 教学策略与执行计划
+
+### 9.1 核心枚举
+
+- `TeachingStrategyType`: `content_adjustment`、`teaching_method`、`differentiated_instruction`、`assignment_design`、`classroom_interaction`
+- `TeachingStrategyPriority`: `high`、`medium`、`low`
+- `TeachingStrategyStatus`: `suggested`、`accepted`、`planned`、`active`、`paused`、`completed`、`dismissed`
+- `ExecutionPlanStatus`: `draft`、`ready`、`active`、`paused`、`completed`、`cancelled`
+- `PlanTaskType`: `supplementary_practice`、`resource_push`、`classroom_lecture`、`quick_check`、`individual_tutoring`、`project_task`
+- `PlanTaskStatus`: `not_started`、`in_progress`、`completed`、`overdue`、`cancelled`
+- `PlanTargetScope`: `whole_class`、`student_group`、`custom_students`
+
+AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作为 `draft` 返回。只有教师动作可以改变策略计划状态；教师动作才会产生 `accepted`、`planned`、`active`、`paused` 或 `completed`。
+
+### 9.2 Teaching Strategy
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/courses/{course_id}/teaching-strategies` | 课程教师 | 按 `status`、`type`、`priority` 筛选，返回 `items,total,nextCursor` |
+| POST | `/courses/{course_id}/teaching-strategies/generate` | 课程教师 | AI 生成策略草稿，初始 `suggested` |
+| POST | `/courses/{course_id}/teaching-strategies` | 课程教师 | 手工创建策略草稿 |
+| GET | `/teaching-strategies/{strategy_id}` | 课程教师 | 策略详情、目标学生/知识点、资源、版本和关联计划 |
+| PATCH | `/teaching-strategies/{strategy_id}` | 课程教师 | 修改策略并写入新版本 |
+| POST | `/teaching-strategies/{strategy_id}/actions` | 课程教师 | `accept`、`dismiss`、`activate`、`pause`、`resume`、`complete` |
+| GET | `/teaching-strategies/{strategy_id}/versions` | 课程教师 | 返回策略版本快照和动作 |
+| GET | `/teaching-strategies/{strategy_id}/effect` | 课程教师 | 返回策略关联计划的观察效果 |
+
+生成请求使用 `knowledgePointIds`、`studentIds`、`insightIds` 和 `timeRangeDays`。策略详情区分 `source` 与 `generated_context`，并返回 `version`、`change_history`、`linked_plans` 和真实 `evidence`。
+
+### 9.3 Execution Plan 与周计划
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/courses/{course_id}/execution-plans` | 课程教师 | 按 `strategyId`、`status` 查询计划 |
+| POST | `/courses/{course_id}/execution-plans` | 课程教师 | 创建草稿或教师明确发布的计划 |
+| GET | `/execution-plans/{plan_id}` | 课程教师 | 计划详情、目标、资源、周计划、任务、最近 LearningEvent 和进度 |
+| PATCH | `/execution-plans/{plan_id}` | 课程教师 | 修改计划配置 |
+| POST | `/execution-plans/{plan_id}/actions` | 课程教师 | `publish`、`pause`、`resume`、`complete`、`cancel` |
+| POST | `/execution-plans/{plan_id}/generate-weekly-plan` | 课程教师 | AI 生成或显式重新生成周计划草案 |
+
+周计划生成响应固定包含 `status: draft`、`generation_id`、`weeks` 和 `recommendations`。未发布计划在生成前后保持 `draft`；发布由教师 `publish` 动作完成。暂停、继续和完成不会删除历史任务或 LearningEvent。
+
+### 9.4 Plan Task 与计划 LearningEvent
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/execution-plans/{plan_id}/tasks` | 课程教师 | 按 `status`、`week` 查询任务 |
+| PATCH | `/plan-tasks/{task_id}` | 课程教师 | 修改任务内容、状态、截止时间和关联对象 |
+| GET | `/execution-plans/{plan_id}/learning-events` | 课程教师 | 按学生、任务、知识点、事件类型查询计划事件 |
+
+任务返回 `completion: {completed,total}`。计划 LearningEvent 复用现有 `LearningEvent`，通过 `planId`、`taskId`、`weekNumber` 回溯计划，并返回学生、知识点和 `correct/wrong/completed/unresolved` 结果。
+
+### 9.5 Effect
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/execution-plans/{plan_id}/effect` | 课程教师 | 计划观察效果 |
+| GET | `/teaching-strategies/{strategy_id}/effect` | 课程教师 | 策略关联计划观察效果 |
+
+效果响应包含 `metrics`、`task_effectiveness`、`remaining_issues`、`facts`、`ai_explanation` 和 `insufficient_evidence`。`facts` 只描述观察到的变化，不使用因果断言；样本不足时 `insufficient_evidence=true`。
+
+## 10. 接口冻结规则
 
 - 已登记的方法、路径和枚举值视为稳定契约。
 - 新功能只能新增可选字段、新枚举值或新路径。

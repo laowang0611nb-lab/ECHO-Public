@@ -494,6 +494,9 @@ export interface LearningEventCreateRequest {
   knowledge_point_id?: string | null;
   conversation_id?: string | null;
   message_id?: string | null;
+  plan_id?: string | null;
+  task_id?: string | null;
+  week_number?: number | null;
   event_type: LearningEventType;
   weight?: number;
   evidence?: string | null;
@@ -505,9 +508,13 @@ export interface LearningEventRecord {
   course_id: string;
   user_id: string;
   knowledge_point_id: string | null;
+  plan_id: string | null;
+  task_id: string | null;
+  week_number: number | null;
   event_type: LearningEventType;
   weight: number;
   evidence: string | null;
+  result: PlanLearningEventResult;
   created_at: string;
 }
 
@@ -760,6 +767,418 @@ export interface DocumentPageEvidence {
   text: string;
   blocks: DocumentPageBlock[];
 }
+export type TeachingStrategyType =
+  | "content_adjustment"
+  | "teaching_method"
+  | "differentiated_instruction"
+  | "assignment_design"
+  | "classroom_interaction";
+
+export type TeachingStrategyPriority = "high" | "medium" | "low";
+
+export type TeachingStrategyStatus =
+  | "suggested"
+  | "accepted"
+  | "planned"
+  | "active"
+  | "paused"
+  | "completed"
+  | "dismissed";
+
+export type TeachingStrategySource = "ai_generated" | "teacher_created";
+
+export type TeachingStrategyHistoryAction =
+  | "generated"
+  | "created"
+  | "updated"
+  | "accept"
+  | "dismiss"
+  | "activate"
+  | "pause"
+  | "resume"
+  | "complete"
+  | "plan_created"
+  | "plan_published";
+
+export type ExecutionPlanStatus =
+  | "draft"
+  | "ready"
+  | "active"
+  | "paused"
+  | "completed"
+  | "cancelled";
+
+export type PlanTargetScope = "whole_class" | "student_group" | "custom_students";
+
+export type PlanTaskType =
+  | "supplementary_practice"
+  | "resource_push"
+  | "classroom_lecture"
+  | "quick_check"
+  | "individual_tutoring"
+  | "project_task";
+
+export type PlanTaskStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed"
+  | "overdue"
+  | "cancelled";
+
+export type PlanLearningEventResult = "correct" | "wrong" | "completed" | "unresolved";
+
+export interface PlanningResourceReference {
+  id: string;
+  title: string;
+  resource_type: ResourceType | "chapter" | "knowledge_point" | string;
+}
+
+export interface PlanningKnowledgePointReference {
+  id: string;
+  name: string;
+}
+
+export interface PlanningStudentReference {
+  id: string;
+  display_name: string;
+}
+
+export interface ExpectedEffect {
+  summary: string;
+  impact: number | null;
+  metrics: Record<string, unknown>[];
+}
+
+export interface TeachingMethodWeight {
+  name: string;
+  weight: number;
+}
+
+export interface TeachingFlowStep {
+  order: number;
+  title: string;
+  description: string;
+}
+
+export interface TeachingStrategyListItem {
+  id: string;
+  course_id: string;
+  title: string;
+  description: string;
+  type: TeachingStrategyType;
+  priority: TeachingStrategyPriority;
+  status: TeachingStrategyStatus;
+  source: TeachingStrategySource;
+  target_knowledge_points: PlanningKnowledgePointReference[];
+  target_student_count: number;
+  expected_effect: ExpectedEffect;
+  updated_at: string;
+}
+
+export interface TeachingStrategyVersion {
+  id: string;
+  strategy_id: string;
+  version: number;
+  action: TeachingStrategyHistoryAction;
+  status: TeachingStrategyStatus;
+  snapshot: Record<string, unknown>;
+  changed_by: string;
+  created_at: string;
+}
+
+export interface TeachingStrategyPlanReference {
+  id: string;
+  title: string;
+  status: ExecutionPlanStatus;
+}
+
+export interface TeachingStrategyDetail {
+  id: string;
+  course: { id: string; name: string };
+  title: string;
+  description: string;
+  type: TeachingStrategyType;
+  priority: TeachingStrategyPriority;
+  status: TeachingStrategyStatus;
+  source: TeachingStrategySource;
+  version: number;
+  goals: string[];
+  teaching_methods: TeachingMethodWeight[];
+  teaching_flow: TeachingFlowStep[];
+  personalization_rules: string[];
+  ai_rules: string[];
+  target_knowledge_points: PlanningKnowledgePointReference[];
+  target_students: PlanningStudentReference[];
+  resources: PlanningResourceReference[];
+  expected_effect: ExpectedEffect;
+  generated_context: Record<string, unknown>;
+  evidence: {
+    learning_event_count: number;
+    knowledge_point_count: number;
+    student_count: number;
+  };
+  linked_plans: TeachingStrategyPlanReference[];
+  change_history: TeachingStrategyVersion[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeachingStrategyPage {
+  items: TeachingStrategyListItem[];
+  total: number;
+  nextCursor: string | null;
+}
+
+export interface TeachingStrategyGenerateRequest {
+  knowledgePointIds: string[];
+  studentIds: string[];
+  insightIds: string[];
+  timeRangeDays: number;
+}
+
+export interface TeachingStrategyCreateRequest {
+  title: string;
+  description: string;
+  type: TeachingStrategyType;
+  priority: TeachingStrategyPriority;
+  goals?: string[];
+  teaching_methods?: TeachingMethodWeight[];
+  teaching_flow?: TeachingFlowStep[];
+  personalization_rules?: string[];
+  ai_rules?: string[];
+  target_knowledge_point_ids?: string[];
+  target_student_ids?: string[];
+  resource_ids?: string[];
+  expected_effect?: ExpectedEffect;
+}
+
+export type TeachingStrategyUpdateRequest = Partial<TeachingStrategyCreateRequest>;
+
+export type TeachingStrategyAction =
+  | "accept"
+  | "dismiss"
+  | "activate"
+  | "pause"
+  | "resume"
+  | "complete";
+
+export interface ExecutionPlanCreateRequest {
+  strategy_id: string;
+  title: string;
+  description: string;
+  start_date: string;
+  end_date: string;
+  target_scope: PlanTargetScope;
+  target_student_ids?: string[];
+  knowledge_point_ids?: string[];
+  actions?: PlanTaskType[];
+  resource_ids?: string[];
+  plan_parameters?: Record<string, unknown>;
+  evaluation_metrics?: string[];
+  teacher_note?: string | null;
+  publish?: boolean;
+}
+
+export interface ExecutionPlanUpdateRequest {
+  title?: string;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+  target_scope?: PlanTargetScope;
+  target_student_ids?: string[];
+  knowledge_point_ids?: string[];
+  actions?: PlanTaskType[];
+  resource_ids?: string[];
+  plan_parameters?: Record<string, unknown>;
+  evaluation_metrics?: string[];
+  teacher_note?: string | null;
+  publish?: boolean;
+}
+
+export type ExecutionPlanAction = "publish" | "pause" | "resume" | "complete" | "cancel";
+
+export interface PlanTaskCompletion {
+  completed: number;
+  total: number;
+}
+
+export interface PlanTaskItem {
+  id: string;
+  plan_id: string;
+  week_number: number;
+  title: string;
+  description: string;
+  type: PlanTaskType;
+  status: PlanTaskStatus;
+  due_at: string | null;
+  knowledge_point_ids: string[];
+  resource_ids: string[];
+  resources: PlanningResourceReference[];
+  target_student_ids: string[];
+  completion: PlanTaskCompletion;
+}
+
+export interface PlanTaskPage {
+  items: PlanTaskItem[];
+  total: number;
+  nextCursor: string | null;
+}
+
+export interface PlanTaskUpdateRequest {
+  title?: string;
+  description?: string;
+  type?: PlanTaskType;
+  status?: PlanTaskStatus;
+  due_at?: string | null;
+  knowledge_point_ids?: string[];
+  resource_ids?: string[];
+  target_student_ids?: string[];
+}
+
+export interface ExecutionPlanWeekItem {
+  id: string;
+  week_number: number;
+  start_date: string;
+  end_date: string;
+  content: string;
+  knowledge_point_ids: string[];
+  resources: PlanningResourceReference[];
+  tasks: PlanTaskItem[];
+}
+
+export interface PlanProgress {
+  percentage: number;
+  completed_tasks: number;
+  total_tasks: number;
+  overdue_tasks: number;
+  current_week: number | null;
+}
+
+export interface PlanStrategyReference {
+  id: string;
+  title: string;
+  version: number;
+}
+
+export interface PlanEffectMetric {
+  metric: string;
+  label: string;
+  before: number | null;
+  after: number | null;
+  delta: number | null;
+  sample_size: number;
+  source: string;
+}
+
+export interface PlanTaskEffectiveness {
+  task_id: string;
+  title: string;
+  completion_rate: number;
+  event_count: number;
+  observed_change: number | null;
+}
+
+export interface PlanEffect {
+  plan_id: string | null;
+  strategy_id: string | null;
+  period: { start: string; end: string };
+  metrics: PlanEffectMetric[];
+  task_effectiveness: PlanTaskEffectiveness[];
+  remaining_issues: string[];
+  facts: string[];
+  ai_explanation: string | null;
+  insufficient_evidence: boolean;
+}
+
+export interface ExecutionPlanListItem {
+  id: string;
+  course_id: string;
+  strategy: PlanStrategyReference;
+  title: string;
+  description: string;
+  status: ExecutionPlanStatus;
+  start_date: string;
+  end_date: string;
+  target_scope: PlanTargetScope;
+  target_student_count: number;
+  knowledge_point_count: number;
+  task_count: number;
+  progress: PlanProgress;
+  updated_at: string;
+}
+
+export interface ExecutionPlanPage {
+  items: ExecutionPlanListItem[];
+  total: number;
+  nextCursor: string | null;
+}
+
+export interface ExecutionPlanDetail {
+  id: string;
+  course: { id: string; name: string };
+  strategy: PlanStrategyReference;
+  title: string;
+  description: string;
+  status: ExecutionPlanStatus;
+  start_date: string;
+  end_date: string;
+  target_scope: PlanTargetScope;
+  target_students: PlanningStudentReference[];
+  knowledge_points: PlanningKnowledgePointReference[];
+  resources: PlanningResourceReference[];
+  actions: PlanTaskType[];
+  plan_parameters: Record<string, unknown>;
+  evaluation_metrics: string[];
+  teacher_note: string | null;
+  progress: PlanProgress;
+  weekly_plans: ExecutionPlanWeekItem[];
+  tasks: PlanTaskItem[];
+  recent_learning_events: PlanLearningEventItem[];
+  effect_summary: PlanEffect | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanLearningEventItem {
+  id: string;
+  course_id: string;
+  plan_id: string;
+  task_id: string | null;
+  week_number: number | null;
+  student: PlanningStudentReference;
+  knowledge_point: PlanningKnowledgePointReference | null;
+  event_type: LearningEventType;
+  result: PlanLearningEventResult;
+  weight: number;
+  evidence: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface PlanLearningEventPage {
+  items: PlanLearningEventItem[];
+  total: number;
+  nextCursor: string | null;
+}
+
+export interface WeeklyPlanGenerateRequest {
+  teacher_note?: string | null;
+  regenerate?: boolean;
+}
+
+export interface WeeklyPlanRecommendation {
+  id: string;
+  content: string;
+  status: "pending";
+}
+
+export interface WeeklyPlanGeneration {
+  status: "draft";
+  generation_id: string;
+  weeks: ExecutionPlanWeekItem[];
+  recommendations: WeeklyPlanRecommendation[];
+}
+
 export type ChatStreamEvent =
   | { event: "text_delta"; data: { delta: string } }
   | {

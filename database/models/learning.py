@@ -10,6 +10,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Integer,
     Text,
     UniqueConstraint,
     Uuid,
@@ -39,6 +40,12 @@ class LearningEventType(StrEnum):
 
 class LearningEvent(Base):
     __tablename__ = "learning_events"
+    __table_args__ = (
+        CheckConstraint(
+            "week_number IS NULL OR week_number >= 1",
+            name="ck_learning_events_week_number_positive",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid4
@@ -73,6 +80,19 @@ class LearningEvent(Base):
         index=True,
         nullable=True,
     )
+    plan_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("execution_plans.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    task_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("plan_tasks.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    week_number: Mapped[int | None] = mapped_column(Integer)
     event_type: Mapped[LearningEventType] = mapped_column(
         Enum(
             LearningEventType,
@@ -98,6 +118,19 @@ class LearningEvent(Base):
     knowledge_point: Mapped["KnowledgePoint | None"] = relationship()
     conversation: Mapped["Conversation | None"] = relationship()
     message: Mapped["Message | None"] = relationship()
+
+    @property
+    def result(self) -> str:
+        if self.event_type == LearningEventType.QUIZ_CORRECT:
+            return "correct"
+        if self.event_type == LearningEventType.QUIZ_WRONG:
+            return "wrong"
+        if self.event_type in {
+            LearningEventType.RESOLVED,
+            LearningEventType.TEACHER_ADJUSTMENT,
+        }:
+            return "completed"
+        return "unresolved"
 
 
 class StudentKnowledgeState(Base):

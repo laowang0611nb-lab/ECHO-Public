@@ -96,6 +96,9 @@ def test_existing_review_flag_survives_workflow_upgrade(tmp_path: Path) -> None:
         "review_answer_versions",
         "review_regeneration_runs",
         "review_history",
+        "execution_plans",
+        "plan_tasks",
+        "teaching_strategies",
     } <= tables
 
 
@@ -104,9 +107,9 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "c5d6e7f8a9b0 (head)" in current.stdout
+    assert "d6e7f8a9b0c1 (head)" in current.stdout
 
     _run_alembic(database_url, "downgrade", "d9e0f1a2b3c4")
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "c5d6e7f8a9b0 (head)" in current.stdout
+    assert "d6e7f8a9b0c1 (head)" in current.stdout

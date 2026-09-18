@@ -10,6 +10,15 @@ from database.models.learning import (
     MasterySnapshot,
     StudentKnowledgeState,
 )
+from database.models.planning import (
+    ExecutionPlan,
+    ExecutionPlanStatus,
+    PlanTargetScope,
+    PlanTask,
+    PlanTaskStatus,
+    plan_target_students,
+    plan_task_target_students,
+)
 from database.models.user import UserRole
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -138,6 +147,46 @@ async def _record_learning_event_once(
         ):
             raise LearningEventReferenceMismatchError
 
+    plan_id = payload.plan_id
+    task_id = payload.task_id
+    week_number = payload.week_number
+    if task_id is not None:
+        task = await session.get(PlanTask, task_id)
+        if task is None or task.status == PlanTaskStatus.CANCELLED:
+            raise LearningEventReferenceMismatchError
+        if plan_id is None:
+            plan_id = task.plan_id
+        elif task.plan_id != plan_id:
+            raise LearningEventReferenceMismatchError
+        if week_number is None:
+            week_number = task.week_number
+        task_target_ids = set(
+            await session.scalars(
+                select(plan_task_target_students.c.user_id).where(
+                    plan_task_target_students.c.task_id == task.id
+                )
+            )
+        )
+        if task_target_ids and payload.student_id not in task_target_ids:
+            raise LearningEventReferenceMismatchError
+
+    if plan_id is not None:
+        plan = await session.get(ExecutionPlan, plan_id)
+        if plan is None or plan.course_id != course_id:
+            raise LearningEventReferenceMismatchError
+        if plan.status == ExecutionPlanStatus.CANCELLED:
+            raise LearningEventReferenceMismatchError
+        if plan.target_scope != PlanTargetScope.WHOLE_CLASS and task_id is None:
+            target_ids = set(
+                await session.scalars(
+                    select(plan_target_students.c.user_id).where(
+                        plan_target_students.c.plan_id == plan.id
+                    )
+                )
+            )
+            if payload.student_id not in target_ids:
+                raise LearningEventReferenceMismatchError
+
     knowledge_point_id = payload.knowledge_point_id
     if knowledge_point_id is not None:
         knowledge_point = await session.scalar(
@@ -161,6 +210,9 @@ async def _record_learning_event_once(
         knowledge_point_id=knowledge_point_id,
         conversation_id=payload.conversation_id,
         message_id=payload.message_id,
+        plan_id=plan_id,
+        task_id=task_id,
+        week_number=week_number,
         event_type=payload.event_type,
         weight=payload.weight,
         evidence=payload.evidence,
