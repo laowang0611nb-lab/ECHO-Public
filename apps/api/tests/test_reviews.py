@@ -9,6 +9,7 @@ from database.models.review import (
     ReviewGenerationStatus,
     ReviewHistoryAction,
     ReviewReason,
+    ReviewSeverity,
     ReviewStatus,
 )
 from httpx import AsyncClient
@@ -436,6 +437,13 @@ async def test_regeneration_creates_version_pending_rereview_and_history(
     assert response.status_code == 200
     assert_completed_regeneration(response.json())
 
+    dashboard = await client.get(
+        f"/api/v1/courses/{course['id']}/dashboard",
+        headers=auth_headers(teacher),
+    )
+    assert dashboard.status_code == 200
+    assert dashboard.json()["pending_review_count"] == 1
+
     detail = await client.get(
         f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}",
         headers=auth_headers(teacher),
@@ -648,6 +656,11 @@ async def test_review_query_summary_context_and_permission(
         headers=auth_headers(teacher),
         params={"reason": ReviewReason.MISSING_COURSE_BASIS.value, "limit": 1},
     )
+    searched = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/query",
+        headers=auth_headers(teacher),
+        params={"q": "not covered", "limit": 1},
+    )
     summary = await client.get(
         f"/api/v1/courses/{course['id']}/review-flags/summary",
         headers=auth_headers(teacher),
@@ -664,11 +677,65 @@ async def test_review_query_summary_context_and_permission(
     assert query.status_code == 200
     assert set(query.json()) == {"items", "total", "nextCursor", "summary"}
     assert query.json()["total"] == 1
+    assert searched.status_code == 200
+    assert searched.json()["total"] == 1
+    assert searched.json()["items"][0]["question"] == "What is not covered by the course?"
     assert summary.status_code == 200
     assert summary.json()["pending"] == 1
     assert context.status_code == 200
     assert context.json()["messageId"] == flag["message_id"]
     assert denied.status_code == 403
+
+
+async def test_review_query_paginates_with_cursor(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "page-teacher@example.com", "teacher")
+    student = await login(client, "page-student@example.com", "student")
+    course, flag = await create_review_flag(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+    async with session_factory() as session:
+        session.add(
+            AIReviewFlag(
+                course_id=UUID(course["id"]),
+                conversation_id=UUID(flag["conversation_id"]),
+                message_id=UUID(flag["message_id"]),
+                student_id=UUID(flag["student_id"]),
+                reason=ReviewReason.OUTSIDE_MATERIAL_HEAVY,
+                severity=ReviewSeverity.HIGH,
+                status=ReviewStatus.OPEN,
+                details={},
+            )
+        )
+        await session.commit()
+
+    first_page = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/query",
+        headers=auth_headers(teacher),
+        params={"limit": 1, "sort": "oldest"},
+    )
+    assert first_page.status_code == 200
+    assert first_page.json()["total"] == 2
+    assert len(first_page.json()["items"]) == 1
+    assert first_page.json()["nextCursor"]
+
+    second_page = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/query",
+        headers=auth_headers(teacher),
+        params={
+            "limit": 1,
+            "sort": "oldest",
+            "cursor": first_page.json()["nextCursor"],
+        },
+    )
+    assert second_page.status_code == 200
+    assert len(second_page.json()["items"]) == 1
+    assert second_page.json()["nextCursor"] is None
 
 
 def test_review_regeneration_openapi_paths() -> None:

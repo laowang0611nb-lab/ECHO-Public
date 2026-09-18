@@ -203,13 +203,21 @@ export function useStudentDetail(studentId: string) {
   };
 }
 
-export function useTeacherConversationMessages(courseId: string | null, conversationId: string) {
+export function useTeacherConversationMessages(
+  courseId: string | null,
+  conversationId: string | null,
+) {
   const { user } = useTeacherSession();
   const userId = user?.id;
   return useQuery({
-    queryKey: studentQueryKeys.conversationMessages(userId ?? "anonymous", courseId ?? "none", conversationId),
-    queryFn: () => apiClient.listTeacherConversationMessages(userId!, courseId!, conversationId),
-    enabled: Boolean(userId && courseId),
+    queryKey: studentQueryKeys.conversationMessages(
+      userId ?? "anonymous",
+      courseId ?? "none",
+      conversationId ?? "none",
+    ),
+    queryFn: () =>
+      apiClient.listTeacherConversationMessages(userId!, courseId!, conversationId!),
+    enabled: Boolean(userId && courseId && conversationId),
     staleTime: 30_000,
   });
 }

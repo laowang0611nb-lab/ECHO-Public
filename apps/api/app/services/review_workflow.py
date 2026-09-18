@@ -19,9 +19,9 @@ from database.models.review import (
     ReviewVersionSource,
 )
 from database.models.user import User, UserRole
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.schemas.learning import LearningEventResponse
 from app.schemas.review import (
@@ -46,7 +46,6 @@ from app.services.review import (
 from app.services.search import search_course_chunks
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
-MAX_QUERY_FLAGS = 500
 
 
 class ReviewRegenerationConflictError(Exception):
@@ -156,6 +155,9 @@ async def ensure_original_version(
     session: AsyncSession,
     flag: AIReviewFlag,
 ) -> ReviewAnswerVersion:
+    await session.execute(
+        select(AIReviewFlag.id).where(AIReviewFlag.id == flag.id).with_for_update()
+    )
     existing = await session.scalar(
         select(ReviewAnswerVersion).where(
             ReviewAnswerVersion.review_flag_id == flag.id,
@@ -270,27 +272,137 @@ def _history_response(
     )
 
 
-async def build_review_flag_detail(
+async def _ensure_original_versions_batch(
     session: AsyncSession,
-    flag: AIReviewFlag,
-    *,
-    question: str | None = None,
-) -> ReviewFlagResponse:
-    current = await _current_version(session, flag)
+    flags: list[AIReviewFlag],
+) -> dict[UUID, list[ReviewAnswerVersion]]:
+    if not flags:
+        return {}
+
+    flag_ids = [flag.id for flag in flags]
+    await session.execute(
+        select(AIReviewFlag.id)
+        .where(AIReviewFlag.id.in_(flag_ids))
+        .order_by(AIReviewFlag.id)
+        .with_for_update()
+    )
     versions = list(
         await session.scalars(
             select(ReviewAnswerVersion)
-            .where(ReviewAnswerVersion.review_flag_id == flag.id)
-            .order_by(ReviewAnswerVersion.version)
+            .where(ReviewAnswerVersion.review_flag_id.in_(flag_ids))
+            .order_by(ReviewAnswerVersion.review_flag_id, ReviewAnswerVersion.version)
         )
     )
+    versions_by_flag: dict[UUID, list[ReviewAnswerVersion]] = {}
+    for version in versions:
+        versions_by_flag.setdefault(version.review_flag_id, []).append(version)
+
+    missing_original = [
+        flag
+        for flag in flags
+        if not any(version.version == 1 for version in versions_by_flag.get(flag.id, []))
+    ]
+    if missing_original:
+        message_ids = [flag.message_id for flag in missing_original]
+        messages = {
+            message.id: message
+            for message in await session.scalars(
+                select(Message)
+                .options(selectinload(Message.citations))
+                .where(Message.id.in_(message_ids))
+            )
+        }
+        if len(messages) != len(set(message_ids)):
+            raise ReviewFlagNotFoundError
+
+        knowledge_point_rows = await session.execute(
+            select(LearningEvent.message_id, LearningEvent.knowledge_point_id).where(
+                LearningEvent.message_id.in_(message_ids),
+                LearningEvent.knowledge_point_id.is_not(None),
+            )
+        )
+        knowledge_points_by_message: dict[UUID, set[UUID]] = {}
+        for message_id, knowledge_point_id in knowledge_point_rows.all():
+            if knowledge_point_id is not None:
+                knowledge_points_by_message.setdefault(message_id, set()).add(knowledge_point_id)
+
+        for flag in missing_original:
+            message = messages[flag.message_id]
+            version = ReviewAnswerVersion(
+                review_flag_id=flag.id,
+                version=1,
+                answer=message.content,
+                knowledge_point_ids=[
+                    str(value)
+                    for value in sorted(
+                        knowledge_points_by_message.get(flag.message_id, set()),
+                        key=str,
+                    )
+                ],
+                citations=_citation_payload(message.citations),
+                source=ReviewVersionSource.ORIGINAL,
+                created_at=message.created_at,
+            )
+            session.add(version)
+            versions_by_flag.setdefault(flag.id, []).append(version)
+            flag.current_version = max(flag.current_version or 1, 1)
+        await session.flush()
+
+    return {
+        flag.id: sorted(versions_by_flag.get(flag.id, []), key=lambda item: item.version)
+        for flag in flags
+    }
+
+
+async def build_review_flag_details(
+    session: AsyncSession,
+    flags: list[AIReviewFlag],
+) -> list[ReviewFlagResponse]:
+    if not flags:
+        return []
+
+    message_ids = {flag.message_id for flag in flags}
+    messages = {
+        message.id: message
+        for message in await session.scalars(
+            select(Message)
+            .options(selectinload(Message.citations))
+            .where(Message.id.in_(message_ids))
+        )
+    }
+    if len(messages) != len(message_ids):
+        raise ReviewFlagNotFoundError
+
+    student_ids = {flag.student_id for flag in flags}
+    students = {
+        student.id: student
+        for student in await session.scalars(select(User).where(User.id.in_(student_ids)))
+    }
+
+    conversation_ids = {flag.conversation_id for flag in flags}
+    user_messages: dict[UUID, list[Message]] = {}
+    for message in await session.scalars(
+        select(Message)
+        .where(
+            Message.conversation_id.in_(conversation_ids),
+            Message.role == MessageRole.USER,
+        )
+        .order_by(Message.created_at, Message.id)
+    ):
+        user_messages.setdefault(message.conversation_id, []).append(message)
+
+    versions_by_flag = await _ensure_original_versions_batch(session, flags)
     history = list(
         await session.scalars(
             select(ReviewHistoryEntry)
-            .where(ReviewHistoryEntry.review_flag_id == flag.id)
-            .order_by(ReviewHistoryEntry.sequence)
+            .where(ReviewHistoryEntry.review_flag_id.in_([flag.id for flag in flags]))
+            .order_by(ReviewHistoryEntry.review_flag_id, ReviewHistoryEntry.sequence)
         )
     )
+    history_by_flag: dict[UUID, list[ReviewHistoryEntry]] = {}
+    for entry in history:
+        history_by_flag.setdefault(entry.review_flag_id, []).append(entry)
+
     teacher_ids = {entry.teacher_id for entry in history if entry.teacher_id}
     teachers = (
         {
@@ -300,37 +412,69 @@ async def build_review_flag_detail(
         if teacher_ids
         else {}
     )
-    message = await session.get(Message, flag.message_id)
-    student = await session.get(User, flag.student_id)
-    if message is None:
-        raise ReviewFlagNotFoundError
-    resolved_question = question if question is not None else await _question(session, flag)
-    return ReviewFlagResponse(
-        id=flag.id,
-        course_id=flag.course_id,
-        conversation_id=flag.conversation_id,
-        message_id=flag.message_id,
-        student_id=flag.student_id,
-        student_display_name=student.display_name if student else "Unknown student",
-        reason=flag.reason,
-        severity=flag.severity,
-        status=flag.status,
-        details=flag.details,
-        question=resolved_question,
-        answer=message.content,
-        knowledgePointIds=current.knowledge_point_ids,
-        citations=current.citations,
-        current_version=flag.current_version,
-        generation_status=flag.generation_status,
-        teacher_note=flag.teacher_note,
-        corrected_answer=flag.corrected_answer,
-        reviewed_by=flag.reviewed_by,
-        reviewed_at=flag.reviewed_at,
-        created_at=flag.created_at,
-        updated_at=flag.updated_at,
-        versions=[_version_response(version) for version in versions],
-        review_history=[_history_response(entry, teachers) for entry in history],
-    )
+
+    responses: list[ReviewFlagResponse] = []
+    for flag in flags:
+        message = messages[flag.message_id]
+        question = next(
+            (
+                candidate
+                for candidate in reversed(user_messages.get(flag.conversation_id, []))
+                if candidate.created_at <= message.created_at
+            ),
+            None,
+        )
+        versions = versions_by_flag.get(flag.id, [])
+        current = next(
+            (version for version in versions if version.version == flag.current_version),
+            None,
+        )
+        if current is None:
+            raise ReviewFlagNotFoundError
+        student = students.get(flag.student_id)
+        responses.append(
+            ReviewFlagResponse(
+                id=flag.id,
+                course_id=flag.course_id,
+                conversation_id=flag.conversation_id,
+                message_id=flag.message_id,
+                student_id=flag.student_id,
+                student_display_name=student.display_name if student else "Unknown student",
+                reason=flag.reason,
+                severity=flag.severity,
+                status=flag.status,
+                details=flag.details,
+                question=question.content if question else None,
+                answer=message.content,
+                knowledgePointIds=current.knowledge_point_ids,
+                citations=current.citations,
+                current_version=flag.current_version,
+                generation_status=flag.generation_status,
+                teacher_note=flag.teacher_note,
+                corrected_answer=flag.corrected_answer,
+                reviewed_by=flag.reviewed_by,
+                reviewed_at=flag.reviewed_at,
+                created_at=flag.created_at,
+                updated_at=flag.updated_at,
+                versions=[_version_response(version) for version in versions],
+                review_history=[
+                    _history_response(entry, teachers) for entry in history_by_flag.get(flag.id, [])
+                ],
+            )
+        )
+    return responses
+
+
+async def build_review_flag_detail(
+    session: AsyncSession,
+    flag: AIReviewFlag,
+    *,
+    question: str | None = None,
+) -> ReviewFlagResponse:
+    response = (await build_review_flag_details(session, [flag]))[0]
+    if question is not None:
+        response.question = question
+    return response
 
 
 async def get_review_flag_detail(
@@ -823,34 +967,56 @@ async def query_review_flags(
                 )
             )
         )
-    flags = list(
-        await session.scalars(
-            statement.order_by(AIReviewFlag.created_at.desc(), AIReviewFlag.id.desc()).limit(
-                MAX_QUERY_FLAGS
+
+    if q and q.strip():
+        answer_message = aliased(Message)
+        question_message = aliased(Message)
+        question_text = (
+            select(question_message.content)
+            .where(
+                question_message.conversation_id == AIReviewFlag.conversation_id,
+                question_message.role == MessageRole.USER,
+                question_message.created_at <= answer_message.created_at,
             )
+            .order_by(question_message.created_at.desc(), question_message.id.desc())
+            .limit(1)
+            .correlate(AIReviewFlag, answer_message)
+            .scalar_subquery()
         )
+        pattern = f"%{q.strip()}%"
+        statement = statement.join(
+            answer_message, answer_message.id == AIReviewFlag.message_id
+        ).where(or_(answer_message.content.ilike(pattern), question_text.ilike(pattern)))
+
+    total = int(
+        await session.scalar(select(func.count()).select_from(statement.order_by(None).subquery()))
+        or 0
     )
-    details = [await build_review_flag_detail(session, flag) for flag in flags]
-    await session.commit()
-    if q:
-        needle = q.strip().casefold()
-        details = [
-            item
-            for item in details
-            if needle in (item.question or "").casefold() or needle in item.answer.casefold()
-        ]
     if sort == "oldest":
-        details.sort(key=lambda item: (item.created_at, item.id))
+        statement = statement.order_by(AIReviewFlag.created_at, AIReviewFlag.id)
     elif sort in {"priority", "severity"}:
-        weights = {"high": 0, "medium": 1, "low": 2}
-        details.sort(key=lambda item: (weights[item.severity], -item.created_at.timestamp()))
+        severity_order = case(
+            (AIReviewFlag.severity == ReviewSeverity.HIGH, 0),
+            (AIReviewFlag.severity == ReviewSeverity.MEDIUM, 1),
+            else_=2,
+        )
+        statement = statement.order_by(
+            severity_order,
+            AIReviewFlag.created_at.desc(),
+            AIReviewFlag.id.desc(),
+        )
+    else:
+        statement = statement.order_by(AIReviewFlag.created_at.desc(), AIReviewFlag.id.desc())
+
     offset = _decode_cursor(cursor)
-    page = details[offset : offset + limit]
-    next_cursor = _encode_cursor(offset + limit) if offset + limit < len(details) else None
+    flags = list(await session.scalars(statement.offset(offset).limit(limit)))
+    details = await build_review_flag_details(session, flags)
+    await session.commit()
+    next_cursor = _encode_cursor(offset + limit) if offset + limit < total else None
     summary = await get_review_summary(session, course_id, requester_id)
     return ReviewFlagQueryResponse(
-        items=page,
-        total=len(details),
+        items=details,
+        total=total,
         nextCursor=next_cursor,
         summary=summary,
     )
@@ -862,25 +1028,61 @@ async def get_review_summary(
     requester_id: UUID,
 ) -> ReviewFlagSummaryResponse:
     await _ensure_teacher(session, course_id, requester_id)
-    base = select(AIReviewFlag).where(AIReviewFlag.course_id == course_id)
-    rows = list(await session.scalars(base))
-    reason_counts = {reason: 0 for reason in ReviewReason}
-    for row in rows:
-        reason_counts[row.reason] += 1
-    pending = sum(
-        1 for row in rows if row.status in {ReviewStatus.OPEN, ReviewStatus.PENDING_REREVIEW}
+    base_filters = (
+        AIReviewFlag.course_id == course_id,
+        CourseMember.role == UserRole.STUDENT,
     )
-    high_risk = sum(
-        1
-        for row in rows
-        if row.severity.value == "high"
-        and row.status in {ReviewStatus.OPEN, ReviewStatus.PENDING_REREVIEW}
+    reason_rows = await session.execute(
+        select(AIReviewFlag.reason, func.count())
+        .join(
+            CourseMember,
+            (CourseMember.course_id == AIReviewFlag.course_id)
+            & (CourseMember.user_id == AIReviewFlag.student_id),
+        )
+        .where(*base_filters)
+        .group_by(AIReviewFlag.reason)
+    )
+    reason_counts = {reason: 0 for reason in ReviewReason}
+    for reason, count in reason_rows.all():
+        reason_counts[reason] = int(count)
+
+    status_rows = await session.execute(
+        select(AIReviewFlag.status, func.count())
+        .join(
+            CourseMember,
+            (CourseMember.course_id == AIReviewFlag.course_id)
+            & (CourseMember.user_id == AIReviewFlag.student_id),
+        )
+        .where(*base_filters)
+        .group_by(AIReviewFlag.status)
+    )
+    status_counts = {review_status: int(count) for review_status, count in status_rows.all()}
+    pending = status_counts.get(ReviewStatus.OPEN, 0) + status_counts.get(
+        ReviewStatus.PENDING_REREVIEW,
+        0,
+    )
+    high_risk = int(
+        await session.scalar(
+            select(func.count())
+            .select_from(AIReviewFlag)
+            .join(
+                CourseMember,
+                (CourseMember.course_id == AIReviewFlag.course_id)
+                & (CourseMember.user_id == AIReviewFlag.student_id),
+            )
+            .where(
+                *base_filters,
+                AIReviewFlag.severity == ReviewSeverity.HIGH,
+                AIReviewFlag.status.in_([ReviewStatus.OPEN, ReviewStatus.PENDING_REREVIEW]),
+            )
+        )
+        or 0
     )
     return ReviewFlagSummaryResponse(
         pending=pending,
         high_risk=high_risk,
         reasons=reason_counts,
-        generating=sum(row.status == ReviewStatus.GENERATING for row in rows),
-        pending_rereview=sum(row.status == ReviewStatus.PENDING_REREVIEW for row in rows),
-        regeneration_failed=sum(row.status == ReviewStatus.REGENERATION_FAILED for row in rows),
+        generating=status_counts.get(ReviewStatus.GENERATING, 0),
+        pending_rereview=status_counts.get(ReviewStatus.PENDING_REREVIEW, 0),
+        regeneration_failed=status_counts.get(ReviewStatus.REGENERATION_FAILED, 0),
     )

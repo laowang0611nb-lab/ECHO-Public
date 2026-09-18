@@ -139,7 +139,7 @@ class AIReviewFlag(Base):
     status: Mapped[ReviewStatus] = mapped_column(
         Enum(
             ReviewStatus,
-            name="review_status",
+            name="ck_ai_review_flags_review_status",
             native_enum=False,
             length=32,
             create_constraint=True,

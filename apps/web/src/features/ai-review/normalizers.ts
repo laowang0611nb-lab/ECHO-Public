@@ -5,7 +5,13 @@ export function firstQueryValue(value: string | string[] | undefined) {
 }
 
 export function normalizeReviewStatus(value: string | undefined): ReviewStatusFilter {
-  return value === "open" || value === "confirmed_correct" || value === "marked_incorrect" || value === "dismissed"
+  return value === "open" ||
+    value === "confirmed_correct" ||
+    value === "marked_incorrect" ||
+    value === "dismissed" ||
+    value === "generating" ||
+    value === "pending_rereview" ||
+    value === "regeneration_failed"
     ? value
     : "all";
 }
@@ -25,7 +31,7 @@ export function normalizeReviewSeverity(value: string | undefined): ReviewSeveri
 }
 
 export function normalizeReviewSort(value: string | undefined): ReviewSort {
-  return value === "newest" || value === "severity" ? value : "priority";
+  return value === "newest" || value === "oldest" || value === "severity" ? value : "priority";
 }
 
 export function buildReviewFilters(searchParams: {

@@ -343,6 +343,9 @@ export function StudentConversationPage({
 
 function reviewStatusLabel(status: ReviewStatus) {
   if (status === "open") return "待审核";
+  if (status === "generating") return "重新生成中";
+  if (status === "pending_rereview") return "待再次审核";
+  if (status === "regeneration_failed") return "重新生成失败";
   if (status === "confirmed_correct") return "确认正确";
   if (status === "marked_incorrect") return "已判错";
   return "已忽略";
@@ -350,6 +353,9 @@ function reviewStatusLabel(status: ReviewStatus) {
 
 function reviewStatusTone(status: ReviewStatus) {
   if (status === "open") return "warning" as const;
+  if (status === "generating") return "info" as const;
+  if (status === "pending_rereview") return "warning" as const;
+  if (status === "regeneration_failed") return "danger" as const;
   if (status === "marked_incorrect") return "danger" as const;
   if (status === "confirmed_correct") return "success" as const;
   return "neutral" as const;

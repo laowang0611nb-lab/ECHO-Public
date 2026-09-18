@@ -1,9 +1,10 @@
 "use client";
 
+import type { ReviewFlagSummary } from "@echo/shared-types";
 import { AlertTriangle, ArrowRight, Clock, FileWarning, Inbox, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -18,16 +19,13 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import type { ReviewQueueFilters } from "@/features/ai-review/types";
 import {
   buildReviewWorkspaceHref,
-  filterReviewFlags,
   reviewReasonLabels,
   reviewSeverityLabel,
   reviewSeverityTone,
   reviewStatusLabel,
   reviewStatusTone,
-  sortReviewFlags,
-  summarizeReviewFlags,
 } from "@/features/ai-review/view-model";
-import { useReviewQueue } from "@/features/ai-review/queries";
+import { useReviewQuery, useReviewSummary } from "@/features/ai-review/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 
 export function ReviewOverviewPage({
@@ -43,13 +41,32 @@ export function ReviewOverviewPage({
   const courseId = initialCourseId && courses.some((course) => course.id === initialCourseId)
     ? initialCourseId
     : selectedCourseId;
-  const queueQuery = useReviewQueue(courseId);
-  const allFlags = useMemo(() => queueQuery.data ?? [], [queueQuery.data]);
-  const summary = summarizeReviewFlags(allFlags);
-  const visibleFlags = useMemo(
-    () => sortReviewFlags(filterReviewFlags(allFlags, filters), filters.sort),
-    [allFlags, filters],
-  );
+  const deferredSearch = useDeferredValue(filters.search);
+  const queueQuery = useReviewQuery(courseId, {
+    status: filters.status === "all" ? undefined : filters.status,
+    severity: filters.severity === "all" ? undefined : filters.severity,
+    reason: filters.reason === "all" ? undefined : filters.reason,
+    q: deferredSearch.trim() || undefined,
+    sort: filters.sort,
+    limit: 100,
+  });
+  const summaryQuery = useReviewSummary(courseId);
+  const visibleFlags = queueQuery.data?.items ?? [];
+  const summary = summaryQuery.data ?? queueQuery.data?.summary ?? null;
+  const summaryData: ReviewFlagSummary = summary ?? {
+    pending: 0,
+    high_risk: 0,
+    reasons: {
+      missing_course_basis: 0,
+      outside_material_heavy: 0,
+      repeated_follow_up: 0,
+      student_not_resolved: 0,
+      teacher_rule_violation: 0,
+    },
+    generating: 0,
+    pending_rereview: 0,
+    regeneration_failed: 0,
+  };
 
   function updateQuery(patch: Partial<ReviewQueueFilters> & { courseId?: string }) {
     const next = { ...filters, ...patch };
@@ -68,8 +85,10 @@ export function ReviewOverviewPage({
   if (!courseId) {
     return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，AI 回答审核会基于当前课程真实数据展示。" title="尚未选择课程" />;
   }
-  if (queueQuery.isLoading) return <LoadingState label="正在加载 AI 回答审核队列..." />;
-  if (queueQuery.isError) return <ErrorState description="审核队列加载失败，请确认后端服务后重试。" onRetry={() => void queueQuery.refetch()} />;
+  if (queueQuery.isLoading || (summaryQuery.isLoading && !queueQuery.data?.summary)) return <LoadingState label="正在加载 AI 回答审核队列..." />;
+  if (queueQuery.isError || (summaryQuery.isError && !queueQuery.data?.summary)) {
+    return <ErrorState description="审核队列加载失败，请确认后端服务后重试。" onRetry={() => { void queueQuery.refetch(); void summaryQuery.refetch(); }} />;
+  }
 
   return (
     <div className="space-y-5">
@@ -94,10 +113,10 @@ export function ReviewOverviewPage({
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Inbox} label="待审核" supporting="状态为待审核的真实记录" value={summary.pending} />
-        <StatCard icon={AlertTriangle} label="高风险回答" supporting="后端 severity=high" tone="warning" value={summary.highRisk} />
-        <StatCard icon={FileWarning} label="缺少课程依据" supporting="未检索到教材来源" value={summary.missingBasis} />
-        <StatCard icon={ShieldCheck} label="学生未解决" supporting="学生主动标记或连续追问" value={summary.unresolved} />
+        <StatCard icon={Inbox} label="待审核" supporting="状态为待审核的真实记录" value={summaryData.pending} />
+        <StatCard icon={AlertTriangle} label="高风险回答" supporting="后端 severity=high" tone="warning" value={summaryData.high_risk} />
+        <StatCard icon={FileWarning} label="缺少课程依据" supporting="未检索到教材来源" value={summaryData.reasons.missing_course_basis} />
+        <StatCard icon={ShieldCheck} label="学生未解决" supporting="学生主动标记或连续追问" value={summaryData.reasons.student_not_resolved} />
       </section>
 
       <Card className="gap-4 py-5">
@@ -107,19 +126,19 @@ export function ReviewOverviewPage({
         </CardHeader>
         <CardContent className="grid gap-3 px-5 md:grid-cols-3">
           <RiskSummaryCard
-            detail={`${summary.pending} 条记录等待教师决定`}
+            detail={`${summaryData.pending} 条记录等待教师决定`}
             href="/ai-review?status=open"
             title="待处理队列"
           />
           <RiskSummaryCard
-            detail={`${summary.highRisk} 条记录由后端标记为高风险`}
+            detail={`${summaryData.high_risk} 条记录由后端标记为高风险`}
             href="/ai-review?severity=high"
             title="高优先级风险"
           />
           <RiskSummaryCard
-            detail={`${summary.reviewed} 条记录已有教师审核结果`}
-            href="/ai-review?status=confirmed_correct"
-            title="已审核记录"
+            detail={`${summaryData.generating + summaryData.pending_rereview + summaryData.regeneration_failed} 条记录处于重新生成链路`}
+            href="/ai-review?status=pending_rereview"
+            title="重新生成流程"
           />
         </CardContent>
       </Card>
@@ -139,6 +158,9 @@ export function ReviewOverviewPage({
               <ReviewFilterSelect
                 items={[
                   { value: "all", label: "全部状态" },
+                  { value: "generating", label: "重新生成中" },
+                  { value: "pending_rereview", label: "待再次审核" },
+                  { value: "regeneration_failed", label: "重新生成失败" },
                   { value: "open", label: "待审核" },
                   { value: "confirmed_correct", label: "确认正确" },
                   { value: "marked_incorrect", label: "已标记错误" },
@@ -169,6 +191,7 @@ export function ReviewOverviewPage({
                 items={[
                   { value: "priority", label: "优先级排序" },
                   { value: "newest", label: "最新优先" },
+                  { value: "oldest", label: "最早优先" },
                   { value: "severity", label: "风险级别" },
                 ]}
                 onValueChange={(value) => updateQuery({ sort: value as ReviewQueueFilters["sort"] })}
@@ -176,11 +199,11 @@ export function ReviewOverviewPage({
               />
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>显示 {visibleFlags.length} / {summary.total} 条</span>
+              <span>显示 {visibleFlags.length} / {queueQuery.data?.total ?? 0} 条</span>
               <span>·</span>
-              <span>待审核 {summary.pending}</span>
+              <span>待审核 {summaryData.pending}</span>
               <span>·</span>
-              <span>高风险 {summary.highRisk}</span>
+              <span>高风险 {summaryData.high_risk}</span>
             </div>
           </div>
         </CardHeader>

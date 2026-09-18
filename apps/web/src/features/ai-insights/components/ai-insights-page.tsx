@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReviewReason } from "@echo/shared-types";
+import type { ReviewFlagSummary, ReviewReason } from "@echo/shared-types";
 import { AlertTriangle, ArrowRight, BookOpen, BrainCircuit, FileWarning, Layers3, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,7 +16,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useReviewQueue } from "@/features/ai-review/queries";
+import { useReviewSummary } from "@/features/ai-review/queries";
 import { reviewReasonLabels } from "@/features/ai-review/view-model";
 import { useTeacherDashboardOverview } from "@/features/dashboard/queries";
 import { useKnowledgeBaseData } from "@/features/knowledge/queries";
@@ -36,17 +36,16 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
   const dashboard = useTeacherDashboardOverview(user?.id, courseId);
   const students = useStudentAnalytics(courseId);
   const knowledge = useKnowledgeBaseData(courseId);
-  const reviews = useReviewQueue(courseId);
+  const reviewSummary = useReviewSummary(courseId);
 
   const overview = dashboard.data;
-  const reviewFlags = useMemo(() => reviews.data ?? [], [reviews.data]);
   const resourceSummary = summarizeKnowledgeBase(knowledge.resources);
   const derived = useMemo(() => buildInsightData({
     students: students.items,
-    reviewFlags,
+    reviewSummary: reviewSummary.data ?? null,
     learningDifficulties: overview?.learning_difficulties ?? [],
     chapterMastery: overview?.chapter_mastery ?? [],
-  }), [overview?.chapter_mastery, overview?.learning_difficulties, reviewFlags, students.items]);
+  }), [overview?.chapter_mastery, overview?.learning_difficulties, reviewSummary.data, students.items]);
 
   function handleCourseChange(value: string) {
     setSelectedCourseId(value);
@@ -56,18 +55,18 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
   if (!courseId) {
     return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，AI 教学洞察会围绕当前课程真实数据生成。" title="尚未选择课程" />;
   }
-  if (dashboard.isLoading || students.isLoading || knowledge.isLoading || reviews.isLoading) {
+  if (dashboard.isLoading || students.isLoading || knowledge.isLoading || reviewSummary.isLoading) {
     return <LoadingState label="正在汇总课程教学洞察..." />;
   }
-  if (dashboard.isError || students.isError || knowledge.isError || reviews.isError) {
-    return <ErrorState description="教学洞察数据加载失败，请确认后端服务后重试。" onRetry={() => { void dashboard.refetch(); students.refetch(); knowledge.refetch(); void reviews.refetch(); }} />;
+  if (dashboard.isError || students.isError || knowledge.isError || reviewSummary.isError) {
+    return <ErrorState description="教学洞察数据加载失败，请确认后端服务后重试。" onRetry={() => { void dashboard.refetch(); students.refetch(); knowledge.refetch(); void reviewSummary.refetch(); }} />;
   }
   if (!overview) return <EmptyState description="当前课程还没有可用于生成洞察的数据。" title="暂无教学洞察" />;
 
   const topDifficulty = derived.difficulties[0] ?? null;
   const inactiveStudents = students.items.filter((item) => !item.activeRecently);
-  const pendingReviews = reviewFlags.filter((flag) => flag.status === "open");
-  const highRiskReviews = pendingReviews.filter((flag) => flag.severity === "high");
+  const pendingReviews = reviewSummary.data?.pending ?? 0;
+  const highRiskReviews = reviewSummary.data?.high_risk ?? 0;
 
   return (
     <div className="space-y-5">
@@ -94,7 +93,7 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
         <StatCard icon={Users} label="活跃学生" supporting={`共 ${overview.stats.student_count} 名学生`} value={overview.stats.active_student_count} />
         <StatCard icon={BrainCircuit} label="平均掌握度" suffix="%" supporting="有证据知识点的平均值" value={overview.stats.average_mastery} />
         <StatCard icon={AlertTriangle} label="待关注知识点" supporting="后端风险阈值统计" tone="warning" value={overview.stats.attention_knowledge_point_count} />
-        <StatCard icon={FileWarning} label="待审核回答" supporting={`其中高风险 ${highRiskReviews.length} 条`} tone="warning" value={overview.stats.pending_review_count} />
+        <StatCard icon={FileWarning} label="待审核回答" supporting={`其中高风险 ${highRiskReviews} 条`} tone="warning" value={pendingReviews} />
       </section>
 
       <Card className="gap-4 border-blue-100 bg-blue-50/35 py-5">
@@ -111,11 +110,11 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
               title={`${topDifficulty.name} 是当前主要薄弱知识点`}
             />
           ) : null}
-          {pendingReviews.length ? (
+          {pendingReviews ? (
             <InsightCard
-              actionHref={`/ai-review?courseId=${courseId}&status=open&severity=high`}
+              actionHref={`/ai-review?courseId=${courseId}&status=open${highRiskReviews ? "&severity=high" : ""}`}
               actionLabel="进入 AI 回答审核"
-              evidence={`${pendingReviews.length} 条待审核，${highRiskReviews.length} 条高风险回答`}
+              evidence={`${pendingReviews} 条待审核，${highRiskReviews} 条高风险回答`}
               title="当前存在需要教师判断的 AI 回答"
             />
           ) : null}
@@ -239,12 +238,12 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
 
 function buildInsightData({
   students,
-  reviewFlags,
+  reviewSummary,
   learningDifficulties,
   chapterMastery,
 }: {
   students: ReturnType<typeof useStudentAnalytics>["items"];
-  reviewFlags: ReturnType<typeof useReviewQueue>["data"];
+  reviewSummary: ReviewFlagSummary | null;
   learningDifficulties: NonNullable<ReturnType<typeof useTeacherDashboardOverview>["data"]>["learning_difficulties"];
   chapterMastery: NonNullable<ReturnType<typeof useTeacherDashboardOverview>["data"]>["chapter_mastery"];
 }) {
@@ -269,8 +268,8 @@ function buildInsightData({
     }
   }
   const reviewReasons = new Map<ReviewReason, number>();
-  for (const flag of reviewFlags ?? []) {
-    reviewReasons.set(flag.reason, (reviewReasons.get(flag.reason) ?? 0) + 1);
+  for (const [reason, count] of Object.entries(reviewSummary?.reasons ?? {})) {
+    reviewReasons.set(reason as ReviewReason, count);
   }
   return {
     difficulties: [...difficultyMap.values()].sort((left, right) => left.average_score - right.average_score),

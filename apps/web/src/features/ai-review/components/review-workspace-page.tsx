@@ -1,10 +1,13 @@
 "use client";
 
-import type { ReviewDecisionRequest, ReviewFlag } from "@echo/shared-types";
+import type {
+  ReviewDecisionRequest,
+  ReviewFlag,
+} from "@echo/shared-types";
 import { ArrowLeft, Check, ExternalLink, FileText, RefreshCw, Save, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -13,23 +16,27 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useReviewDecision, useReviewFlag, useReviewQueue } from "@/features/ai-review/queries";
+import {
+  useReviewContext,
+  useReviewDecision,
+  useReviewFlag,
+  useReviewQuery,
+  useReviewRegeneration,
+  useReviewRegenerationStatus,
+} from "@/features/ai-review/queries";
 import type { ReviewQueueFilters } from "@/features/ai-review/types";
 import {
   buildReviewWorkspaceHref,
-  extractFlagEvidence,
-  filterReviewFlags,
   reviewReasonLabels,
   reviewSeverityLabel,
   reviewSeverityTone,
   reviewStatusLabel,
   reviewStatusTone,
-  sortReviewFlags,
 } from "@/features/ai-review/view-model";
 import { buildSourceHref } from "@/features/knowledge/view-model";
-import { useTeacherConversationMessages } from "@/features/students/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 
 export function ReviewWorkspacePage({
@@ -47,41 +54,48 @@ export function ReviewWorkspacePage({
   const courseId = initialCourseId && courses.some((course) => course.id === initialCourseId)
     ? initialCourseId
     : selectedCourseId;
-  const queueQuery = useReviewQueue(courseId);
-  const allFlags = useMemo(() => queueQuery.data ?? [], [queueQuery.data]);
-  const visibleFlags = useMemo(
-    () => sortReviewFlags(filterReviewFlags(allFlags, filters), filters.sort),
-    [allFlags, filters],
-  );
-  const requestedFlag = reviewId ? allFlags.find((flag) => flag.id === reviewId) ?? null : null;
-  const current = reviewId ? requestedFlag : visibleFlags[0] ?? null;
-  const flagQuery = useReviewFlag(courseId, current?.id ?? null);
-  const flag = flagQuery.data ?? current;
-  const messagesQuery = useTeacherConversationMessages(courseId, flag?.conversation_id ?? "none");
-
-  const message = messagesQuery.data?.find((item) => item.id === flag?.message_id) ?? null;
-  const evidence = flag ? extractFlagEvidence(flag) : { knowledgePointIds: [], citations: [] };
-  const knowledgePointIds = new Set([...evidence.knowledgePointIds, ...(message?.knowledgePointIds ?? [])]);
+  const deferredSearch = useDeferredValue(filters.search);
+  const queueQuery = useReviewQuery(courseId, {
+    status: filters.status === "all" ? undefined : filters.status,
+    severity: filters.severity === "all" ? undefined : filters.severity,
+    reason: filters.reason === "all" ? undefined : filters.reason,
+    q: deferredSearch.trim() || undefined,
+    sort: filters.sort,
+    limit: 100,
+  });
+  const visibleFlags = useMemo(() => queueQuery.data?.items ?? [], [queueQuery.data?.items]);
+  const requestedId = reviewId ?? visibleFlags[0]?.id ?? null;
+  const flagQuery = useReviewFlag(courseId, requestedId);
+  const flag = flagQuery.data ?? null;
+  const contextQuery = useReviewContext(courseId, flag?.id ?? null);
+  const knowledgePointIds = new Set(contextQuery.data?.knowledgePointIds ?? flag?.knowledgePointIds ?? []);
   const citations = Array.from(
-    new Map(
-      [
-        ...evidence.citations,
-        ...(message?.citations ?? []).flatMap((citation) =>
-          citation.document_id
-            ? [{ documentId: citation.document_id, page: citation.page_start, chunkId: citation.chunk_id ?? undefined }]
-            : [],
-        ),
-      ]
-        .map((citation) => [`${citation.documentId}:${citation.page}:${citation.chunkId ?? ""}`, citation]),
-    ).values(),
+    new Map((contextQuery.data?.citations ?? flag?.citations ?? []).map((citation) => [
+      `${citation.document_id}:${citation.page_start}:${citation.chunk_id ?? ""}`,
+      citation,
+    ])).values(),
   );
+  const currentVersion = contextQuery.data?.current_version
+    ?? flag?.versions.find((version) => version.version === flag.current_version)
+    ?? null;
+
+  useEffect(() => {
+    if (!courseId || !visibleFlags.length) return;
+    const selectedId = reviewId ?? visibleFlags[0]?.id;
+    if (!selectedId) return;
+    if (selectedId === reviewId && visibleFlags.some((item) => item.id === selectedId)) return;
+    const nextId = visibleFlags.some((item) => item.id === selectedId)
+      ? selectedId
+      : visibleFlags[0]?.id;
+    if (nextId) {
+      router.replace(buildReviewWorkspaceHref(nextId, courseId, filters), { scroll: false });
+    }
+  }, [courseId, filters, reviewId, router, visibleFlags]);
 
   function updateFilters(patch: Partial<ReviewQueueFilters>) {
     const next = { ...filters, ...patch };
     setFilters(next);
-    const nextReview = current && filterReviewFlags(allFlags, next).some((item) => item.id === current.id)
-      ? current.id
-      : null;
+    const nextReview = flag?.id ?? null;
     const params = new URLSearchParams();
     if (courseId) params.set("courseId", courseId);
     if (nextReview) params.set("reviewId", nextReview);
@@ -112,9 +126,9 @@ export function ReviewWorkspacePage({
   if (!courseId) {
     return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，再进入 AI 回答审核工作台。" title="尚未选择课程" />;
   }
-  if (queueQuery.isLoading) return <LoadingState label="正在加载审核工作台..." />;
-  if (queueQuery.isError) return <ErrorState description="审核工作台加载失败，请确认后端服务后重试。" onRetry={() => void queueQuery.refetch()} />;
-  if (reviewId && !requestedFlag) {
+  if (queueQuery.isLoading || (requestedId && flagQuery.isLoading)) return <LoadingState label="正在加载审核工作台..." />;
+  if (queueQuery.isError || flagQuery.isError) return <ErrorState description="审核工作台加载失败，请确认后端服务后重试。" onRetry={() => { void queueQuery.refetch(); void flagQuery.refetch(); }} />;
+  if (reviewId && !flag) {
     return (
       <EmptyState
         action={<Link className={buttonVariants({ variant: "outline" })} href={`/ai-review?courseId=${courseId}`}>返回审核总览</Link>}
@@ -132,7 +146,6 @@ export function ReviewWorkspacePage({
       />
     );
   }
-  if (flagQuery.isError) return <ErrorState description="当前审核项不存在或无法读取。" onRetry={() => void flagQuery.refetch()} />;
 
   return (
     <div className="space-y-5">
@@ -176,13 +189,24 @@ export function ReviewWorkspacePage({
               <p className="mt-2 whitespace-pre-wrap text-sm leading-7">{flag.question || "当前 ReviewFlag 没有保存问题文本。"}</p>
             </section>
 
-            <section className="rounded-lg border-2 border-blue-100 bg-blue-50/35 px-4 py-4">
+            <section className="rounded-lg border-2 border-border bg-muted/30 px-4 py-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-xs font-semibold text-primary"><FileText className="size-3.5" />AI 原回答</p>
-                <span className="text-[11px] text-muted-foreground">当前版本：原始回答</span>
+                <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground"><FileText className="size-3.5" />AI 原回答</p>
+                <span className="text-[11px] text-muted-foreground">version 1</span>
               </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{flag.answer}</p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{flag.versions.find((version) => version.version === 1)?.answer ?? flag.answer}</p>
             </section>
+
+            {currentVersion && currentVersion.version > 1 ? (
+              <section className="rounded-lg border-2 border-blue-100 bg-blue-50/35 px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-xs font-semibold text-primary"><RefreshCw className="size-3.5" />当前生成版本</p>
+                  <span className="text-[11px] text-muted-foreground">version {currentVersion.version}</span>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{currentVersion.answer}</p>
+                {currentVersion.instruction ? <p className="mt-3 rounded-md bg-white/70 px-3 py-2 text-xs leading-5 text-muted-foreground">修改意见：{currentVersion.instruction}</p> : null}
+              </section>
+            ) : null}
 
             {flag.corrected_answer ? (
               <section className="rounded-lg border-2 border-emerald-100 bg-emerald-50/40 px-4 py-4">
@@ -210,26 +234,30 @@ export function ReviewWorkspacePage({
               {citations.length ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {citations.map((citation, index) => (
-                    <Link
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
-                      href={buildSourceHref(citation.documentId, {
-                        from: "review",
-                        courseId,
-                        knowledgePointId: Array.from(knowledgePointIds)[0],
-                        page: citation.page,
-                        chunkId: citation.chunkId,
-                        conversationId: flag.conversation_id,
-                        messageId: flag.message_id,
-                        reviewId: flag.id,
-                      })}
-                      key={`${citation.documentId}-${citation.page}-${index}`}
-                    >
-                      来源 {index + 1} · 第 {citation.page} 页
-                    </Link>
+                    citation.document_id ? (
+                      <Link
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                        href={buildSourceHref(citation.document_id, {
+                          from: "review",
+                          courseId,
+                          knowledgePointId: Array.from(knowledgePointIds)[0],
+                          page: citation.page_start,
+                          chunkId: citation.chunk_id ?? undefined,
+                          conversationId: flag.conversation_id,
+                          messageId: flag.message_id,
+                          reviewId: flag.id,
+                        })}
+                        key={`${citation.document_id}-${citation.page_start}-${index}`}
+                      >
+                        来源 {index + 1} · 第 {citation.page_start} 页
+                      </Link>
+                    ) : null
                   ))}
                 </div>
               ) : <p className="mt-2 text-sm text-muted-foreground">当前回答没有可追溯 Citation，不能生成 PDF 来源。</p>}
             </section>
+
+            <ReviewVersionsPanel currentVersion={flag.current_version} versions={flag.versions} />
           </CardContent>
         </Card>
 
@@ -241,12 +269,42 @@ export function ReviewWorkspacePage({
               <EvidenceLine label="严重级别" value={reviewSeverityLabel(flag.severity)} />
               <EvidenceLine label="当前状态" value={reviewStatusLabel(flag.status)} />
               <EvidenceLine label="关联消息" value={flag.message_id} mono />
-              <EvidenceLine label="完整对话" value={messagesQuery.isLoading ? "加载中" : messagesQuery.isError ? "加载失败" : `${messagesQuery.data?.length ?? 0} 条消息`} />
+              <EvidenceLine
+                label="近期学习证据"
+                value={
+                  contextQuery.isLoading
+                    ? "加载中"
+                    : contextQuery.isError
+                      ? "读取失败"
+                      : `${contextQuery.data?.recent_learning_events.length ?? 0} 条`
+                }
+              />
+              {contextQuery.isError ? (
+                <Button onClick={() => void contextQuery.refetch()} size="sm" type="button" variant="outline">
+                  重新读取上下文
+                </Button>
+              ) : null}
               <p className="rounded-lg border border-dashed border-border px-3 py-3 text-xs leading-5 text-muted-foreground">
                 系统检测与教材证据分开显示。前端不会用回答长度、消息数量或模型分数推断风险。
               </p>
             </CardContent>
           </Card>
+
+          <ReviewRegenerationPanel
+            courseId={courseId}
+            flag={flag}
+            key={`regenerate-${flag.id}`}
+            onChanged={() => { void flagQuery.refetch(); void queueQuery.refetch(); void contextQuery.refetch(); }}
+          />
+
+          {contextQuery.data?.teaching_policy_conflicts.length ? (
+            <Card className="gap-3 border-orange-200 bg-orange-50/40 py-5">
+              <CardHeader className="px-5"><CardTitle>教学规则冲突</CardTitle></CardHeader>
+              <CardContent className="space-y-2 px-5 text-sm">
+                {contextQuery.data.teaching_policy_conflicts.map((conflict) => <p className="rounded-lg border border-orange-100 bg-white px-3 py-2 leading-6 text-orange-900" key={conflict.code}>{conflict.detail}</p>)}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <ReviewDecisionPanel
             courseId={courseId}
@@ -254,6 +312,8 @@ export function ReviewWorkspacePage({
             key={flag.id}
             onCompleted={handleCompleted}
           />
+
+          <ReviewHistoryPanel history={contextQuery.data?.review_history ?? flag.review_history} />
         </aside>
       </div>
     </div>
@@ -286,6 +346,9 @@ function ReviewQueueList({
         <Select
           items={[
             { value: "all", label: "全部状态" },
+            { value: "generating", label: "重新生成中" },
+            { value: "pending_rereview", label: "待再次审核" },
+            { value: "regeneration_failed", label: "重新生成失败" },
             { value: "open", label: "待审核" },
             { value: "confirmed_correct", label: "确认正确" },
             { value: "marked_incorrect", label: "已标记错误" },
@@ -297,6 +360,9 @@ function ReviewQueueList({
           <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent><SelectGroup>
             <SelectItem value="all">全部状态</SelectItem>
+            <SelectItem value="generating">重新生成中</SelectItem>
+            <SelectItem value="pending_rereview">待再次审核</SelectItem>
+            <SelectItem value="regeneration_failed">重新生成失败</SelectItem>
             <SelectItem value="open">待审核</SelectItem>
             <SelectItem value="confirmed_correct">确认正确</SelectItem>
             <SelectItem value="marked_incorrect">已标记错误</SelectItem>
@@ -337,6 +403,7 @@ function ReviewDecisionPanel({
   const [note, setNote] = useState(flag.teacher_note ?? "");
   const [correctedAnswer, setCorrectedAnswer] = useState(flag.corrected_answer ?? "");
   const decisionMutation = useReviewDecision(courseId);
+  const isGenerating = flag.status === "generating";
 
   async function handleDecision(decision: ReviewDecisionRequest["decision"]) {
     const payload: ReviewDecisionRequest = {
@@ -348,28 +415,139 @@ function ReviewDecisionPanel({
     onCompleted(flag.id);
   }
 
+
   return (
     <Card className="gap-4 py-5">
       <CardHeader className="px-5"><CardTitle>教师审核决定</CardTitle><p className="text-xs text-muted-foreground">决定会写入真实审核接口并保留原回答。</p></CardHeader>
       <CardContent className="space-y-3 px-5">
+        {isGenerating ? <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">当前回答正在重新生成，完成后会进入待再次审核。</p> : null}
         <Textarea onChange={(event) => setNote(event.target.value)} placeholder="审核备注或修改意见..." value={note} />
         <Textarea onChange={(event) => setCorrectedAnswer(event.target.value)} placeholder="标记错误时填写修改稿（可选）..." value={correctedAnswer} />
         <div className="grid gap-2">
-          <Button disabled={decisionMutation.isPending} onClick={() => void handleDecision("confirm_correct")} type="button">
+          <Button disabled={decisionMutation.isPending || isGenerating} onClick={() => void handleDecision("confirm_correct")} type="button">
             <Check data-icon="inline-start" />确认回答正确
           </Button>
-          <Button disabled={decisionMutation.isPending} onClick={() => void handleDecision("mark_incorrect")} type="button" variant="destructive">
+          <Button disabled={decisionMutation.isPending || isGenerating} onClick={() => void handleDecision("mark_incorrect")} type="button" variant="destructive">
             <Save data-icon="inline-start" />标记错误并提交修改稿
           </Button>
-          <Button disabled={decisionMutation.isPending} onClick={() => void handleDecision("dismiss")} type="button" variant="outline">
+          <Button disabled={decisionMutation.isPending || isGenerating} onClick={() => void handleDecision("dismiss")} type="button" variant="outline">
             <X data-icon="inline-start" />忽略该风险
           </Button>
-          <Button disabled type="button" variant="outline"><RefreshCw data-icon="inline-start" />重新生成（后端未提供接口）</Button>
         </div>
         {decisionMutation.isError ? <p className="text-sm text-destructive">{decisionMutation.error instanceof Error ? decisionMutation.error.message : "审核提交失败。"}</p> : null}
-        <p className="rounded-lg border border-dashed border-border px-3 py-3 text-xs leading-5 text-muted-foreground">
-          当前后端没有重新生成接口和审核历史接口，因此不模拟生成过程，也不伪造审核历史。
-        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewVersionsPanel({
+  currentVersion,
+  versions,
+}: {
+  currentVersion: number;
+  versions: ReviewFlag["versions"];
+}) {
+  if (!versions.length) return null;
+  const labels = { original: "原始回答", regenerated: "AI 重新生成", teacher: "教师修改稿" } as const;
+  return (
+    <section className="border-t border-border pt-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-muted-foreground">回答版本</p>
+        <span className="text-[11px] text-muted-foreground">共 {versions.length} 个版本</span>
+      </div>
+      <div className="mt-3 space-y-2">
+        {versions.map((version) => (
+          <details className="rounded-lg border-2 border-border bg-muted/20 px-4 py-3" key={version.version}>
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                version {version.version}
+                {version.version === currentVersion ? <StatusBadge tone="info">当前版本</StatusBadge> : null}
+              </span>
+              <span className="text-xs text-muted-foreground">{labels[version.source]} · {version.created_at.slice(0, 16).replace("T", " ")}</span>
+            </summary>
+            <p className="mt-3 whitespace-pre-wrap border-t border-border pt-3 text-sm leading-7">{version.answer}</p>
+            {version.instruction ? <p className="mt-2 text-xs leading-5 text-muted-foreground">修改意见：{version.instruction}</p> : null}
+            <p className="mt-2 text-[11px] text-muted-foreground">知识点 {version.knowledgePointIds.length} · Citation {version.citations.length}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReviewHistoryPanel({ history }: { history: ReviewFlag["review_history"] }) {
+  return (
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5"><CardTitle>审核历史</CardTitle><p className="text-xs text-muted-foreground">来自后端持久化记录。</p></CardHeader>
+      <CardContent className="space-y-3 px-5">
+        {history.length ? history.map((entry) => (
+          <div className="rounded-lg border-2 border-border px-3 py-3" key={entry.id}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-medium">version {entry.version} · {entry.action === "regenerate" ? "重新生成" : reviewStatusLabel(entry.to_status)}</span>
+              <span className="text-[11px] text-muted-foreground">{entry.created_at.slice(0, 16).replace("T", " ")}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{reviewStatusLabel(entry.from_status)} → {reviewStatusLabel(entry.to_status)}{entry.teacher_display_name ? ` · ${entry.teacher_display_name}` : ""}</p>
+            {entry.note ? <p className="mt-2 text-sm leading-6">{entry.note}</p> : null}
+          </div>
+        )) : <p className="py-6 text-center text-sm text-muted-foreground">暂无审核记录。</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewRegenerationPanel({
+  courseId,
+  flag,
+  onChanged,
+}: {
+  courseId: string;
+  flag: ReviewFlag;
+  onChanged: () => void;
+}) {
+  const [instruction, setInstruction] = useState("");
+  const regenerationMutation = useReviewRegeneration(courseId);
+  const regenerationStatusQuery = useReviewRegenerationStatus(courseId, flag.id);
+  const generationStatus = regenerationStatusQuery.data;
+  const isGenerating = regenerationMutation.isPending
+    || generationStatus?.status === "generating"
+    || flag.status === "generating";
+  const generationError = generationStatus?.error
+    ?? (flag.status === "regeneration_failed" ? "重新生成失败，请调整要求后重试。" : null);
+
+  async function handleRegeneration() {
+    const normalized = instruction.trim();
+    if (!normalized) return;
+    await regenerationMutation.mutateAsync({
+      flagId: flag.id,
+      payload: { instruction: normalized, base_version: flag.current_version },
+    });
+    onChanged();
+  }
+
+  return (
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5"><CardTitle>重新生成回答</CardTitle><p className="text-xs text-muted-foreground">生成新版本并进入待再次审核，不覆盖原回答。</p></CardHeader>
+      <CardContent className="space-y-3 px-5">
+        <Textarea onChange={(event) => setInstruction(event.target.value)} placeholder="重新生成要求，例如：更简洁/补充教材依据..." value={instruction} />
+        {isGenerating ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>正在生成新版本，完成后进入待再次审核</span>
+              <span>{generationStatus?.progress ?? 5}%</span>
+            </div>
+            <Progress value={generationStatus?.progress ?? 5} />
+          </div>
+        ) : null}
+        <Button
+          disabled={isGenerating || !instruction.trim()}
+          onClick={() => void handleRegeneration()}
+          type="button"
+        >
+          <RefreshCw data-icon="inline-start" />
+          {isGenerating ? "重新生成中" : generationError ? "重试重新生成" : "重新生成回答"}
+        </Button>
+        {regenerationMutation.isError ? <p className="text-sm text-destructive">{regenerationMutation.error instanceof Error ? regenerationMutation.error.message : "重新生成失败。"}</p> : null}
+        {generationError ? <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{generationError}</p> : null}
       </CardContent>
     </Card>
   );

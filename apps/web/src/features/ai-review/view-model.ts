@@ -24,15 +24,19 @@ export function reviewSeverityTone(severity: ReviewSeverity) {
 
 export function reviewStatusLabel(status: ReviewStatus) {
   if (status === "open") return "待审核";
+  if (status === "generating") return "重新生成中";
+  if (status === "pending_rereview") return "待再次审核";
+  if (status === "regeneration_failed") return "重新生成失败";
   if (status === "confirmed_correct") return "确认正确";
   if (status === "marked_incorrect") return "已标记错误";
   return "已忽略";
 }
 
 export function reviewStatusTone(status: ReviewStatus) {
-  if (status === "open") return "warning" as const;
+  if (status === "open" || status === "pending_rereview") return "warning" as const;
+  if (status === "generating") return "info" as const;
   if (status === "confirmed_correct") return "success" as const;
-  if (status === "marked_incorrect") return "danger" as const;
+  if (status === "marked_incorrect" || status === "regeneration_failed") return "danger" as const;
   return "neutral" as const;
 }
 
@@ -59,7 +63,8 @@ export function sortReviewFlags(flags: ReviewFlag[], sort: ReviewQueueFilters["s
     if (sort === "severity") {
       return priority[right.severity] - priority[left.severity] || right.created_at.localeCompare(left.created_at);
     }
-    const statusWeight = (flag: ReviewFlag) => (flag.status === "open" ? 1 : 0);
+    const statusWeight = (flag: ReviewFlag) =>
+      flag.status === "open" || flag.status === "pending_rereview" ? 1 : 0;
     return (
       statusWeight(right) - statusWeight(left) ||
       priority[right.severity] - priority[left.severity] ||
@@ -71,11 +76,15 @@ export function sortReviewFlags(flags: ReviewFlag[], sort: ReviewQueueFilters["s
 export function summarizeReviewFlags(flags: ReviewFlag[]): ReviewQueueSummary {
   return {
     total: flags.length,
-    pending: flags.filter((flag) => flag.status === "open").length,
+    pending: flags.filter(
+      (flag) => flag.status === "open" || flag.status === "pending_rereview",
+    ).length,
     highRisk: flags.filter((flag) => flag.severity === "high").length,
     missingBasis: flags.filter((flag) => flag.reason === "missing_course_basis").length,
     unresolved: flags.filter((flag) => flag.reason === "student_not_resolved").length,
-    reviewed: flags.filter((flag) => flag.status !== "open").length,
+    reviewed: flags.filter((flag) =>
+      ["confirmed_correct", "marked_incorrect", "dismissed"].includes(flag.status),
+    ).length,
   };
 }
 

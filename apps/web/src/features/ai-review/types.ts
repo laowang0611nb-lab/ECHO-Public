@@ -8,7 +8,7 @@ import type {
 export type ReviewStatusFilter = ReviewStatus | "all";
 export type ReviewReasonFilter = ReviewReason | "all";
 export type ReviewSeverityFilter = ReviewSeverity | "all";
-export type ReviewSort = "priority" | "newest" | "severity";
+export type ReviewSort = "priority" | "newest" | "oldest" | "severity";
 
 export interface ReviewQueueFilters {
   search: string;
