@@ -1,8 +1,8 @@
 "use client";
-import { AlertTriangle, ArrowLeft, ArrowRight, Copy, FileText, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowRight, Copy, Download, FileText, Highlighter, ZoomIn, ZoomOut } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChapterTree } from "@/features/knowledge/components/chapter-tree";
-import { useKnowledgeResourceData, useSourceEvidence } from "@/features/knowledge/queries";
+import { useDocumentFileBlob, useDocumentPageEvidence, useKnowledgeResourceData, useSourceEvidence } from "@/features/knowledge/queries";
 import { buildPointHref, buildResourceHref } from "@/features/knowledge/view-model";
 
 export function SourceViewerPage({
@@ -48,6 +48,12 @@ export function SourceViewerPage({
   const [manualPage, setManualPage] = useState<number | null>(initialPage ?? null);
   const page = manualPage ?? evidence.evidence?.page_start ?? 1;
   const [zoom, setZoom] = useState(100);
+  const pageEvidenceQuery = useDocumentPageEvidence(data.course?.id ?? null, resourceId, page);
+  const fileBlobQuery = useDocumentFileBlob(data.course?.id ?? null, resourceId);
+  const fileUrl = useMemo(() => fileBlobQuery.data ? URL.createObjectURL(fileBlobQuery.data) : null, [fileBlobQuery.data]);
+  useEffect(() => () => {
+    if (fileUrl) URL.revokeObjectURL(fileUrl);
+  }, [fileUrl]);
 
 
   const relatedPoints = useMemo(
@@ -77,6 +83,9 @@ export function SourceViewerPage({
           <>
             <Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>
             <Link className={buttonVariants({ variant: "outline" })} href={buildResourceHref(resourceId, { from: "source", courseId: data.course.id })}>资源详情</Link>
+            <a className={buttonVariants({ variant: "outline" })} download={resource.document.original_name} href={fileUrl ?? undefined}>
+              <Download data-icon="inline-start" />打开 PDF
+            </a>
           </>
         }
         breadcrumbs={breadcrumbs}
@@ -97,7 +106,7 @@ export function SourceViewerPage({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-          <StatusBadge tone="warning">PDF 文件流待后端补齐</StatusBadge>
+          <StatusBadge tone="success">PDF 文件流已接入</StatusBadge>
           {currentPoint ? <StatusBadge tone="info">{currentPoint.name}</StatusBadge> : null}
         </div>
       </section>
@@ -133,19 +142,37 @@ export function SourceViewerPage({
                 className="relative flex min-h-[560px] w-full max-w-[720px] items-center justify-center rounded-sm bg-white p-10 shadow-sm ring-1 ring-border"
                 style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
               >
-                {evidence.evidence?.content ? (
-                  <div className="max-w-2xl text-left">
-                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Evidence excerpt · Page {evidence.evidence.page_start}</p>
-                    <blockquote className="mt-6 text-lg leading-9 text-foreground">{evidence.evidence.content}</blockquote>
-                    <p className="mt-8 text-sm text-muted-foreground">当前后端未提供 PDF 文件流或 bbox，无法在此处渲染真实页面和高亮框。</p>
+                {pageEvidenceQuery.isLoading ? <p className="text-sm text-muted-foreground">正在加载第 {page} 页证据...</p> : null}
+                {pageEvidenceQuery.isError ? <p className="text-sm text-destructive">页面证据加载失败，请稍后重试。</p> : null}
+                {pageEvidenceQuery.data ? (
+                  <div className="relative w-full max-w-[720px] self-start rounded-sm bg-white p-8 shadow-sm ring-1 ring-border" style={{ aspectRatio: pageEvidenceQuery.data.width && pageEvidenceQuery.data.height ? `${pageEvidenceQuery.data.width} / ${pageEvidenceQuery.data.height}` : "3 / 4" }}>
+                    <div className="flex items-center justify-between gap-3 border-b border-border pb-3">
+                      <p className="text-xs font-medium text-muted-foreground">第 {pageEvidenceQuery.data.page_number} 页证据</p>
+                      <p className="text-[11px] text-muted-foreground">{pageEvidenceQuery.data.blocks.filter((block) => block.bbox).length} 个坐标块 · {pageEvidenceQuery.data.blocks.length} 个文本块</p>
+                    </div>
+                    <p className="mt-5 whitespace-pre-wrap text-sm leading-7 text-foreground">{pageEvidenceQuery.data.text || "当前页没有可展示文本。"}</p>
+                    {pageEvidenceQuery.data.blocks.map((block) => block.bbox && pageEvidenceQuery.data.width && pageEvidenceQuery.data.height ? (
+                      <div
+                        className="pointer-events-none absolute rounded-sm border-2 border-blue-400/55 bg-blue-200/20"
+                        key={block.chunk_id}
+                        style={{
+                          left: `${(block.bbox[0] / pageEvidenceQuery.data.width) * 100}%`,
+                          top: `${(block.bbox[1] / pageEvidenceQuery.data.height) * 100}%`,
+                          width: `${((block.bbox[2] - block.bbox[0]) / pageEvidenceQuery.data.width) * 100}%`,
+                          height: `${((block.bbox[3] - block.bbox[1]) / pageEvidenceQuery.data.height) * 100}%`,
+                        }}
+                        title={block.text}
+                      />
+                    ) : null)}
                   </div>
-                ) : (
+                ) : null}
+                {!pageEvidenceQuery.isLoading && !pageEvidenceQuery.isError && !pageEvidenceQuery.data ? (
                   <div className="max-w-md text-center">
                     <FileText className="mx-auto size-10 text-muted-foreground" />
-                    <p className="mt-4 text-sm font-medium">第 {Math.min(page, maxPage)} 页定位已保留</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">没有可用的原文 Chunk，或检索服务未返回结果。</p>
+                    <p className="mt-4 text-sm font-medium">第 {Math.min(page, maxPage)} 页暂无解析证据</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">请确认文档已完成页级解析。</p>
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           </CardContent>
@@ -159,6 +186,8 @@ export function SourceViewerPage({
           isError={evidence.isError}
           messageId={messageId}
           reviewId={reviewId}
+          hasBBox={Boolean(pageEvidenceQuery.data?.blocks.some((block) => block.bbox))}
+          pageEvidenceReady={Boolean(pageEvidenceQuery.data)}
           onCopy={() => void copyQuote()}
           pointName={currentPoint?.name}
           resourceName={resource.document.original_name}
@@ -189,6 +218,8 @@ function SourceEvidenceAside({
   isError,
   messageId,
   reviewId,
+  hasBBox,
+  pageEvidenceReady,
   onCopy,
 }: {
   resourceName: string;
@@ -200,6 +231,8 @@ function SourceEvidenceAside({
   isError: boolean;
   messageId?: string;
   reviewId?: string;
+  hasBBox: boolean;
+  pageEvidenceReady: boolean;
   onCopy: () => void;
 }) {
   return (
@@ -232,10 +265,15 @@ function SourceEvidenceAside({
         </CardContent>
       </Card>
 
-      <Card className="gap-3 border-orange-100 bg-orange-50/35 py-5">
-        <CardHeader className="px-5"><CardTitle className="flex items-center gap-2 text-orange-800"><AlertTriangle className="size-4" />精确高亮不可用</CardTitle></CardHeader>
-        <CardContent className="px-5 text-sm leading-6 text-orange-800/80">
-          当前数据只有页码和 Chunk 文本，没有 bbox。因此不绘制虚假高亮框，只定位正确页并显示原文。
+      <Card className="gap-3 border-blue-100 bg-blue-50/50 py-5">
+        <CardHeader className="px-5"><CardTitle className="flex items-center gap-2 text-blue-800"><Highlighter className="size-4" />页级定位</CardTitle></CardHeader>
+        <CardContent className="px-5 text-sm leading-6 text-blue-900/80">
+          {pageEvidenceReady
+            ? hasBBox
+              ? "已使用后端返回的真实页面尺寸和 bbox 绘制证据高亮。"
+              : "已加载真实页码和页面文本；后端未返回 bbox，因此不绘制高亮框。"
+            : "页面证据加载后将在这里显示定位状态。"
+          }
         </CardContent>
       </Card>
     </aside>

@@ -5,9 +5,12 @@ import {
   FileCheck2,
   FileClock,
   FileText,
+  ExternalLink,
   Layers3,
   Plus,
+  RotateCcw,
   Search,
+  Trash2,
   Upload,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,7 +31,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KnowledgeGraphPreview } from "@/features/knowledge/components/knowledge-graph-preview";
 import { ResourceKindIcon } from "@/features/knowledge/components/resource-kind-icon";
-import { knowledgeQueryKeys, useKnowledgeBaseData } from "@/features/knowledge/queries";
+import { knowledgeQueryKeys, useExternalResources, useKnowledgeBaseData, useKnowledgeGraph, useQuestionItems, useTrashedResources } from "@/features/knowledge/queries";
 import { buildResourceHref, summarizeKnowledgeBase } from "@/features/knowledge/view-model";
 import { formatBytes, formatDate } from "@/features/courses/detail/utils";
 import { apiClient } from "@/lib/api";
@@ -65,6 +68,10 @@ export function KnowledgeBasePage({
     : selectedCourseId;
   const course = courses.find((item) => item.id === courseId) ?? selectedCourse;
   const data = useKnowledgeBaseData(courseId);
+  const questionItemsQuery = useQuestionItems(courseId);
+  const externalResourcesQuery = useExternalResources(courseId);
+  const trashedResourcesQuery = useTrashedResources(courseId);
+  const graphQuery = useKnowledgeGraph(courseId);
 
   useEffect(() => {
     if (courseId && selectedCourseId !== courseId) {
@@ -233,7 +240,7 @@ export function KnowledgeBasePage({
                       <p className="text-xs text-muted-foreground">当前由真实章节和知识点生成。</p>
                     </CardHeader>
                     <CardContent className="px-5">
-                      <KnowledgeGraphPreview chapters={data.chapters} compact courseId={courseId} courseName={course?.name ?? "课程"} />
+                      <KnowledgeGraphPreview chapters={data.chapters} compact courseId={courseId} courseName={course?.name ?? "课程"} relationCount={graphQuery.data?.edges.length} />
                     </CardContent>
                   </Card>
                   <RecentUploads courseId={courseId} resources={data.resources} />
@@ -249,7 +256,7 @@ export function KnowledgeBasePage({
                 <p className="text-sm text-muted-foreground">跨知识点关系接口需求已登记，当前展示真实章节结构和知识点数量。</p>
               </CardHeader>
               <CardContent className="px-5">
-                <KnowledgeGraphPreview chapters={data.chapters} courseId={courseId} courseName={course?.name ?? "课程"} />
+                <KnowledgeGraphPreview chapters={data.chapters} courseId={courseId} courseName={course?.name ?? "课程"} relationCount={graphQuery.data?.edges.length} />
               </CardContent>
             </Card>
           ) : null}
@@ -268,22 +275,71 @@ export function KnowledgeBasePage({
             ) : <EmptyState description="上传教材或教学大纲后，这里会显示正式知识来源。" title="暂无教材与大纲" />
           ) : null}
 
-          {["examples", "external", "recycle"].includes(activeTab) ? (
-            <EmptyState
-              description={
-                activeTab === "examples"
-                  ? "题库、代码示例和实验资源接口需求已登记，后端接入后在这里显示真实内容。"
-                  : activeTab === "external"
-                    ? "外部资源、来源校验和更新时间接口需求已登记。"
-                    : "资源删除、回收站和恢复接口需求已登记，当前不会伪造删除状态。"
-              }
-              title={activeTab === "examples" ? "示例与习题待接入" : activeTab === "external" ? "外部资源待接入" : "回收站待接入"}
-            />
-          ) : null}
+          {activeTab === "examples" ? <QuestionItemsTab query={questionItemsQuery} /> : null}
+          {activeTab === "external" ? <ExternalResourcesTab query={externalResourcesQuery} /> : null}
+          {activeTab === "recycle" ? <ResourceTrashTab query={trashedResourcesQuery} courseId={courseId} onChanged={data.refetch} /> : null}
         </TabsContent>
       </Tabs>
     </motion.div>
   );
+}
+
+function QuestionItemsTab({ query }: { query: ReturnType<typeof useQuestionItems> }) {
+  if (query.isLoading) return <LoadingState label="正在加载示例与习题..." />;
+  if (query.isError) return <ErrorState description="示例与习题加载失败。" onRetry={() => void query.refetch()} />;
+  const items = query.data?.items ?? [];
+  if (!items.length) return <EmptyState description="当前课程还没有题库、代码示例或实验题目。" title="暂无示例与习题数据" />;
+  return <div className="grid gap-3 xl:grid-cols-2">{items.map((item) => <Card className="gap-3 py-5" key={item.id}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>{item.title}</CardTitle><div className="flex gap-2"><StatusBadge tone="info">{questionTypeLabel(item.type)}</StatusBadge><StatusBadge tone={item.difficulty === "hard" ? "danger" : item.difficulty === "medium" ? "warning" : "success"}>{questionDifficultyLabel(item.difficulty)}</StatusBadge></div></div></CardHeader><CardContent className="space-y-2 px-5 text-sm leading-6"><p className="line-clamp-4 whitespace-pre-wrap">{item.content}</p><p className="text-xs text-muted-foreground">关联知识点 {item.knowledge_point_ids.length} 个{item.source_page ? ` · 来源第 ${item.source_page} 页` : ""}</p></CardContent></Card>)}</div>;
+}
+
+function ExternalResourcesTab({ query }: { query: ReturnType<typeof useExternalResources> }) {
+  if (query.isLoading) return <LoadingState label="正在加载外部资源..." />;
+  if (query.isError) return <ErrorState description="外部资源加载失败。" onRetry={() => void query.refetch()} />;
+  const items = query.data?.items ?? [];
+  if (!items.length) return <EmptyState description="当前课程还没有登记外部链接或平台资源。" title="暂无外部资源" />;
+  return <div className="grid gap-3">{items.map((item) => <Card className="gap-3 py-5" key={item.id}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><CardTitle className="truncate">{item.title}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{item.provider || "外部来源"} · {item.last_verified_at ? `校验于 ${item.last_verified_at.slice(0, 10)}` : "尚未校验"}</p></div><StatusBadge tone={externalStatusTone(item.check_status)}>{externalStatusLabel(item.check_status)}</StatusBadge></div></CardHeader><CardContent className="flex flex-wrap items-center justify-between gap-3 px-5 text-sm"><p className="min-w-0 flex-1 text-muted-foreground">{item.description || "暂无描述"}</p><a className={buttonVariants({ size: "sm", variant: "outline" })} href={item.url} rel="noreferrer" target="_blank"><ExternalLink data-icon="inline-start" />打开链接</a></CardContent></Card>)}</div>;
+}
+
+function ResourceTrashTab({ query, courseId, onChanged }: { query: ReturnType<typeof useTrashedResources>; courseId: string; onChanged: () => void }) {
+  const { user } = useTeacherSession();
+  const queryClient = useQueryClient();
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => apiClient.restoreResource(user!.id, courseId, id),
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.resourceList(user!.id, courseId, true) }); onChanged(); },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.permanentlyDeleteResource(user!.id, courseId, id),
+    onSuccess: () => { void query.refetch(); onChanged(); },
+  });
+  if (query.isLoading) return <LoadingState label="正在加载回收站..." />;
+  if (query.isError) return <ErrorState description="回收站加载失败。" onRetry={() => void query.refetch()} />;
+  const items = query.data?.items ?? [];
+  if (!items.length) return <EmptyState description="当前课程没有已删除的资源、章节、知识点、习题或外部链接。" title="回收站为空" />;
+  return <div className="grid gap-3">{items.map((item) => <Card className="gap-3 py-5" key={`${item.item_type}-${item.id}`}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>{item.title}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{resourceItemTypeLabel(item.item_type)} · 删除于 {item.trashed_at?.slice(0, 16).replace("T", " ") ?? "未知时间"}</p></div><div className="flex gap-2"><Button disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate(item.id)} size="sm" type="button" variant="outline"><RotateCcw data-icon="inline-start" />恢复</Button><Button disabled={deleteMutation.isPending} onClick={() => { if (window.confirm("永久删除后无法恢复，确定继续吗？")) deleteMutation.mutate(item.id); }} size="sm" type="button" variant="destructive"><Trash2 data-icon="inline-start" />永久删除</Button></div></div></CardHeader></Card>)}</div>;
+}
+
+function externalStatusLabel(status: "unchecked" | "valid" | "invalid" | "unknown") {
+  return { unchecked: "未校验", valid: "链接有效", invalid: "链接失效", unknown: "状态未知" }[status];
+}
+
+function externalStatusTone(status: "unchecked" | "valid" | "invalid" | "unknown") {
+  if (status === "valid") return "success" as const;
+  if (status === "invalid") return "danger" as const;
+  return "neutral" as const;
+}
+
+function questionTypeLabel(type: string) {
+  const labels: Record<string, string> = { single_choice: "单选", multiple_choice: "多选", true_false: "判断", short_answer: "简答", coding: "编程", experiment: "实验" };
+  return labels[type] ?? type;
+}
+
+function questionDifficultyLabel(difficulty: string) {
+  return { easy: "基础", medium: "中等", hard: "困难" }[difficulty] ?? difficulty;
+}
+
+function resourceItemTypeLabel(type: string) {
+  const labels: Record<string, string> = { document: "文档", chapter: "章节", knowledge_point: "知识点", question_item: "习题", external_resource: "外部资源" };
+  return labels[type] ?? type;
 }
 
 function ResourceStats({ summary }: { summary: ReturnType<typeof summarizeKnowledgeBase> }) {

@@ -97,7 +97,9 @@ export function KnowledgeEditor({
           content_type: "application/pdf",
           size_bytes: 0,
           status: "ready",
+          resource_type: "textbook",
           page_count: null,
+          trashed_at: null,
           created_at: "",
           updated_at: "",
         }));

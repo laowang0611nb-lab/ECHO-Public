@@ -11,6 +11,7 @@ import {
   FileQuestion,
   Lightbulb,
   Pencil,
+  TrendingUp,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -38,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useKnowledgePointData, useSourceEvidence } from "@/features/knowledge/queries";
+import { useKnowledgePointData, useKnowledgePointErrorPatterns, useKnowledgePointMasteryTrend, useQuestionItems, useSourceEvidence } from "@/features/knowledge/queries";
 import type { KnowledgePointTab } from "@/features/knowledge/types";
 import { buildPointHref, buildResourceHref, buildSourceHref } from "@/features/knowledge/view-model";
 import { apiClient } from "@/lib/api";
@@ -78,6 +79,9 @@ export function KnowledgePointDetailPage({
     documentId: resourceId,
     query: context?.point.name,
   });
+  const masteryTrendQuery = useKnowledgePointMasteryTrend(courseId || null, pointId);
+  const errorPatternsQuery = useKnowledgePointErrorPatterns(courseId || null, pointId);
+  const questionItemsQuery = useQuestionItems(courseId || null, pointId);
 
   function handleTabChange(value: string) {
     const next = tabs.some((tab) => tab.value === value) ? (value as KnowledgePointTab) : "overview";
@@ -142,31 +146,19 @@ export function KnowledgePointDetailPage({
                   evidenceError={evidence.isError}
                 />
                 <StudentMasteryCard context={context} />
-                <UnavailableCard
-                  description="掌握趋势接口需求已登记；后端接入后显示真实时间序列，不用估算曲线替代。"
-                  icon={AlertTriangle}
-                  title="掌握趋势待接入"
-                />
-                <UnavailableCard
-                  description="常见错误聚类接口需求已登记；后端需返回可回查 LearningEvent 的错误模式。"
-                  icon={CircleHelp}
-                  title="常见错误待接入"
-                />
+                <MasteryTrendCard query={masteryTrendQuery} />
+                <ErrorPatternsCard query={errorPatternsQuery} />
               </div>
               <aside className="space-y-4">
                 <RelatedPointsCard context={context} />
-                <UnavailableCard
-                  description="题库与知识点关联接口需求已登记，接入后展示真实题目、难度和来源。"
-                  icon={FileQuestion}
-                  title="相关习题待接入"
-                />
+                <QuestionItemsSummaryCard query={questionItemsQuery} />
                 <TeachingSuggestionCard mastery={mastery} />
               </aside>
             </div>
           ) : null}
           {activeTab === "related" ? <RelatedContentTab context={context} /> : null}
           {activeTab === "students" ? <StudentMasteryTab context={context} /> : null}
-          {activeTab === "exercises" ? <EmptyState description="题库接口需求已登记，后端接入 question-items 后在这里显示真实题目。" title="相关习题待接入" /> : null}
+          {activeTab === "exercises" ? <QuestionItemsPanel query={questionItemsQuery} /> : null}
           {activeTab === "suggestions" ? <TeachingSuggestionDetail mastery={mastery} /> : null}
           {activeTab === "analysis" ? <AnalysisTab affectedStudents={affectedStudents} context={context} mastery={mastery} /> : null}
         </TabsContent>
@@ -456,6 +448,82 @@ function AnalysisTab({
   );
 }
 
+function MasteryTrendCard({ query }: { query: ReturnType<typeof useKnowledgePointMasteryTrend> }) {
+  if (query.isLoading) return <Card className="gap-3 py-5"><CardContent className="px-5 text-sm text-muted-foreground">正在加载掌握趋势...</CardContent></Card>;
+  if (query.isError) return <ErrorState description="掌握趋势加载失败。" onRetry={() => void query.refetch()} />;
+  const points = query.data?.points.filter((point) => point.average_mastery !== null) ?? [];
+  if (!points.length) {
+    return <UnavailableCard description="当前时间窗口没有可追溯的掌握快照，暂不生成趋势线。" icon={AlertTriangle} title="暂无掌握趋势" />;
+  }
+  const width = 640;
+  const height = 180;
+  const chartPoints = points.map((point, index) => ({
+    ...point,
+    x: points.length === 1 ? width / 2 : (index / (points.length - 1)) * width,
+    y: height - ((point.average_mastery ?? 0) / 100) * (height - 24) - 12,
+  }));
+  const latest = chartPoints.at(-1)!;
+  return (
+    <Card className="gap-4 py-5">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 px-5">
+        <div><CardTitle className="flex items-center gap-2"><TrendingUp className="size-4 text-primary" />掌握趋势</CardTitle><p className="mt-1 text-xs text-muted-foreground">近 {query.data?.range.days} 天真实快照，无快照日期不插值。</p></div>
+        <StatusBadge tone="info">{`最新 ${Math.round(latest.average_mastery ?? 0)}%`}</StatusBadge>
+      </CardHeader>
+      <CardContent className="px-5">
+        <div className="overflow-x-auto rounded-lg border border-border bg-muted/20 p-3">
+          <svg className="h-48 min-w-[640px] w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="知识点掌握趋势">
+            {[0, 25, 50, 75, 100].map((value) => <line key={value} stroke="#D5DFEC" strokeDasharray="4 5" strokeWidth="1" x1="0" x2={width} y1={height - (value / 100) * (height - 24) - 12} y2={height - (value / 100) * (height - 24) - 12} />)}
+            <polyline fill="none" points={chartPoints.map((point) => `${point.x},${point.y}`).join(" ")} stroke="#2F7CF6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />
+            {chartPoints.map((point) => <circle cx={point.x} cy={point.y} fill="#FFFFFF" key={point.date} r="4" stroke="#2F7CF6" strokeWidth="2"><title>{point.date}: {Math.round(point.average_mastery ?? 0)}%</title></circle>)}
+          </svg>
+        </div>
+        <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><span>{query.data?.range.start_date}</span><span>证据点 {points.reduce((sum, point) => sum + point.evidence_count, 0)}</span><span>{query.data?.range.end_date}</span></div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ErrorPatternsCard({ query }: { query: ReturnType<typeof useKnowledgePointErrorPatterns> }) {
+  if (query.isLoading) return <Card className="gap-3 py-5"><CardContent className="px-5 text-sm text-muted-foreground">正在分析常见错误...</CardContent></Card>;
+  if (query.isError) return <ErrorState description="常见错误分析加载失败。" onRetry={() => void query.refetch()} />;
+  const patterns = query.data?.patterns ?? [];
+  return (
+    <Card className="gap-4 py-5">
+      <CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><CircleHelp className="size-4 text-orange-500" />常见错误</CardTitle><p className="text-xs text-muted-foreground">来自近 {query.data?.window_days ?? 30} 天真实 LearningEvent 的错误模式。</p></CardHeader>
+      <CardContent className="space-y-3 px-5">
+        {patterns.length ? patterns.map((pattern) => (
+          <div className="rounded-lg border border-border px-4 py-3" key={pattern.code}>
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">{pattern.label}</p><StatusBadge tone={pattern.trend === "up" ? "danger" : pattern.trend === "down" ? "success" : "neutral"}>{patternTrendLabel(pattern.trend)}</StatusBadge></div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">{pattern.description}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{pattern.occurrence_count} 次 · {pattern.affected_students} 名学生 · {pattern.sample_evidence_ids.length} 条样本证据</p>
+          </div>
+        )) : <p className="py-8 text-center text-sm text-muted-foreground">当前时间窗口没有重复错误模式。</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuestionItemsSummaryCard({ query }: { query: ReturnType<typeof useQuestionItems> }) {
+  const items = query.data?.items ?? [];
+  return (
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><FileQuestion className="size-4 text-primary" />相关习题</CardTitle><p className="text-xs text-muted-foreground">来自真实题库关联。</p></CardHeader>
+      <CardContent className="space-y-2 px-5">
+        {items.length ? items.slice(0, 3).map((item) => <div className="rounded-lg border border-border px-3 py-3" key={item.id}><p className="truncate text-sm font-medium">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{questionTypeLabel(item.type)} · {questionDifficultyLabel(item.difficulty)}</p></div>) : <p className="py-8 text-center text-sm text-muted-foreground">当前知识点还没有关联习题。</p>}
+        {items.length > 3 ? <p className="text-center text-xs text-muted-foreground">另有 {items.length - 3} 道题</p> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuestionItemsPanel({ query }: { query: ReturnType<typeof useQuestionItems> }) {
+  if (query.isLoading) return <LoadingState label="正在加载相关习题..." />;
+  if (query.isError) return <ErrorState description="相关习题加载失败。" onRetry={() => void query.refetch()} />;
+  const items = query.data?.items ?? [];
+  if (!items.length) return <EmptyState description="当前知识点还没有关联题目。" title="暂无相关习题" />;
+  return <div className="grid gap-3">{items.map((item) => <Card className="gap-3 py-5" key={item.id}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>{item.title}</CardTitle><div className="flex gap-2"><StatusBadge tone="info">{questionTypeLabel(item.type)}</StatusBadge><StatusBadge tone={item.difficulty === "hard" ? "danger" : item.difficulty === "medium" ? "warning" : "success"}>{questionDifficultyLabel(item.difficulty)}</StatusBadge></div></div></CardHeader><CardContent className="space-y-3 px-5 text-sm leading-6"><p className="whitespace-pre-wrap">{item.content}</p>{item.answer ? <p className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-900">答案：{item.answer}</p> : null}{item.explanation ? <p className="text-muted-foreground">解析：{item.explanation}</p> : null}{item.source_page ? <p className="text-xs text-muted-foreground">来源页码：第 {item.source_page} 页</p> : null}</CardContent></Card>)}</div>;
+}
+
 function EditKnowledgePointDialog({
   context,
   onChanged,
@@ -519,6 +587,23 @@ function HeaderMetric({ label, value, tone = "default" }: { label: string; value
 
 function InfoLine({ label, value }: { label: string; value: string }) {
   return <div className="flex items-center justify-between gap-4 text-sm"><span className="text-muted-foreground">{label}</span><span className="font-medium">{value}</span></div>;
+}
+
+function patternTrendLabel(trend: "up" | "stable" | "down" | "unknown") {
+  if (trend === "up") return "上升";
+  if (trend === "down") return "下降";
+  if (trend === "stable") return "稳定";
+  return "未知";
+}
+
+function questionTypeLabel(type: string) {
+  const labels: Record<string, string> = { single_choice: "单选", multiple_choice: "多选", true_false: "判断", short_answer: "简答", coding: "编程", experiment: "实验" };
+  return labels[type] ?? type;
+}
+
+function questionDifficultyLabel(difficulty: string) {
+  const labels: Record<string, string> = { easy: "基础", medium: "中等", hard: "困难" };
+  return labels[difficulty] ?? difficulty;
 }
 
 function knowledgePointBreadcrumbs(from: string, courseName: string, chapterTitle: string) {

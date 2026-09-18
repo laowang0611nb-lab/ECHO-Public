@@ -1,4 +1,20 @@
-import type { Chapter, Course, CourseDocument, KnowledgePoint, KnowledgePointAnalytics } from "@echo/shared-types";
+import type {
+  Chapter,
+  Course,
+  CourseDocument,
+  DocumentCitationPage,
+  DocumentIndexStatus,
+  DocumentPageEvidence,
+  ErrorPatternReport,
+  ExternalResourcePage,
+  ExternalResourceStatus,
+  KnowledgeGraph,
+  KnowledgePoint,
+  KnowledgePointAnalytics,
+  MasteryTrend,
+  QuestionItemPage,
+  ResourceListPage,
+} from "@echo/shared-types";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { buildResourceView } from "@/features/knowledge/view-model";
@@ -13,6 +29,26 @@ export const knowledgeQueryKeys = {
   pointLookup: (userId: string, pointId: string) => ["teacher", "knowledge", "point-lookup", userId, pointId] as const,
   pointAnalytics: (userId: string, courseId: string, pointId: string) =>
     ["teacher", "knowledge", "point-analytics", userId, courseId, pointId] as const,
+  pointMasteryTrend: (userId: string, courseId: string, pointId: string, days: number) =>
+    ["teacher", "knowledge", "point-mastery-trend", userId, courseId, pointId, days] as const,
+  pointErrorPatterns: (userId: string, courseId: string, pointId: string, days: number) =>
+    ["teacher", "knowledge", "point-error-patterns", userId, courseId, pointId, days] as const,
+  questionItems: (userId: string, courseId: string, pointId?: string | null) =>
+    ["teacher", "knowledge", "question-items", userId, courseId, pointId ?? "all"] as const,
+  externalResources: (userId: string, courseId: string, pointId?: string | null, status?: ExternalResourceStatus) =>
+    ["teacher", "knowledge", "external-resources", userId, courseId, pointId ?? "all", status ?? "all"] as const,
+  resourceList: (userId: string, courseId: string, trashed: boolean) =>
+    ["teacher", "knowledge", "resource-list", userId, courseId, trashed ? "trashed" : "active"] as const,
+  graph: (userId: string, courseId: string) =>
+    ["teacher", "knowledge", "graph", userId, courseId] as const,
+  indexStatus: (userId: string, courseId: string, documentId: string) =>
+    ["teacher", "knowledge", "index-status", userId, courseId, documentId] as const,
+  citations: (userId: string, courseId: string, documentId: string) =>
+    ["teacher", "knowledge", "citations", userId, courseId, documentId] as const,
+  pageEvidence: (userId: string, courseId: string, documentId: string, pageNumber: number) =>
+    ["teacher", "knowledge", "page-evidence", userId, courseId, documentId, pageNumber] as const,
+  fileBlob: (userId: string, courseId: string, documentId: string) =>
+    ["teacher", "knowledge", "file-blob", userId, courseId, documentId] as const,
   sourceEvidence: (userId: string, courseId: string, documentId: string, query: string, chunkId?: string) =>
     ["teacher", "knowledge", "source-evidence", userId, courseId, documentId, query, chunkId ?? ""] as const,
 };
@@ -165,6 +201,116 @@ export function useKnowledgePointData(pointId: string) {
       void documentsQuery.refetch();
     },
   };
+}
+
+export function useKnowledgePointMasteryTrend(courseId: string | null, pointId: string | null, days = 30) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<MasteryTrend>({
+    queryKey: knowledgeQueryKeys.pointMasteryTrend(userId ?? "anonymous", courseId ?? "none", pointId ?? "none", days),
+    queryFn: () => apiClient.getKnowledgePointMasteryTrend(userId!, courseId!, pointId!, days),
+    enabled: Boolean(userId && courseId && pointId),
+    staleTime: 30_000,
+  });
+}
+
+export function useKnowledgePointErrorPatterns(courseId: string | null, pointId: string | null, days = 30) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<ErrorPatternReport>({
+    queryKey: knowledgeQueryKeys.pointErrorPatterns(userId ?? "anonymous", courseId ?? "none", pointId ?? "none", days),
+    queryFn: () => apiClient.getKnowledgePointErrorPatterns(userId!, courseId!, pointId!, days),
+    enabled: Boolean(userId && courseId && pointId),
+    staleTime: 30_000,
+  });
+}
+
+export function useQuestionItems(courseId: string | null, pointId?: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<QuestionItemPage>({
+    queryKey: knowledgeQueryKeys.questionItems(userId ?? "anonymous", courseId ?? "none", pointId),
+    queryFn: () => apiClient.listQuestionItems(userId!, courseId!, { knowledgePointId: pointId ?? undefined, limit: 100 }),
+    enabled: Boolean(userId && courseId),
+    staleTime: 30_000,
+  });
+}
+
+export function useExternalResources(courseId: string | null, pointId?: string | null, status?: ExternalResourceStatus) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<ExternalResourcePage>({
+    queryKey: knowledgeQueryKeys.externalResources(userId ?? "anonymous", courseId ?? "none", pointId, status),
+    queryFn: () => apiClient.listExternalResources(userId!, courseId!, { knowledgePointId: pointId ?? undefined, status, limit: 100 }),
+    enabled: Boolean(userId && courseId),
+    staleTime: 30_000,
+  });
+}
+
+export function useTrashedResources(courseId: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<ResourceListPage>({
+    queryKey: knowledgeQueryKeys.resourceList(userId ?? "anonymous", courseId ?? "none", true),
+    queryFn: () => apiClient.listResources(userId!, courseId!, { trashed: true, limit: 100 }),
+    enabled: Boolean(userId && courseId),
+    staleTime: 30_000,
+  });
+}
+
+export function useKnowledgeGraph(courseId: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<KnowledgeGraph>({
+    queryKey: knowledgeQueryKeys.graph(userId ?? "anonymous", courseId ?? "none"),
+    queryFn: () => apiClient.getKnowledgeGraph(userId!, courseId!),
+    enabled: Boolean(userId && courseId),
+    staleTime: 30_000,
+  });
+}
+
+export function useDocumentIndexStatus(courseId: string | null, documentId: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<DocumentIndexStatus>({
+    queryKey: knowledgeQueryKeys.indexStatus(userId ?? "anonymous", courseId ?? "none", documentId ?? "none"),
+    queryFn: () => apiClient.getDocumentIndexStatus(userId!, courseId!, documentId!),
+    enabled: Boolean(userId && courseId && documentId),
+    staleTime: 15_000,
+  });
+}
+
+export function useDocumentCitations(courseId: string | null, documentId: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<DocumentCitationPage>({
+    queryKey: knowledgeQueryKeys.citations(userId ?? "anonymous", courseId ?? "none", documentId ?? "none"),
+    queryFn: () => apiClient.listDocumentCitations(userId!, courseId!, documentId!, { limit: 100 }),
+    enabled: Boolean(userId && courseId && documentId),
+    staleTime: 15_000,
+  });
+}
+
+export function useDocumentPageEvidence(courseId: string | null, documentId: string | null, pageNumber: number) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<DocumentPageEvidence>({
+    queryKey: knowledgeQueryKeys.pageEvidence(userId ?? "anonymous", courseId ?? "none", documentId ?? "none", pageNumber),
+    queryFn: () => apiClient.getDocumentPageEvidence(userId!, courseId!, documentId!, pageNumber),
+    enabled: Boolean(userId && courseId && documentId && pageNumber > 0),
+    staleTime: 15_000,
+  });
+}
+
+export function useDocumentFileBlob(courseId: string | null, documentId: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<Blob>({
+    queryKey: knowledgeQueryKeys.fileBlob(userId ?? "anonymous", courseId ?? "none", documentId ?? "none"),
+    queryFn: () => apiClient.getDocumentFileBlob(userId!, courseId!, documentId!),
+    enabled: Boolean(userId && courseId && documentId),
+    staleTime: 60_000,
+  });
 }
 
 export function useSourceEvidence({

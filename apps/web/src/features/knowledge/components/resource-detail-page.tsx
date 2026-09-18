@@ -5,17 +5,16 @@ import {
   ArrowRight,
   BookOpen,
   Box,
+  Download,
   ExternalLink,
-  FileText,
   Layers3,
-  LockKeyhole,
   RefreshCw,
   ScanText,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -30,7 +29,7 @@ import { ChapterTree } from "@/features/knowledge/components/chapter-tree";
 import { KnowledgeStructureEditor } from "@/features/knowledge/components/knowledge-structure-editor";
 import { ParseStatusPanel } from "@/features/knowledge/components/parse-status-panel";
 import { ResourceKindIcon } from "@/features/knowledge/components/resource-kind-icon";
-import { useKnowledgeResourceData } from "@/features/knowledge/queries";
+import { useDocumentCitations, useDocumentFileBlob, useDocumentIndexStatus, useDocumentPageEvidence, useKnowledgeResourceData } from "@/features/knowledge/queries";
 import type { ResourceDetailTab } from "@/features/knowledge/types";
 import { buildPointHref, buildSourceHref, resourcePageCount } from "@/features/knowledge/view-model";
 import { formatBytes, formatDate } from "@/features/courses/detail/utils";
@@ -113,8 +112,8 @@ export function KnowledgeResourceDetailPage({
       <ResourceHeader resource={resource} />
 
       <Tabs onValueChange={handleTabChange} value={activeTab}>
-        <TabsList className="h-auto w-full justify-start overflow-x-auto border-b border-border px-0" variant="line">
-          {tabs.map((tab) => <TabsTrigger className="h-10 flex-none px-4" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-none border-b border-border px-0 sm:grid-cols-4 xl:grid-cols-7" variant="line">
+          {tabs.map((tab) => <TabsTrigger className="h-10 w-full px-2" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
         </TabsList>
 
         <TabsContent className="mt-5" value={activeTab}>
@@ -128,7 +127,7 @@ export function KnowledgeResourceDetailPage({
                 onChanged={data.refetch}
               />
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
-                <DocumentPreviewPanel page={page} pageCount={pageCount} setPage={setPage} title={resource.document.original_name} />
+                <DocumentPreviewPanel courseId={course.id} documentId={resource.document.id} page={page} pageCount={pageCount} setPage={setPage} title={resource.document.original_name} />
                 <ChapterAndPointPreview courseId={course.id} resourceId={resourceId} chapters={chapterTree} />
               </div>
             </div>
@@ -141,13 +140,8 @@ export function KnowledgeResourceDetailPage({
               <KnowledgeStructureEditor chapters={resource.chapters} courseId={course.id} documentId={resource.document.id} onChanged={data.refetch} />
             ) : <EmptyState description="该资源尚未解析出章节和知识点，请先执行解析。" title="暂无知识点" />
           ) : null}
-          {activeTab === "index" ? <IndexTab resource={resource} /> : null}
-          {activeTab === "citations" ? (
-            <EmptyState
-              description="当前后端没有按资源查询引用使用记录的接口；不会用演示数据替代真实引用。"
-              title="引用记录暂不可用"
-            />
-          ) : null}
+          {activeTab === "index" ? <IndexTab courseId={course.id} documentId={resource.document.id} resource={resource} /> : null}
+          {activeTab === "citations" ? <CitationsTab courseId={course.id} documentId={resource.document.id} /> : null}
           {activeTab === "related" ? <RelatedResources course={course} /> : null}
         </TabsContent>
       </Tabs>
@@ -184,7 +178,7 @@ function ResourceHeader({ resource }: { resource: NonNullable<ReturnType<typeof 
               <Link className={buttonVariants({ variant: "outline" })} href={buildSourceHref(resource.document.id, { from: "resource", courseId: resource.document.course_id, page: 1 })}>
                 查看解析原文
               </Link>
-              <Button disabled type="button" variant="outline"><LockKeyhole data-icon="inline-start" />文件流未开放</Button>
+              <ResourceFileButton courseId={resource.document.course_id} documentId={resource.document.id} fileName={resource.document.original_name} />
             </div>
           </div>
         </div>
@@ -209,12 +203,17 @@ function DocumentPreviewPanel({
   pageCount,
   setPage,
   title,
+  courseId,
+  documentId,
 }: {
   page: number;
   pageCount: number;
   setPage: (value: number) => void;
   title: string;
+  courseId: string;
+  documentId: string;
 }) {
+  const pageEvidenceQuery = useDocumentPageEvidence(courseId, documentId, page);
   const maxPage = Math.max(1, pageCount);
   return (
     <Card className="gap-4 py-5">
@@ -222,9 +221,9 @@ function DocumentPreviewPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <CardTitle>文档预览</CardTitle>
-            <p className="mt-1 text-xs text-muted-foreground">当前后端未提供文件流接口，先保留正确页数、翻页和原文证据入口。</p>
+            <p className="mt-1 text-xs text-muted-foreground">页面尺寸、文本块和真实坐标来自文档页级证据接口。</p>
           </div>
-          <StatusBadge tone="warning">文件流待后端补齐</StatusBadge>
+          <StatusBadge tone="success">页级证据已接入</StatusBadge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 px-5">
@@ -236,14 +235,16 @@ function DocumentPreviewPanel({
           </div>
           <p className="min-w-0 truncate text-xs text-muted-foreground">{title}</p>
         </div>
-        <div className="flex min-h-96 items-center justify-center rounded-lg border border-dashed border-border bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-8 text-center">
-          <div className="max-w-md">
-            <FileText className="mx-auto size-8 text-muted-foreground" />
-            <p className="mt-4 text-sm font-medium">第 {Math.min(page, maxPage)} 页定位已保留</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              PDF 文件流接口缺失，当前不伪造页面内容。原文引用和正确页码会在来源查看页根据检索结果展示。
-            </p>
-          </div>
+        <div className="rounded-lg border border-border bg-muted/20 p-4">
+          {pageEvidenceQuery.isLoading ? <p className="py-16 text-center text-sm text-muted-foreground">正在加载页面证据...</p> : null}
+          {pageEvidenceQuery.isError ? <p className="py-16 text-center text-sm text-destructive">页面证据加载失败。</p> : null}
+          {pageEvidenceQuery.data ? (
+            <div className="mx-auto max-w-3xl rounded-sm bg-white p-6 text-left shadow-sm ring-1 ring-border">
+              <div className="flex items-center justify-between gap-3 border-b border-border pb-3"><p className="text-xs text-muted-foreground">Page {pageEvidenceQuery.data.page_number}</p><p className="text-[11px] text-muted-foreground">{pageEvidenceQuery.data.width && pageEvidenceQuery.data.height ? `${pageEvidenceQuery.data.width} × ${pageEvidenceQuery.data.height}` : "尺寸未知"}</p></div>
+              <p className="mt-4 whitespace-pre-wrap text-sm leading-7">{pageEvidenceQuery.data.text || "当前页没有文本内容。"}</p>
+              <p className="mt-4 text-xs text-muted-foreground">{pageEvidenceQuery.data.blocks.length} 个文本块，{pageEvidenceQuery.data.blocks.filter((block) => block.bbox).length} 个坐标块。</p>
+            </div>
+          ) : null}
         </div>
       </CardContent>
     </Card>
@@ -305,29 +306,66 @@ function OverviewTab({ resource }: { resource: NonNullable<ReturnType<typeof use
   );
 }
 
-function IndexTab({ resource }: { resource: NonNullable<ReturnType<typeof useKnowledgeResourceData>["resource"]> }) {
-  const progress = resource.document.status === "ready" ? 100 : resource.document.status === "parsing" ? 55 : 0;
+function IndexTab({ courseId, documentId, resource }: { courseId: string; documentId: string; resource: NonNullable<ReturnType<typeof useKnowledgeResourceData>["resource"]> }) {
+  const indexQuery = useDocumentIndexStatus(courseId, documentId);
+  const index = indexQuery.data;
+  const progress = index && index.chunks_total ? Math.round((index.chunks_embedded / index.chunks_total) * 100) : 0;
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
       <Card className="gap-5 py-5">
-        <CardHeader className="px-5"><CardTitle>向量索引状态</CardTitle><p className="text-sm text-muted-foreground">后端目前只提供重建 Chunk 和 Embedding 的写接口，没有查询索引详情接口。</p></CardHeader>
+        <CardHeader className="px-5"><CardTitle>向量索引状态</CardTitle><p className="text-sm text-muted-foreground">页解析、Chunk 和 Embedding 状态来自后端索引接口。</p></CardHeader>
         <CardContent className="space-y-5 px-5">
-          <Progress value={progress} />
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric icon={Box} label="文档状态" value={resource.statusLabel} />
-            <Metric icon={Layers3} label="结构已完成" value={resource.chapters.length ? "是" : "否"} />
-            <Metric icon={ScanText} label="索引详情" value="待接口" />
-          </div>
+          {indexQuery.isLoading ? <p className="text-sm text-muted-foreground">正在加载索引状态...</p> : null}
+          {indexQuery.isError ? <ErrorState description="索引状态加载失败。" onRetry={() => void indexQuery.refetch()} /> : null}
+          {index ? (
+            <>
+              <Progress value={progress} />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric icon={Box} label="文档状态" value={index.status} />
+                <Metric icon={Layers3} label="已解析页" value={`${index.pages_parsed}/${index.pages_total}`} />
+                <Metric icon={ScanText} label="已向量化 Chunk" value={`${index.chunks_embedded}/${index.chunks_total}`} />
+              </div>
+              {index.error ? <p className="rounded-lg bg-destructive/5 px-3 py-2 text-sm text-destructive">{index.error}</p> : null}
+              <p className="text-xs text-muted-foreground">最近索引：{index.last_indexed_at?.slice(0, 16).replace("T", " ") ?? "尚无记录"}</p>
+            </>
+          ) : null}
         </CardContent>
       </Card>
-      <Card className="gap-4 border-orange-100 bg-orange-50/35 py-5">
-        <CardHeader className="px-5"><CardTitle className="text-orange-800">能力说明</CardTitle></CardHeader>
-        <CardContent className="px-5 text-sm leading-6 text-orange-800/80">
-          当前不会把 ready 状态单独解释为“向量索引已完成”。真实索引结论需要通过解析工作台重新运行构建流程。
+      <Card className="gap-4 border-blue-100 bg-blue-50/40 py-5">
+        <CardHeader className="px-5"><CardTitle className="text-blue-900">结构摘要</CardTitle></CardHeader>
+        <CardContent className="space-y-3 px-5 text-sm leading-6 text-blue-900/80">
+          <p>当前资源包含 {resource.chapters.length} 个章节、{resource.knowledgePointCount} 个知识点。</p>
+          <p>空白索引不会被解释为完成；进度以真实 Chunk 和 Embedding 数量计算。</p>
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function CitationsTab({ courseId, documentId }: { courseId: string; documentId: string }) {
+  const citationsQuery = useDocumentCitations(courseId, documentId);
+  if (citationsQuery.isLoading) return <LoadingState label="正在加载引用记录..." />;
+  if (citationsQuery.isError) return <ErrorState description="引用记录加载失败。" onRetry={() => void citationsQuery.refetch()} />;
+  const citations = citationsQuery.data?.items ?? [];
+  if (!citations.length) return <EmptyState description="当前资源还没有被 AI 回答引用。" title="暂无引用记录" />;
+  return (
+    <Card className="gap-0 overflow-hidden py-0">
+      <CardHeader className="border-b px-5 py-4"><CardTitle>引用情况</CardTitle><p className="text-xs text-muted-foreground">共 {citationsQuery.data?.total ?? citations.length} 条真实消息引用。</p></CardHeader>
+      <CardContent className="divide-y divide-border px-0">
+        {citations.map((citation) => <div className="grid gap-3 px-5 py-4 lg:grid-cols-[120px_minmax(0,1fr)_120px]" key={citation.id}><StatusBadge tone="info">{`第 ${citation.page_start} 页`}</StatusBadge><div className="min-w-0"><p className="line-clamp-3 text-sm leading-6">{citation.quote}</p><p className="mt-1 text-[11px] text-muted-foreground">Chunk {citation.chunk_id ?? "未知"}</p></div><p className="text-right text-xs text-muted-foreground">{citation.created_at.slice(0, 10)}</p></div>)}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ResourceFileButton({ courseId, documentId, fileName }: { courseId: string; documentId: string; fileName: string }) {
+  const fileQuery = useDocumentFileBlob(courseId, documentId);
+  const url = useMemo(() => fileQuery.data ? URL.createObjectURL(fileQuery.data) : null, [fileQuery.data]);
+  useEffect(() => () => {
+    if (url) URL.revokeObjectURL(url);
+  }, [url]);
+  if (fileQuery.isError) return <span className={buttonVariants({ variant: "outline" })}><Download data-icon="inline-start" />文件不可用</span>;
+  return <a className={buttonVariants({ variant: "outline" })} download={fileName} href={url ?? undefined}><Download data-icon="inline-start" />{fileQuery.isLoading ? "加载文件..." : "打开 PDF"}</a>;
 }
 
 function RelatedResources({ course }: { course: { id: string; name: string } }) {

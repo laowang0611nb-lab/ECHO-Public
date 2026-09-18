@@ -4,15 +4,19 @@ import { AlertTriangle, BookOpen, CheckCircle2, ClipboardCheck, Sparkles } from 
 import Link from "next/link";
 
 import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { TeacherNoteForm, MasteryCorrectionDialog } from "@/features/students/components/student-event-forms";
+import { useStudentErrorPatterns, useStudentMasteryTrend } from "@/features/students/queries";
 import type { ConversationEvidenceGroup, StudentDetailContext } from "@/features/students/types";
 import { buildChapterMastery, buildConversationEvidenceGroups, buildWeakPoints, eventCategoryCounts, eventLabel } from "@/features/students/view-model";
 import { cn } from "@/lib/utils";
 
 export function StudentOverview({ context }: { context: StudentDetailContext }) {
+  const masteryTrendQuery = useStudentMasteryTrend(context.course?.id ?? null, context.member?.user_id ?? null);
+  const errorPatternsQuery = useStudentErrorPatterns(context.course?.id ?? null, context.member?.user_id ?? null);
   const mastery = context.detail.average_mastery;
   const chapterMastery = buildChapterMastery(context.chapters, context.masteryStates, context.chapterAnalytics);
   const weakPoints = buildWeakPoints(context.masteryStates, context.chapters).slice(0, 5);
@@ -36,11 +40,12 @@ export function StudentOverview({ context }: { context: StudentDetailContext }) 
               <InfoLine label="有状态知识点" value={`${context.masteryStates.length} 个`} />
               <InfoLine label="低于 60%" value={`${weakPoints.length} 个`} />
               <Progress value={mastery ?? 0} />
-              <p className="text-xs leading-5 text-muted-foreground">暂无长期趋势接口，因此不展示虚构增长曲线。</p>
+              <p className="text-xs leading-5 text-muted-foreground">长期趋势使用独立接口，不用当前分数反推历史变化。</p>
             </div>
           </CardContent>
         </Card>
 
+        <StudentTrendCard query={masteryTrendQuery} />
         <Card className="gap-4 py-5">
           <CardHeader className="px-5"><CardTitle>各章节掌握度</CardTitle></CardHeader>
           <CardContent className="space-y-4 px-5">
@@ -70,6 +75,7 @@ export function StudentOverview({ context }: { context: StudentDetailContext }) 
       </div>
 
       <aside className="space-y-4">
+        <StudentErrorPatternsCard query={errorPatternsQuery} />
         <RecentEvents context={context} />
         <StudentAiEvaluation context={context} compact />
       </aside>
@@ -269,6 +275,36 @@ export function TeacherNotesTab({ context, onChanged }: { context: StudentDetail
   );
 }
 
+function StudentTrendCard({ query }: { query: ReturnType<typeof useStudentMasteryTrend> }) {
+  const points = query.data?.points.filter((point) => point.average_mastery !== null) ?? [];
+  return (
+    <Card className="gap-4 py-5">
+      <CardHeader className="px-5"><CardTitle>长期掌握趋势</CardTitle><p className="text-xs text-muted-foreground">近 {query.data?.range.days ?? 90} 天真实掌握快照。</p></CardHeader>
+      <CardContent className="px-5">
+        {query.isLoading ? <p className="py-8 text-center text-sm text-muted-foreground">正在加载趋势...</p> : null}
+        {query.isError ? <ErrorState description="长期掌握趋势加载失败。" onRetry={() => void query.refetch()} /> : null}
+        {!query.isLoading && !query.isError && !points.length ? <EmptyState description="当前时间窗口没有可追溯的掌握快照。" title="暂无趋势数据" /> : null}
+        {points.length ? <div className="rounded-lg border border-border bg-muted/20 p-3"><svg className="h-40 w-full" viewBox="0 0 640 160" role="img" aria-label="学生掌握趋势"><polyline fill="none" points={points.map((point, index) => `${points.length === 1 ? 320 : (index / (points.length - 1)) * 640},${148 - ((point.average_mastery ?? 0) / 100) * 136}`).join(" ")} stroke="#2F7CF6" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" />{points.map((point, index) => <circle cx={points.length === 1 ? 320 : (index / (points.length - 1)) * 640} cy={148 - ((point.average_mastery ?? 0) / 100) * 136} fill="#FFFFFF" key={point.date} r="4" stroke="#2F7CF6" strokeWidth="2"><title>{point.date}: {Math.round(point.average_mastery ?? 0)}%</title></circle>)}</svg></div> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StudentErrorPatternsCard({ query }: { query: ReturnType<typeof useStudentErrorPatterns> }) {
+  const patterns = query.data?.patterns ?? [];
+  return (
+    <Card className="gap-3 py-5">
+      <CardHeader className="px-5"><CardTitle>错误画像</CardTitle><p className="text-xs text-muted-foreground">后端按学习事件聚类，不从单次回答推断。</p></CardHeader>
+      <CardContent className="space-y-2 px-5">
+        {query.isLoading ? <p className="py-6 text-center text-sm text-muted-foreground">正在分析...</p> : null}
+        {query.isError ? <ErrorState description="错误画像加载失败。" onRetry={() => void query.refetch()} /> : null}
+        {!query.isLoading && !query.isError && !patterns.length ? <p className="py-6 text-center text-sm text-muted-foreground">当前没有重复错误模式。</p> : null}
+        {patterns.slice(0, 4).map((pattern) => <div className="rounded-lg border border-border px-3 py-3" key={pattern.code}><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium">{pattern.label}</p><StatusBadge tone={pattern.trend === "up" ? "danger" : pattern.trend === "down" ? "success" : "neutral"}>{patternTrendText(pattern.trend)}</StatusBadge></div><p className="mt-1 text-xs text-muted-foreground">{pattern.occurrence_count} 次 · {pattern.affected_students} 名学生</p></div>)}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function RecentEvents({ context }: { context: StudentDetailContext }) {
   const events = context.detail.recent_evidence.slice(0, 6);
   return (
@@ -284,6 +320,10 @@ export function RecentEvents({ context }: { context: StudentDetailContext }) {
       </CardContent>
     </Card>
   );
+}
+
+function patternTrendText(trend: "up" | "stable" | "down" | "unknown") {
+  return { up: "上升", stable: "稳定", down: "下降", unknown: "未知" }[trend];
 }
 
 function conversationStatusLabel(status: ConversationEvidenceGroup["status"]) {

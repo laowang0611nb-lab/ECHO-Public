@@ -4,7 +4,9 @@ import type {
   Conversation,
   Course,
   CourseMember,
+  ErrorPatternReport,
   ReviewFlag,
+  MasteryTrend,
   StudentLearningDetail,
   TeacherMessage,
 } from "@echo/shared-types";
@@ -29,6 +31,10 @@ export const studentQueryKeys = {
     ["teacher", "students", "conversation-evidence", userId, courseId, studentId] as const,
   conversationMessages: (userId: string, courseId: string, conversationId: string) =>
     ["teacher", "students", "conversation-messages", userId, courseId, conversationId] as const,
+  masteryTrend: (userId: string, courseId: string, studentId: string, days: number) =>
+    ["teacher", "students", "mastery-trend", userId, courseId, studentId, days] as const,
+  errorPatterns: (userId: string, courseId: string, studentId: string, days: number) =>
+    ["teacher", "students", "error-patterns", userId, courseId, studentId, days] as const,
 };
 
 export function useStudentAnalytics(courseId: string | null) {
@@ -201,6 +207,28 @@ export function useStudentDetail(studentId: string) {
       void studentConversationsQuery.refetch();
     },
   };
+}
+
+export function useStudentMasteryTrend(courseId: string | null, studentId: string | null, days = 90) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<MasteryTrend>({
+    queryKey: studentQueryKeys.masteryTrend(userId ?? "anonymous", courseId ?? "none", studentId ?? "none", days),
+    queryFn: () => apiClient.getStudentMasteryTrend(userId!, courseId!, studentId!, days),
+    enabled: Boolean(userId && courseId && studentId),
+    staleTime: 30_000,
+  });
+}
+
+export function useStudentErrorPatterns(courseId: string | null, studentId: string | null, days = 90) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<ErrorPatternReport>({
+    queryKey: studentQueryKeys.errorPatterns(userId ?? "anonymous", courseId ?? "none", studentId ?? "none", days),
+    queryFn: () => apiClient.getStudentErrorPatterns(userId!, courseId!, studentId!, days),
+    enabled: Boolean(userId && courseId && studentId),
+    staleTime: 30_000,
+  });
 }
 
 export function useTeacherConversationMessages(
