@@ -27,6 +27,7 @@ import {
 } from "@/features/ai-review/view-model";
 import { useReviewQuery, useReviewSummary } from "@/features/ai-review/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
+import { cn } from "@/lib/utils";
 
 export function ReviewOverviewPage({
   initialCourseId,
@@ -67,6 +68,7 @@ export function ReviewOverviewPage({
     pending_rereview: 0,
     regeneration_failed: 0,
   };
+  const firstReviewPending = Math.max(0, summaryData.pending - summaryData.pending_rereview);
 
   function updateQuery(patch: Partial<ReviewQueueFilters> & { courseId?: string }) {
     const next = { ...filters, ...patch };
@@ -103,7 +105,7 @@ export function ReviewOverviewPage({
             }}
             value={courseId}
           >
-            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-[min(280px,60vw)]"><SelectValue className="truncate" /></SelectTrigger>
             <SelectContent><SelectGroup>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectGroup></SelectContent>
           </Select>
         }
@@ -113,8 +115,8 @@ export function ReviewOverviewPage({
       />
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Inbox} label="待审核" supporting="状态为待审核的真实记录" value={summaryData.pending} />
-        <StatCard icon={AlertTriangle} label="高风险回答" supporting="后端 severity=high" tone="warning" value={summaryData.high_risk} />
+        <StatCard icon={Inbox} label="待审核" supporting="首次审核与再次审核合计" value={summaryData.pending} />
+        <StatCard icon={AlertTriangle} label="高风险回答" supporting="系统标记为高优先级" tone="warning" value={summaryData.high_risk} />
         <StatCard icon={FileWarning} label="缺少课程依据" supporting="未检索到教材来源" value={summaryData.reasons.missing_course_basis} />
         <StatCard icon={ShieldCheck} label="学生未解决" supporting="学生主动标记或连续追问" value={summaryData.reasons.student_not_resolved} />
       </section>
@@ -124,21 +126,32 @@ export function ReviewOverviewPage({
           <CardTitle>风险摘要</CardTitle>
           <p className="text-xs text-muted-foreground">风险信号只来自后端 ReviewFlag，不在前端自行计算高风险分数。</p>
         </CardHeader>
-        <CardContent className="grid gap-3 px-5 md:grid-cols-3">
+        <CardContent className="grid gap-3 px-5 md:grid-cols-2 xl:grid-cols-4">
           <RiskSummaryCard
-            detail={`${summaryData.pending} 条记录等待教师决定`}
-            href="/ai-review?status=open"
-            title="待处理队列"
+            count={firstReviewPending}
+            detail="等待首次教师判断"
+            href={`/ai-review?courseId=${courseId}&status=open`}
+            title="待首次审核"
           />
           <RiskSummaryCard
-            detail={`${summaryData.high_risk} 条记录由后端标记为高风险`}
-            href="/ai-review?severity=high"
-            title="高优先级风险"
+            count={summaryData.pending_rereview}
+            detail="重新生成后等待教师复核"
+            href={`/ai-review?courseId=${courseId}&status=pending_rereview`}
+            title="待再次审核"
           />
           <RiskSummaryCard
-            detail={`${summaryData.generating + summaryData.pending_rereview + summaryData.regeneration_failed} 条记录处于重新生成链路`}
-            href="/ai-review?status=pending_rereview"
-            title="重新生成流程"
+            count={summaryData.generating}
+            detail="AI 正在生成新版本"
+            href={`/ai-review?courseId=${courseId}&status=generating`}
+            title="重新生成中"
+            tone="info"
+          />
+          <RiskSummaryCard
+            count={summaryData.regeneration_failed}
+            detail="生成失败，可进入工作台重试"
+            href={`/ai-review?courseId=${courseId}&status=regeneration_failed`}
+            title="重新生成失败"
+            tone="danger"
           />
         </CardContent>
       </Card>
@@ -256,12 +269,32 @@ function ReviewFilterSelect({
   );
 }
 
-function RiskSummaryCard({ title, detail, href }: { title: string; detail: string; href: string }) {
+function RiskSummaryCard({
+  title,
+  detail,
+  href,
+  count,
+  tone = "default",
+}: {
+  title: string;
+  detail: string;
+  href: string;
+  count: number;
+  tone?: "default" | "info" | "danger";
+}) {
   return (
-    <Link className="rounded-lg border-2 border-border bg-muted/25 px-4 py-4 transition-colors hover:border-primary/35 hover:bg-muted/50" href={href}>
-      <p className="text-sm font-semibold">{title}</p>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{detail}</p>
-      <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">查看队列 <ArrowRight className="size-3.5" /></span>
+    <Link className="group flex min-w-0 items-start justify-between gap-4 rounded-lg border-2 border-border bg-muted/20 px-4 py-4 transition-colors hover:border-primary/35 hover:bg-muted/45" href={href}>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="mt-1 block text-xs leading-5 text-muted-foreground">{detail}</span>
+        <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">查看队列 <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+      </span>
+      <span className={cn(
+        "shrink-0 rounded-lg px-3 py-2 text-xl font-semibold",
+        tone === "info" && "bg-blue-50 text-blue-700",
+        tone === "danger" && "bg-red-50 text-red-700",
+        tone === "default" && "bg-background text-foreground",
+      )}>{count}</span>
     </Link>
   );
 }

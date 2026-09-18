@@ -3,8 +3,22 @@
 import type {
   ReviewDecisionRequest,
   ReviewFlag,
+  ReviewVersion,
 } from "@echo/shared-types";
-import { ArrowLeft, Check, ExternalLink, FileText, RefreshCw, Save, X } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpenCheck,
+  Check,
+  ExternalLink,
+  FileText,
+  History,
+  MessageSquareText,
+  RefreshCw,
+  Save,
+  ShieldAlert,
+  Sparkles,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useState } from "react";
@@ -149,20 +163,28 @@ export function ReviewWorkspacePage({
   }
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-        <div>
-          <p className="text-xs text-muted-foreground">AI 教学 / AI 回答审核 / 工作台</p>
-          <h1 className="mt-2 text-2xl font-semibold">审核工作台</h1>
-          <p className="mt-1 text-sm text-muted-foreground">查看真实问题、AI 回答、引用与学习证据，再提交教师决定。</p>
+    <div className="flex flex-col gap-5">
+      <section className="rounded-xl border-2 border-border bg-card px-5 py-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">AI 教学 / AI 回答审核 / 工作台</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight">审核工作台</h1>
+              <StatusBadge tone={reviewSeverityTone(flag.severity)}>{reviewSeverityLabel(flag.severity)}</StatusBadge>
+              <StatusBadge tone={reviewStatusTone(flag.status)}>{reviewStatusLabel(flag.status)}</StatusBadge>
+            </div>
+            <p className="mt-1 truncate text-sm text-muted-foreground" title={`${flag.student_display_name} · ${reviewReasonLabels[flag.reason]}`}>
+              {flag.student_display_name} · {reviewReasonLabels[flag.reason]} · 审核项 {flag.id}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>
+            <Link className={buttonVariants({ variant: "outline" })} href={`/ai-review?courseId=${courseId}`}>审核总览</Link>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>
-          <Link className={buttonVariants({ variant: "outline" })} href={`/ai-review?courseId=${courseId}`}>审核总览</Link>
-        </div>
-      </header>
+      </section>
 
-      <div className="grid gap-4 xl:grid-cols-[270px_minmax(0,1fr)_360px]">
+      <div className="grid gap-4 xl:grid-cols-[248px_minmax(0,1fr)_340px] xl:items-start">
         <ReviewQueueList
           courseId={courseId}
           currentId={flag.id}
@@ -171,153 +193,211 @@ export function ReviewWorkspacePage({
           onFiltersChange={updateFilters}
         />
 
-        <Card className="gap-4 py-5">
-          <CardHeader className="px-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle>{flag.student_display_name} · {reviewReasonLabels[flag.reason]}</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">审核项 {flag.id}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <StatusBadge tone={reviewSeverityTone(flag.severity)}>{reviewSeverityLabel(flag.severity)}</StatusBadge>
-                <StatusBadge tone={reviewStatusTone(flag.status)}>{reviewStatusLabel(flag.status)}</StatusBadge>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4 px-5">
-            <section className="rounded-lg border-2 border-border bg-muted/35 px-4 py-4">
-              <p className="text-xs font-semibold text-muted-foreground">学生问题</p>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-7">{flag.question || "当前 ReviewFlag 没有保存问题文本。"}</p>
-            </section>
-
-            <section className="rounded-lg border-2 border-border bg-muted/30 px-4 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground"><FileText className="size-3.5" />AI 原回答</p>
-                <span className="text-[11px] text-muted-foreground">version 1</span>
-              </div>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{flag.versions.find((version) => version.version === 1)?.answer ?? flag.answer}</p>
-            </section>
-
-            {currentVersion && currentVersion.version > 1 ? (
-              <section className="rounded-lg border-2 border-blue-100 bg-blue-50/35 px-4 py-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="flex items-center gap-2 text-xs font-semibold text-primary"><RefreshCw className="size-3.5" />当前生成版本</p>
-                  <span className="text-[11px] text-muted-foreground">version {currentVersion.version}</span>
-                </div>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{currentVersion.answer}</p>
-                {currentVersion.instruction ? <p className="mt-3 rounded-md bg-white/70 px-3 py-2 text-xs leading-5 text-muted-foreground">修改意见：{currentVersion.instruction}</p> : null}
-              </section>
-            ) : null}
-
-            {flag.corrected_answer ? (
-              <section className="rounded-lg border-2 border-emerald-100 bg-emerald-50/40 px-4 py-4">
-                <p className="text-xs font-semibold text-emerald-700">教师修改版本</p>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-7">{flag.corrected_answer}</p>
-              </section>
-            ) : null}
-
-            <div className="flex flex-wrap gap-2">
-              <Link
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-                href={`/students/${flag.student_id}/conversations/${flag.conversation_id}?from=ai-review&courseId=${courseId}&reviewId=${flag.id}&messageId=${flag.message_id}`}
-              >
-                查看完整学生对话 <ExternalLink className="size-3.5" />
-              </Link>
-              {knowledgePointIds.size ? Array.from(knowledgePointIds).map((pointId) => (
-                <Link className={buttonVariants({ variant: "outline", size: "sm" })} href={`/knowledge/points/${pointId}?from=review&courseId=${courseId}&reviewId=${flag.id}&messageId=${flag.message_id}`} key={pointId}>
-                  关联知识点
-                </Link>
-              )) : <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">未关联知识点</span>}
-            </div>
-
-            <section className="border-t border-border pt-4">
-              <p className="text-xs font-semibold text-muted-foreground">引用来源</p>
-              {citations.length ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {citations.map((citation, index) => (
-                    citation.document_id ? (
-                      <Link
-                        className={buttonVariants({ variant: "outline", size: "sm" })}
-                        href={buildSourceHref(citation.document_id, {
-                          from: "review",
-                          courseId,
-                          knowledgePointId: Array.from(knowledgePointIds)[0],
-                          page: citation.page_start,
-                          chunkId: citation.chunk_id ?? undefined,
-                          conversationId: flag.conversation_id,
-                          messageId: flag.message_id,
-                          reviewId: flag.id,
-                        })}
-                        key={`${citation.document_id}-${citation.page_start}-${index}`}
-                      >
-                        来源 {index + 1} · 第 {citation.page_start} 页
-                      </Link>
-                    ) : null
-                  ))}
-                </div>
-              ) : <p className="mt-2 text-sm text-muted-foreground">当前回答没有可追溯 Citation，不能生成 PDF 来源。</p>}
-            </section>
-
-            <ReviewVersionsPanel currentVersion={flag.current_version} versions={flag.versions} />
-          </CardContent>
-        </Card>
-
-        <aside className="space-y-4">
-          <Card className="gap-3 py-5">
-            <CardHeader className="px-5"><CardTitle>风险证据</CardTitle></CardHeader>
-            <CardContent className="space-y-3 px-5 text-sm">
-              <EvidenceLine label="后端风险原因" value={reviewReasonLabels[flag.reason]} />
-              <EvidenceLine label="严重级别" value={reviewSeverityLabel(flag.severity)} />
-              <EvidenceLine label="当前状态" value={reviewStatusLabel(flag.status)} />
-              <EvidenceLine label="关联消息" value={flag.message_id} mono />
-              <EvidenceLine
-                label="近期学习证据"
-                value={
-                  contextQuery.isLoading
-                    ? "加载中"
-                    : contextQuery.isError
-                      ? "读取失败"
-                      : `${contextQuery.data?.recent_learning_events.length ?? 0} 条`
-                }
-              />
-              {contextQuery.isError ? (
-                <Button onClick={() => void contextQuery.refetch()} size="sm" type="button" variant="outline">
-                  重新读取上下文
-                </Button>
-              ) : null}
-              <p className="rounded-lg border border-dashed border-border px-3 py-3 text-xs leading-5 text-muted-foreground">
-                系统检测与教材证据分开显示。前端不会用回答长度、消息数量或模型分数推断风险。
-              </p>
-            </CardContent>
-          </Card>
-
-          <ReviewRegenerationPanel
+        <div className="flex min-w-0 flex-col gap-4">
+          <ReviewContentCard
+            citations={citations}
             courseId={courseId}
+            currentVersion={currentVersion}
             flag={flag}
-            key={`regenerate-${flag.id}`}
-            onChanged={() => { void flagQuery.refetch(); void queueQuery.refetch(); void contextQuery.refetch(); }}
+            knowledgePointIds={knowledgePointIds}
           />
+          <ReviewHistoryPanel history={contextQuery.data?.review_history ?? flag.review_history} />
+        </div>
 
-          {contextQuery.data?.teaching_policy_conflicts.length ? (
-            <Card className="gap-3 border-orange-200 bg-orange-50/40 py-5">
-              <CardHeader className="px-5"><CardTitle>教学规则冲突</CardTitle></CardHeader>
-              <CardContent className="space-y-2 px-5 text-sm">
-                {contextQuery.data.teaching_policy_conflicts.map((conflict) => <p className="rounded-lg border border-orange-100 bg-white px-3 py-2 leading-6 text-orange-900" key={conflict.code}>{conflict.detail}</p>)}
-              </CardContent>
-            </Card>
-          ) : null}
-
+        <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-20">
+          <ReviewEvidenceCard contextQuery={contextQuery} flag={flag} />
           <ReviewDecisionPanel
             courseId={courseId}
             flag={flag}
             key={flag.id}
             onCompleted={handleCompleted}
           />
-
-          <ReviewHistoryPanel history={contextQuery.data?.review_history ?? flag.review_history} />
+          <ReviewRegenerationPanel
+            courseId={courseId}
+            flag={flag}
+            key={`regenerate-${flag.id}`}
+            onChanged={() => { void flagQuery.refetch(); void queueQuery.refetch(); void contextQuery.refetch(); }}
+          />
         </aside>
       </div>
     </div>
+  );
+}
+
+function ReviewContentCard({
+  citations,
+  courseId,
+  currentVersion,
+  flag,
+  knowledgePointIds,
+}: {
+  citations: ReviewFlag["citations"];
+  courseId: string;
+  currentVersion: ReviewVersion | null;
+  flag: ReviewFlag;
+  knowledgePointIds: Set<string>;
+}) {
+  const originalVersion = flag.versions.find((version) => version.version === 1) ?? null;
+  return (
+    <Card className="gap-0 py-0">
+      <CardHeader className="border-b px-5 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <CardTitle>当前审核内容</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {flag.student_display_name} 的提问与 AI 回答版本，教师决定前不会被覆盖。
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <StatusBadge tone={reviewSeverityTone(flag.severity)}>{reviewSeverityLabel(flag.severity)}</StatusBadge>
+            <StatusBadge tone={reviewStatusTone(flag.status)}>{reviewStatusLabel(flag.status)}</StatusBadge>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-0">
+        <ReviewSection icon={MessageSquareText} label="学生问题">
+          <p className="whitespace-pre-wrap text-sm leading-7">{flag.question || "当前审核项没有保存问题文本。"}</p>
+        </ReviewSection>
+
+        <ReviewSection icon={FileText} label="AI 原回答" meta="version 1">
+          <p className="whitespace-pre-wrap text-sm leading-7">{originalVersion?.answer ?? flag.answer}</p>
+        </ReviewSection>
+
+        {currentVersion && currentVersion.version > 1 ? (
+          <ReviewSection icon={Sparkles} label="当前生成版本" meta={`version ${currentVersion.version}`} tone="current">
+            <p className="whitespace-pre-wrap text-sm leading-7">{currentVersion.answer}</p>
+            {currentVersion.instruction ? (
+              <p className="mt-3 rounded-md bg-card/80 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                修改意见：{currentVersion.instruction}
+              </p>
+            ) : null}
+          </ReviewSection>
+        ) : null}
+
+        {flag.corrected_answer ? (
+          <ReviewSection icon={Check} label="教师修改稿" tone="success">
+            <p className="whitespace-pre-wrap text-sm leading-7">{flag.corrected_answer}</p>
+          </ReviewSection>
+        ) : null}
+
+        <ReviewSection icon={BookOpenCheck} label="证据入口">
+          <div className="flex flex-wrap gap-2">
+            <Link
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+              href={`/students/${flag.student_id}/conversations/${flag.conversation_id}?from=ai-review&courseId=${courseId}&reviewId=${flag.id}&messageId=${flag.message_id}`}
+            >
+              查看完整学生对话 <ExternalLink className="size-3.5" />
+            </Link>
+            {knowledgePointIds.size ? Array.from(knowledgePointIds).map((pointId) => (
+              <Link className={buttonVariants({ variant: "outline", size: "sm" })} href={`/knowledge/points/${pointId}?from=review&courseId=${courseId}&reviewId=${flag.id}&messageId=${flag.message_id}`} key={pointId}>
+                关联知识点
+              </Link>
+            )) : <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">未关联知识点</span>}
+          </div>
+        </ReviewSection>
+
+        <ReviewSection icon={BookOpenCheck} label="引用来源">
+          {citations.length ? (
+            <div className="flex flex-wrap gap-2">
+              {citations.map((citation, index) => (
+                citation.document_id ? (
+                  <Link
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    href={buildSourceHref(citation.document_id, {
+                      from: "review",
+                      courseId,
+                      knowledgePointId: Array.from(knowledgePointIds)[0],
+                      page: citation.page_start,
+                      chunkId: citation.chunk_id ?? undefined,
+                      conversationId: flag.conversation_id,
+                      messageId: flag.message_id,
+                      reviewId: flag.id,
+                    })}
+                    key={`${citation.document_id}-${citation.page_start}-${index}`}
+                  >
+                    来源 {index + 1} · 第 {citation.page_start} 页
+                  </Link>
+                ) : null
+              ))}
+            </div>
+          ) : <p className="text-sm text-muted-foreground">当前回答没有可追溯的教材引用。</p>}
+        </ReviewSection>
+
+        <ReviewVersionsPanel currentVersion={flag.current_version} versions={flag.versions} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReviewSection({
+  children,
+  icon: Icon,
+  label,
+  meta,
+  tone = "default",
+}: {
+  children: React.ReactNode;
+  icon: typeof MessageSquareText;
+  label: string;
+  meta?: string;
+  tone?: "default" | "current" | "success";
+}) {
+  return (
+    <section className={`border-b px-5 py-5 last:border-b-0 ${tone === "current" ? "bg-blue-50/35" : tone === "success" ? "bg-emerald-50/30" : ""}`}>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className={`flex items-center gap-2 text-xs font-semibold ${tone === "current" ? "text-primary" : tone === "success" ? "text-emerald-700" : "text-muted-foreground"}`}>
+          <Icon className="size-3.5" />
+          {label}
+        </p>
+        {meta ? <span className="text-[11px] text-muted-foreground">{meta}</span> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ReviewEvidenceCard({
+  contextQuery,
+  flag,
+}: {
+  contextQuery: ReturnType<typeof useReviewContext>;
+  flag: ReviewFlag;
+}) {
+  return (
+    <Card className="gap-4 py-5">
+      <CardHeader className="px-5">
+        <CardTitle className="flex items-center gap-2"><ShieldAlert className="size-4 text-orange-500" />审核依据</CardTitle>
+        <p className="text-xs text-muted-foreground">系统信号、上下文和教师决定分开记录。</p>
+      </CardHeader>
+      <CardContent className="space-y-3 px-5 text-sm">
+        <EvidenceLine label="风险原因" value={reviewReasonLabels[flag.reason]} />
+        <EvidenceLine label="严重级别" value={reviewSeverityLabel(flag.severity)} />
+        <EvidenceLine label="当前状态" value={reviewStatusLabel(flag.status)} />
+        <EvidenceLine
+          label="近期学习证据"
+          value={
+            contextQuery.isLoading
+              ? "加载中"
+              : contextQuery.isError
+                ? "读取失败"
+                : `${contextQuery.data?.recent_learning_events.length ?? 0} 条`
+          }
+        />
+        <details className="rounded-lg border border-border bg-muted/35 px-3 py-2">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">查看关联标识</summary>
+          <div className="mt-2 flex flex-col gap-1 break-all text-[11px] text-muted-foreground">
+            <span>审核项：{flag.id}</span>
+            <span>消息：{flag.message_id}</span>
+          </div>
+        </details>
+        {contextQuery.isError ? (
+          <Button onClick={() => void contextQuery.refetch()} size="sm" type="button" variant="outline">
+            重新读取上下文
+          </Button>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -334,16 +414,15 @@ function ReviewQueueList({
   flags: ReviewFlag[];
   onFiltersChange: (patch: Partial<ReviewQueueFilters>) => void;
 }) {
+  const currentVisible = flags.some((item) => item.id === currentId);
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-4">
+    <Card className="gap-0 py-0 xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)]">
+      <CardHeader className="border-b px-4 py-4">
         <CardTitle>审核队列</CardTitle>
         <p className="text-xs text-muted-foreground">当前筛选 {flags.length} 条</p>
       </CardHeader>
-      <CardContent className="space-y-3 px-4">
-        <div className="relative">
-          <Input className="pl-3" onChange={(event) => onFiltersChange({ search: event.target.value })} placeholder="搜索队列..." value={filters.search} />
-        </div>
+      <CardContent className="flex min-h-0 flex-col gap-3 p-4">
+        <Input onChange={(event) => onFiltersChange({ search: event.target.value })} placeholder="搜索队列..." value={filters.search} />
         <Select
           items={[
             { value: "all", label: "全部状态" },
@@ -370,7 +449,12 @@ function ReviewQueueList({
             <SelectItem value="dismissed">已忽略</SelectItem>
           </SelectGroup></SelectContent>
         </Select>
-        <div className="space-y-2">
+        {!currentVisible ? (
+          <p className="rounded-md bg-muted px-3 py-2 text-xs leading-5 text-muted-foreground">
+            当前审核项已移出这个筛选结果，完成后会自动进入下一条匹配记录。
+          </p>
+        ) : null}
+        <div className="flex max-h-[calc(100vh-19rem)] flex-col gap-2 overflow-y-auto pr-0.5">
           {flags.map((item) => (
             <Link
               className={`block rounded-lg border-2 px-3 py-3 transition-colors ${item.id === currentId ? "border-blue-200 bg-blue-50" : "border-border hover:bg-muted/45"}`}
@@ -422,8 +506,14 @@ function ReviewDecisionPanel({
       <CardHeader className="px-5"><CardTitle>教师审核决定</CardTitle><p className="text-xs text-muted-foreground">决定会写入真实审核接口并保留原回答。</p></CardHeader>
       <CardContent className="space-y-3 px-5">
         {isGenerating ? <p className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">当前回答正在重新生成，完成后会进入待再次审核。</p> : null}
-        <Textarea onChange={(event) => setNote(event.target.value)} placeholder="审核备注或修改意见..." value={note} />
-        <Textarea onChange={(event) => setCorrectedAnswer(event.target.value)} placeholder="标记错误时填写修改稿（可选）..." value={correctedAnswer} />
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-muted-foreground">审核备注</span>
+          <Textarea onChange={(event) => setNote(event.target.value)} placeholder="填写判断依据或后续处理说明..." value={note} />
+        </label>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-medium text-muted-foreground">教师修改稿</span>
+          <Textarea onChange={(event) => setCorrectedAnswer(event.target.value)} placeholder="标记错误时填写修改稿（可选）..." value={correctedAnswer} />
+        </label>
         <div className="grid gap-2">
           <Button disabled={decisionMutation.isPending || isGenerating} onClick={() => void handleDecision("confirm_correct")} type="button">
             <Check data-icon="inline-start" />确认回答正确
@@ -479,7 +569,7 @@ function ReviewVersionsPanel({
 function ReviewHistoryPanel({ history }: { history: ReviewFlag["review_history"] }) {
   return (
     <Card className="gap-3 py-5">
-      <CardHeader className="px-5"><CardTitle>审核历史</CardTitle><p className="text-xs text-muted-foreground">来自后端持久化记录。</p></CardHeader>
+      <CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><History className="size-4 text-muted-foreground" />审核历史</CardTitle><p className="text-xs text-muted-foreground">来自后端持久化记录。</p></CardHeader>
       <CardContent className="space-y-3 px-5">
         {history.length ? history.map((entry) => (
           <div className="rounded-lg border-2 border-border px-3 py-3" key={entry.id}>
@@ -526,10 +616,10 @@ function ReviewRegenerationPanel({
   }
 
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5"><CardTitle>重新生成回答</CardTitle><p className="text-xs text-muted-foreground">生成新版本并进入待再次审核，不覆盖原回答。</p></CardHeader>
+    <Card className="gap-3 border-dashed bg-muted/15 py-5">
+      <CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><RefreshCw className="size-4 text-muted-foreground" />需要重新生成</CardTitle><p className="text-xs text-muted-foreground">生成新版本并进入待再次审核，不覆盖原回答。</p></CardHeader>
       <CardContent className="space-y-3 px-5">
-        <Textarea onChange={(event) => setInstruction(event.target.value)} placeholder="重新生成要求，例如：更简洁/补充教材依据..." value={instruction} />
+        <Textarea onChange={(event) => setInstruction(event.target.value)} placeholder="填写修改要求，例如：更简洁、补充教材依据..." value={instruction} />
         {isGenerating ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -543,7 +633,9 @@ function ReviewRegenerationPanel({
           disabled={isGenerating || !instruction.trim()}
           onClick={() => void handleRegeneration()}
           type="button"
+          variant="outline"
         >
+
           <RefreshCw data-icon="inline-start" />
           {isGenerating ? "重新生成中" : generationError ? "重试重新生成" : "重新生成回答"}
         </Button>

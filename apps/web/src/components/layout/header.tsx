@@ -45,8 +45,8 @@ export function Header() {
           onValueChange={(value) => value && setSelectedCourseId(value)}
           value={selectedCourseId ?? null}
         >
-          <SelectTrigger className="w-[220px] border-0 bg-transparent px-1 text-base font-semibold shadow-none">
-            <SelectValue placeholder="选择课程" />
+          <SelectTrigger className="w-[min(280px,42vw)] border-0 bg-transparent px-1 text-base font-semibold shadow-none sm:w-[260px]" title={selectedCourse?.name}>
+            <SelectValue className="truncate" placeholder="选择课程" />
           </SelectTrigger>
           <SelectContent align="start">
             {courses.map((course) => (
