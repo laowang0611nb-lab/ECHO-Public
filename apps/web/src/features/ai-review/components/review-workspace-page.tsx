@@ -541,14 +541,14 @@ function ReviewVersionsPanel({
   if (!versions.length) return null;
   const labels = { original: "原始回答", regenerated: "AI 重新生成", teacher: "教师修改稿" } as const;
   return (
-    <section className="border-t border-border pt-4">
+    <section className="border-t border-border px-5 py-5">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-semibold text-muted-foreground">回答版本</p>
         <span className="text-[11px] text-muted-foreground">共 {versions.length} 个版本</span>
       </div>
-      <div className="mt-3 space-y-2">
+      <div className="mt-4 space-y-3">
         {versions.map((version) => (
-          <details className="rounded-lg border-2 border-border bg-muted/20 px-4 py-3" key={version.version}>
+          <details className="rounded-lg border-2 border-border bg-muted/20 px-4 py-3.5" key={version.version}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
               <span className="flex items-center gap-2 text-sm font-medium">
                 version {version.version}

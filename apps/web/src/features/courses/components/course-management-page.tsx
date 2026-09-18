@@ -105,16 +105,18 @@ export function CourseManagementPage() {
         </motion.div>
       ) : (
         <>
-          <motion.section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" variants={itemVariants}>
-            <StatCard icon={BookOpen} label="我的课程" supporting="当前账号可管理课程" value={items.length} />
-            <StatCard icon={ClipboardList} label="选课学生" supporting="课程成员去重前总量" value={summary.studentCount} />
-            <StatCard
-              icon={CalendarDays}
-              label="平均掌握度"
-              suffix="%"
-              supporting="有状态知识点的平均分"
-              value={summary.averageMastery}
-            />
+          <motion.section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]" variants={itemVariants}>
+            <div className="grid gap-4 md:grid-cols-3">
+              <StatCard icon={BookOpen} label="我的课程" supporting="当前账号可管理课程" value={items.length} />
+              <StatCard icon={ClipboardList} label="选课学生" supporting="课程成员去重前总量" value={summary.studentCount} />
+              <StatCard
+                icon={CalendarDays}
+                label="平均掌握度"
+                suffix="%"
+                supporting="有状态知识点的平均分"
+                value={summary.averageMastery}
+              />
+            </div>
             <StatCard
               icon={Settings}
               label="待关注课程"

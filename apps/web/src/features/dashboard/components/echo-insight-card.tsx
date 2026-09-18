@@ -17,7 +17,7 @@ export function EchoInsightCard({
   const tone = insight.risk_level === "high" ? "danger" : insight.risk_level === "medium" ? "warning" : "success";
 
   return (
-    <Card className="gap-4 border-blue-100 bg-blue-50/35 py-5">
+    <Card className="gap-4 border-blue-300/80 bg-blue-50/45 py-5 shadow-[0_1px_3px_rgba(47,124,246,0.12)]">
       <CardHeader className="px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-primary">

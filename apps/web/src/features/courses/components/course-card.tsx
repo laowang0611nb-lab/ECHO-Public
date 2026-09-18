@@ -50,6 +50,7 @@ export function CourseCard({
       </div>
 
       <CardContent className="space-y-4 px-4 py-4">
+        <Link className="block space-y-4" href={`/courses/${course.id}`}>
         <div>
           <h3 className="truncate text-base font-semibold">{course.name}</h3>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -81,6 +82,7 @@ export function CourseCard({
           />
           <p className="mt-2 text-[11px] text-muted-foreground">教学进度暂缺独立接口，当前显示真实掌握度基准。</p>
         </div>
+        </Link>
 
         <div className="flex items-center justify-between gap-2 pt-1">
           <Link className={buttonVariants({ size: "sm" })} href={`/courses/${course.id}`}>

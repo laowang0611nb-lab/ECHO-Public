@@ -38,11 +38,6 @@ export function LearningTrendCard({
           <span className="rounded-md border border-border bg-muted/45 px-2 py-1 text-xs text-muted-foreground">{range}</span>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {metric !== "mastery" && currentMastery !== null ? (
-            <span className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-              当前综合掌握度 {Math.round(currentMastery)}%
-            </span>
-          ) : null}
           <Tabs onValueChange={(value) => setMetric(value as TrendMetric)} value={metric}>
             <TabsList className="border border-border bg-muted/60">
               <TabsTrigger value="mastery">综合掌握度</TabsTrigger>
@@ -50,6 +45,11 @@ export function LearningTrendCard({
               <TabsTrigger value="active">活跃学生</TabsTrigger>
             </TabsList>
           </Tabs>
+          {metric !== "mastery" && currentMastery !== null ? (
+            <span className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+              当前综合掌握度 {Math.round(currentMastery)}%
+            </span>
+          ) : null}
         </div>
       </CardHeader>
       <CardContent className="px-2 pb-4 sm:px-5">
