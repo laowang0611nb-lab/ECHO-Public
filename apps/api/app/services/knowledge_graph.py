@@ -172,7 +172,7 @@ async def get_knowledge_graph(
         nodes[document.id] = KnowledgeGraphNode(
             id=document.id,
             type="resource",
-            label=document.original_name,
+            label=document.display_name or document.original_name,
             parent_id=course.id,
             metadata={
                 "resource_type": document.resource_type.value,

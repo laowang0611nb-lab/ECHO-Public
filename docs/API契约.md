@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.89`
+> 冻结版本：`v0.0.91`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
@@ -28,9 +28,15 @@
 | POST | `/demo/reset` | 教师 | 重建隔离 Demo 数据集，不触碰真实课程 |
 | POST | `/auth/login` | 公开 | 创建或恢复开发用户 |
 | GET | `/auth/me` | 已登录 | 当前用户 |
+| GET | `/auth/me/profile` | 教师 | 当前教师完整可公开资料 |
+| PATCH | `/auth/me/profile` | 教师 | 更新当前教师资料，不允许修改角色和权限 |
+| POST | `/auth/change-password` | 已登录 | 验证当前密码、更新 Argon2id Hash 并撤销旧 Refresh Session |
 | POST | `/courses` | 教师 | 创建课程并自动成为教师成员 |
 | GET | `/courses` | 已登录 | 当前用户加入的课程 |
 | GET | `/courses/{course_id}` | 课程成员 | 课程详情 |
+| PATCH | `/courses/{course_id}` | 课程教师 | 更新课程基础信息 |
+| POST | `/courses/{course_id}/archive` | 课程教师 | 归档课程并保留历史数据 |
+| POST | `/courses/{course_id}/restore` | 课程教师 | 从归档恢复为草稿 |
 | POST | `/courses/join` | 学生 | 课程码加入已发布课程 |
 | POST | `/courses/{course_id}/publish` | 课程教师 | 发布课程 |
 | GET | `/courses/{course_id}/members` | 课程教师 | 查看含邮箱的成员列表 |
@@ -41,6 +47,7 @@
 |---|---|---|---|
 | POST | `/courses/{course_id}/documents` | 课程教师 | 上传 PDF |
 | GET | `/courses/{course_id}/documents` | 课程教师 | 查询教材列表和解析状态 |
+| PATCH | `/courses/{course_id}/documents/{document_id}/metadata` | 课程教师 | 更新资源展示名、摘要、关键词和出版元数据，不触发重新解析 |
 | POST | `/documents/{document_id}/parse` | 课程教师 | 解析 PDF 页文本 |
 | POST | `/documents/{document_id}/generate-structure` | 课程教师 | 生成并替换章节结构 |
 | GET | `/courses/{course_id}/chapters` | 课程成员 | 查询章节与知识点 |
@@ -527,7 +534,32 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 
 效果响应包含 `metrics`、`task_effectiveness`、`remaining_issues`、`facts`、`ai_explanation` 和 `insufficient_evidence`。`facts` 只描述观察到的变化，不使用因果断言；样本不足时 `insufficient_evidence=true`。
 
-## 10. 接口冻结规则
+## 10. 教师端 P1 编辑契约
+
+### 10.1 Course
+
+`Course` 新增可选字段 `course_type`、`target_audience`、`expected_student_count` 和只读 `archived_at`。现有 `term` 作为学期字段，请求和响应同时兼容 `semester` 别名。
+
+课程状态扩展为 `draft`、`published`、`archived`。归档不物理删除课程、成员、资源、对话或 LearningEvent；归档课程不可发布或通过课程码加入，恢复后回到 `draft`。
+
+### 10.2 Teacher Profile 与 Password
+
+教师资料响应包含 `id`、`email`、`display_name`、`role`、`school_name`、`department`、`employee_no`、`title`、`teaching_fields` 和时间字段。请求可使用 `teacher_no` 作为 `employee_no` 别名；`teaching_fields` 使用字符串数组并去重。
+
+修改密码请求为 `current_password` 和 `new_password`。新密码至少 8 位且同时包含字母和数字；成功后更新 `password_changed_at`，重置失败计数并撤销该用户未撤销的旧 Refresh Session。开发身份头本身不提供正式密码登录，密码哈希验证由认证服务保留给后续正式登录接口。
+
+### 10.3 Resource Metadata
+
+资源元数据字段包括 `display_name`（兼容请求别名 `title`）、`summary`、`keywords`、`author`、`publisher` 和 `copyright`。PATCH 只更新元数据，不改变原文件、`storage_key`、页面、Chunk、Embedding、Citation 或解析状态。
+
+### 10.4 保留的 P2
+
+- 资源文件替换、课程 Deep Copy、教学日历、服务器 CPU/RAM/Disk/Network/日志监控。
+- 独立计划任务 POST 与拖拽排序；现有任务编辑仍使用 `PATCH /plan-tasks/{task_id}`。
+- 独立 Suggestion 实体和 `ignored` flag；策略忽略继续使用 `TeachingStrategyStatus.dismissed`。
+- 会话级 LearningEvent 的 `reviewId` 筛选；Conversation/Message 已有持久化关联，后续单独扩展筛选契约。
+
+## 11. 接口冻结规则
 
 - 已登记的方法、路径和枚举值视为稳定契约。
 - 新功能只能新增可选字段、新枚举值或新路径。

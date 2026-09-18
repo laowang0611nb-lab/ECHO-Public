@@ -7,17 +7,19 @@ from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DBSession, DocumentStorageDep
 from app.core.config import settings
-from app.schemas.document import DocumentResponse
+from app.schemas.document import DocumentMetadataUpdate, DocumentResponse
 from app.services.course import CourseNotFoundError
 from app.services.document import (
     DocumentFileMissingError,
     DocumentListForbiddenError,
+    DocumentMetadataForbiddenError,
     DocumentNotFoundError,
     DocumentParseError,
     DocumentParseForbiddenError,
     DocumentUploadForbiddenError,
     list_course_documents,
     parse_document,
+    update_document_metadata,
     upload_course_document,
 )
 from app.services.storage import DocumentTooLargeError, UnsupportedDocumentTypeError
@@ -87,6 +89,37 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="Document exceeds the configured upload limit",
+        ) from exc
+
+
+@router.patch(
+    "/courses/{course_id}/documents/{document_id}/metadata",
+    response_model=DocumentResponse,
+)
+async def patch_course_document_metadata(
+    course_id: UUID,
+    document_id: UUID,
+    payload: DocumentMetadataUpdate,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> Document:
+    try:
+        return await update_document_metadata(
+            session,
+            course_id,
+            document_id,
+            current_user.id,
+            payload,
+        )
+    except DocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        ) from exc
+    except DocumentMetadataForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can update resource metadata",
         ) from exc
 
 

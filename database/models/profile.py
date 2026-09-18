@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.db.base_class import Base
@@ -13,6 +13,12 @@ if TYPE_CHECKING:
 
 class TeacherProfile(Base):
     __tablename__ = "teacher_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "employee_no",
+            name="uq_teacher_profiles_employee_no",
+        ),
+    )
 
     user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -23,6 +29,9 @@ class TeacherProfile(Base):
     department: Mapped[str | None] = mapped_column(String(200))
     employee_no: Mapped[str | None] = mapped_column(String(100))
     title: Mapped[str | None] = mapped_column(String(100))
+    teaching_fields: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default="[]", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

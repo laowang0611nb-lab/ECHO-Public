@@ -78,7 +78,7 @@ async def resolve_resource_references(
     for document in documents:
         references[document.id] = ResourceReference(
             id=document.id,
-            title=document.original_name,
+            title=document.display_name or document.original_name,
             resource_type=document.resource_type.value,
         )
 

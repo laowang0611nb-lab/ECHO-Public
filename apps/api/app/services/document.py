@@ -11,6 +11,7 @@ from pypdf import PdfReader
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.schemas.document import DocumentMetadataUpdate
 from app.services.course import CourseNotFoundError
 from app.services.storage import LocalDocumentStorage, UnsupportedDocumentTypeError
 
@@ -38,6 +39,10 @@ class DocumentFileMissingError(Exception):
 
 
 class DocumentParseError(Exception):
+    pass
+
+
+class DocumentMetadataForbiddenError(Exception):
     pass
 
 
@@ -82,6 +87,7 @@ async def upload_course_document(
         course_id=course_id,
         uploaded_by=uploader.id,
         original_name=original_name,
+        display_name=original_name,
         storage_key=storage_key,
         content_type="application/pdf",
         size_bytes=size_bytes,
@@ -133,6 +139,49 @@ def _extract_pdf_pages(path: Path) -> list[tuple[str, int | None, int | None]]:
         height = round(float(page.mediabox.height)) if page.mediabox.height else None
         pages.append((page.extract_text() or "", width, height))
     return pages
+
+
+async def update_document_metadata(
+    session: AsyncSession,
+    course_id: UUID,
+    document_id: UUID,
+    requester_id: UUID,
+    payload: DocumentMetadataUpdate,
+) -> Document:
+    document = await session.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.course_id == course_id,
+            Document.trashed_at.is_(None),
+        )
+    )
+    if document is None:
+        raise DocumentNotFoundError
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == requester_id,
+        )
+    )
+    if membership is None or membership.role != UserRole.TEACHER:
+        raise DocumentMetadataForbiddenError
+
+    for field in (
+        "display_name",
+        "summary",
+        "keywords",
+        "author",
+        "publisher",
+        "copyright",
+    ):
+        if field in payload.model_fields_set:
+            value = getattr(payload, field)
+            if field == "keywords" and value is None:
+                value = []
+            setattr(document, field, value)
+    await session.commit()
+    await session.refresh(document)
+    return document
 
 
 async def parse_document(

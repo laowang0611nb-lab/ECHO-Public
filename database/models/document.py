@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     CheckConstraint,
     DateTime,
@@ -99,6 +100,14 @@ class Document(Base):
         server_default=ResourceType.TEXTBOOK.value,
         nullable=False,
     )
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    summary: Mapped[str | None] = mapped_column(Text)
+    keywords: Mapped[list[str]] = mapped_column(
+        JSON, default=list, server_default="[]", nullable=False
+    )
+    author: Mapped[str | None] = mapped_column(String(255))
+    publisher: Mapped[str | None] = mapped_column(String(255))
+    copyright: Mapped[str | None] = mapped_column(String(255))
     trashed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

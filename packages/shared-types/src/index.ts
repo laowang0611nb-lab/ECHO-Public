@@ -2,7 +2,7 @@ export type UserRole = "teacher" | "student";
 
 export type MessageRole = "user" | "assistant" | "system";
 
-export type CourseStatus = "draft" | "published";
+export type CourseStatus = "draft" | "published" | "archived";
 
 export type ChatStreamEventName =
   | "text_delta"
@@ -123,6 +123,40 @@ export interface User {
   updated_at: string;
 }
 
+export interface TeacherProfile {
+  id: string;
+  email: string;
+  display_name: string;
+  role: "teacher";
+  school_name: string | null;
+  department: string | null;
+  employee_no: string | null;
+  title: string | null;
+  teaching_fields: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeacherProfileUpdateRequest {
+  display_name?: string;
+  school_name?: string | null;
+  department?: string | null;
+  employee_no?: string | null;
+  teacher_no?: string | null;
+  title?: string | null;
+  teaching_fields?: string[] | null;
+}
+
+export interface PasswordChangeRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface PasswordChangeResponse {
+  changed_at: string;
+  sessions_revoked: number;
+}
+
 export interface DevelopmentLoginRequest {
   email: string;
   display_name: string;
@@ -134,9 +168,14 @@ export interface Course {
   name: string;
   description: string | null;
   term: string | null;
+  semester: string | null;
+  course_type: string | null;
+  target_audience: string | null;
+  expected_student_count: number | null;
   status: CourseStatus;
   code: string;
   created_by: string;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -145,8 +184,21 @@ export interface CourseCreateRequest {
   name: string;
   description?: string;
   term?: string;
+  semester?: string;
+  course_type?: string;
+  target_audience?: string;
+  expected_student_count?: number;
 }
 
+export interface CourseUpdateRequest {
+  name?: string;
+  description?: string | null;
+  term?: string | null;
+  semester?: string | null;
+  course_type?: string | null;
+  target_audience?: string | null;
+  expected_student_count?: number | null;
+}
 export interface CourseMember {
   id: string;
   course_id: string;
@@ -172,6 +224,12 @@ export interface CourseDocument {
   course_id: string;
   uploaded_by: string;
   original_name: string;
+  display_name: string | null;
+  summary: string | null;
+  keywords: string[];
+  author: string | null;
+  publisher: string | null;
+  copyright: string | null;
   content_type: string;
   size_bytes: number;
   status: DocumentStatus;
@@ -180,6 +238,16 @@ export interface CourseDocument {
   trashed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface DocumentMetadataUpdateRequest {
+  display_name?: string | null;
+  title?: string | null;
+  summary?: string | null;
+  keywords?: string[] | null;
+  author?: string | null;
+  publisher?: string | null;
+  copyright?: string | null;
 }
 
 export interface NativeFileUpload {

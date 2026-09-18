@@ -28,10 +28,17 @@ if TYPE_CHECKING:
 class CourseStatus(StrEnum):
     DRAFT = "draft"
     PUBLISHED = "published"
+    ARCHIVED = "archived"
 
 
 class Course(Base):
     __tablename__ = "courses"
+    __table_args__ = (
+        CheckConstraint(
+            "expected_student_count IS NULL OR expected_student_count > 0",
+            name="ck_courses_expected_student_count_positive",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid4
@@ -39,6 +46,10 @@ class Course(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     term: Mapped[str | None] = mapped_column(String(80))
+    course_type: Mapped[str | None] = mapped_column(String(80))
+    target_audience: Mapped[str | None] = mapped_column(String(200))
+    expected_student_count: Mapped[int | None] = mapped_column(Integer)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[CourseStatus] = mapped_column(
         Enum(
             CourseStatus,
@@ -82,6 +93,10 @@ class Course(Base):
         back_populates="course",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def semester(self) -> str | None:
+        return self.term
 
 
 class CourseMember(Base):

@@ -3,8 +3,25 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DBSession
 from app.core.config import settings
-from app.schemas.auth import LoginRequest, UserResponse
-from app.services.auth import UserRoleConflictError, get_or_register_user
+from app.schemas.auth import (
+    LoginRequest,
+    PasswordChangeRequest,
+    PasswordChangeResponse,
+    TeacherProfileResponse,
+    TeacherProfileUpdate,
+    UserResponse,
+)
+from app.services.auth import (
+    CurrentPasswordInvalidError,
+    PasswordNotConfiguredError,
+    TeacherProfileConflictError,
+    TeacherProfileForbiddenError,
+    UserRoleConflictError,
+    change_password,
+    get_or_register_user,
+    get_teacher_profile,
+    update_teacher_profile,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -22,6 +39,57 @@ async def login(payload: LoginRequest, session: DBSession) -> User:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
+        ) from exc
+
+
+@router.get("/me/profile", response_model=TeacherProfileResponse)
+async def get_profile(current_user: CurrentUser, session: DBSession) -> TeacherProfileResponse:
+    try:
+        return await get_teacher_profile(session, current_user)
+    except TeacherProfileForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only teachers can update teacher profiles",
+        ) from exc
+
+
+@router.patch("/me/profile", response_model=TeacherProfileResponse)
+async def patch_profile(
+    payload: TeacherProfileUpdate,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> TeacherProfileResponse:
+    try:
+        return await update_teacher_profile(session, current_user, payload)
+    except TeacherProfileForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only teachers can update teacher profiles",
+        ) from exc
+    except TeacherProfileConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Teacher profile conflicts with existing data",
+        ) from exc
+
+
+@router.post("/change-password", response_model=PasswordChangeResponse)
+async def change_current_password(
+    payload: PasswordChangeRequest,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> PasswordChangeResponse:
+    try:
+        return await change_password(session, current_user.id, payload)
+    except PasswordNotConfiguredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Password credentials are not configured for this account",
+        ) from exc
+    except CurrentPasswordInvalidError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is invalid",
         ) from exc
 
 

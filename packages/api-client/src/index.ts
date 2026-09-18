@@ -11,14 +11,20 @@ import type {
   Course,
   CourseCreateRequest,
   CourseDashboard,
+  CourseUpdateRequest,
   CourseDocument,
   CourseMember,
+  DocumentMetadataUpdateRequest,
   DevelopmentLoginRequest,
   DemoDatasetStatus,
   DocumentCitationPage,
   DocumentIndexStatus,
   DocumentPageEvidence,
   DocumentUploadSource,
+  PasswordChangeRequest,
+  PasswordChangeResponse,
+  TeacherProfile,
+  TeacherProfileUpdateRequest,
   ExecutionPlanAction,
   ExecutionPlanCreateRequest,
   ExecutionPlanDetail,
@@ -253,6 +259,23 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
         body: JSON.stringify(payload),
       }),
     me: (userId: string) => request<User>("/api/v1/auth/me", undefined, userId),
+    getTeacherProfile: (userId: string) =>
+      request<TeacherProfile>("/api/v1/auth/me/profile", undefined, userId),
+    updateTeacherProfile: (
+      userId: string,
+      payload: TeacherProfileUpdateRequest,
+    ) =>
+      request<TeacherProfile>(
+        "/api/v1/auth/me/profile",
+        { method: "PATCH", body: JSON.stringify(payload) },
+        userId,
+      ),
+    changePassword: (userId: string, payload: PasswordChangeRequest) =>
+      request<PasswordChangeResponse>(
+        "/api/v1/auth/change-password",
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
     listCourses: (userId: string) => request<Course[]>("/api/v1/courses", undefined, userId),
     joinCourse: (userId: string, code: string) =>
       request<Course>(
@@ -270,6 +293,24 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
           method: "POST",
           body: JSON.stringify(payload),
         },
+        userId,
+      ),
+    updateCourse: (userId: string, courseId: string, payload: CourseUpdateRequest) =>
+      request<Course>(
+        `/api/v1/courses/${courseId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+        userId,
+      ),
+    archiveCourse: (userId: string, courseId: string) =>
+      request<Course>(
+        `/api/v1/courses/${courseId}/archive`,
+        { method: "POST" },
+        userId,
+      ),
+    restoreCourse: (userId: string, courseId: string) =>
+      request<Course>(
+        `/api/v1/courses/${courseId}/restore`,
+        { method: "POST" },
         userId,
       ),
     publishCourse: (userId: string, courseId: string) =>
@@ -305,6 +346,17 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
           method: "POST",
           body: createDocumentFormData(file, fileName),
         },
+        userId,
+      ),
+    updateDocumentMetadata: (
+      userId: string,
+      courseId: string,
+      documentId: string,
+      payload: DocumentMetadataUpdateRequest,
+    ) =>
+      request<CourseDocument>(
+        `/api/v1/courses/${courseId}/documents/${documentId}/metadata`,
+        { method: "PATCH", body: JSON.stringify(payload) },
         userId,
       ),
     parseCourseDocument: (userId: string, documentId: string) =>

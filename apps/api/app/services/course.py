@@ -1,5 +1,6 @@
 import secrets
 import string
+from datetime import UTC, datetime
 from uuid import UUID
 
 from database.models.course import Course, CourseMember, CourseStatus
@@ -8,7 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.course import CourseCreate, CourseJoinRequest, CourseMemberResponse
+from app.schemas.course import (
+    CourseCreate,
+    CourseJoinRequest,
+    CourseMemberResponse,
+    CourseUpdate,
+)
 
 COURSE_CODE_LENGTH = 8
 COURSE_CODE_ALPHABET = string.ascii_uppercase + string.digits
@@ -42,6 +48,18 @@ class CourseMemberListForbiddenError(Exception):
     pass
 
 
+class CourseUpdateForbiddenError(Exception):
+    pass
+
+
+class CourseArchiveForbiddenError(Exception):
+    pass
+
+
+class CourseLifecycleConflictError(Exception):
+    pass
+
+
 def generate_course_code() -> str:
     return "".join(secrets.choice(COURSE_CODE_ALPHABET) for _ in range(COURSE_CODE_LENGTH))
 
@@ -63,6 +81,9 @@ async def create_course(session: AsyncSession, creator: User, payload: CourseCre
         name=payload.name,
         description=payload.description,
         term=payload.term,
+        course_type=payload.course_type,
+        target_audience=payload.target_audience,
+        expected_student_count=payload.expected_student_count,
         code=await _generate_unique_course_code(session),
         created_by=creator.id,
     )
@@ -76,6 +97,91 @@ async def create_course(session: AsyncSession, creator: User, payload: CourseCre
             role=UserRole.TEACHER,
         )
     )
+    await session.commit()
+    await session.refresh(course)
+    return course
+
+
+async def update_course(
+    session: AsyncSession,
+    course_id: UUID,
+    user_id: UUID,
+    payload: CourseUpdate,
+) -> Course:
+    course = await session.get(Course, course_id)
+    if course is None:
+        raise CourseNotFoundError
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == user_id,
+            CourseMember.role == UserRole.TEACHER,
+        )
+    )
+    if membership is None:
+        raise CourseUpdateForbiddenError
+
+    for field in (
+        "name",
+        "description",
+        "term",
+        "course_type",
+        "target_audience",
+        "expected_student_count",
+    ):
+        if field in payload.model_fields_set:
+            setattr(course, field, getattr(payload, field))
+    await session.commit()
+    await session.refresh(course)
+    return course
+
+
+async def archive_course(
+    session: AsyncSession,
+    course_id: UUID,
+    user_id: UUID,
+) -> Course:
+    course = await session.get(Course, course_id)
+    if course is None:
+        raise CourseNotFoundError
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == user_id,
+            CourseMember.role == UserRole.TEACHER,
+        )
+    )
+    if membership is None:
+        raise CourseArchiveForbiddenError
+    if course.status != CourseStatus.ARCHIVED:
+        course.status = CourseStatus.ARCHIVED
+        course.archived_at = datetime.now(UTC)
+        await session.commit()
+        await session.refresh(course)
+    return course
+
+
+async def restore_course(
+    session: AsyncSession,
+    course_id: UUID,
+    user_id: UUID,
+) -> Course:
+    course = await session.get(Course, course_id)
+    if course is None:
+        raise CourseNotFoundError
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.user_id == user_id,
+            CourseMember.role == UserRole.TEACHER,
+        )
+    )
+    if membership is None:
+        raise CourseArchiveForbiddenError
+    if course.status != CourseStatus.ARCHIVED:
+        raise CourseLifecycleConflictError("Only archived courses can be restored")
+    course.status = CourseStatus.DRAFT
+    course.archived_at = None
     await session.commit()
     await session.refresh(course)
     return course
@@ -213,6 +319,8 @@ async def publish_course(session: AsyncSession, course_id: UUID, user_id: UUID) 
     if membership is None or membership.role != UserRole.TEACHER:
         raise CoursePublishForbiddenError
 
+    if course.status == CourseStatus.ARCHIVED:
+        raise CourseLifecycleConflictError("Archived courses cannot be published")
     if course.status != CourseStatus.PUBLISHED:
         course.status = CourseStatus.PUBLISHED
         await session.commit()

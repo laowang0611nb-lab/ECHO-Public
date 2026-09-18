@@ -103,7 +103,7 @@ async def _course_resource_items(
             id=document.id,
             course_id=course_id,
             item_type="document",
-            title=document.original_name,
+            title=document.display_name or document.original_name,
             resource_type=document.resource_type,
             trashed_at=document.trashed_at,
             created_at=document.created_at,
