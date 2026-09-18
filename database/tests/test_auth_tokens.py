@@ -3,6 +3,7 @@ from uuid import uuid4
 
 import jwt
 import pytest
+from pydantic import ValidationError
 
 from database.auth.password import hash_password, verify_password
 from database.auth.tokens import (
@@ -11,6 +12,7 @@ from database.auth.tokens import (
     decode_access_token,
     hash_refresh_token,
 )
+from database.config import DEFAULT_AUTH_SECRET, DatabaseSettings
 
 
 def test_access_token_contains_minimal_identity_claims() -> None:
@@ -57,3 +59,17 @@ def test_password_hash_preserves_password_content() -> None:
 
     with pytest.raises(ValueError):
         hash_password("   ")
+
+
+def test_production_rejects_default_auth_secret() -> None:
+    with pytest.raises(ValidationError):
+        DatabaseSettings(
+            environment="production",
+            auth_secret_key=DEFAULT_AUTH_SECRET,
+        )
+
+    settings = DatabaseSettings(
+        environment="production",
+        auth_secret_key="production-secret-with-sufficient-entropy",
+    )
+    assert settings.environment == "production"

@@ -12,7 +12,14 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
-.\.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --reload
+```
+
+The SQLAlchemy models and Alembic migrations live in the repository-level
+`database/` package. Run subsequent backend commands from the repository root:
+
+```powershell
+cd ..\..
+apps\api\.venv\Scripts\python -m uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --reload
 ```
 
 `0.0.0.0` allows Android devices connected to the computer hotspot to reach
@@ -26,9 +33,10 @@ GET http://127.0.0.1:8000/api/v1/health
 
 ## Temporary development authentication
 
-Authentication is intentionally limited to identity bootstrap and development
-lookup. It does not implement passwords, JWT, sessions, or production access
-control.
+The HTTP authentication routes are still intentionally limited to identity
+bootstrap and development lookup. The repository-level `database/` package
+now contains the password, JWT, refresh-session, and profile data foundation,
+but those services are not yet exposed as production HTTP login endpoints.
 
 ```text
 POST /api/v1/auth/login
@@ -109,6 +117,8 @@ the configured context limit are processed by a segmented extraction and
 recursive merge workflow. The default input budget is 70% of the model's
 1,000,000-token context window (`700,000` tokens). A `422` is reserved for an
 irreducible single segment that still exceeds the budget.
+Adjacent extraction batches keep a configurable token overlap, and every LLM
+request sets an explicit `max_tokens` output limit.
 
 ## Knowledge chunks
 
@@ -210,28 +220,36 @@ contracts are frozen in `docs/API契约.md`.
 Seed repeatable teacher student analytics demo data:
 
 ```powershell
-python -m app.scripts.seed_teacher_student_analytics
+python -m database.seeds.seed_teacher_student_analytics
 ```
 
-The seed script writes the full ID manifest to
+Run from the repository root so the `database` package is importable. The seed
+script writes the full ID manifest to
 `tmp/teacher_student_analytics_seed.json`.
 
 Tests and lint:
 
+From the repository root:
+
 ```powershell
-.\.venv\Scripts\python -m pytest
-.\.venv\Scripts\python -m ruff check .
+apps\api\.venv\Scripts\python -m pytest apps/api/tests
+apps\api\.venv\Scripts\python -m ruff check apps/api/app apps/api/tests database
 ```
 
 Database migrations:
 
+From the repository root:
+
 ```powershell
-.\.venv\Scripts\alembic.exe upgrade head
+apps\api\.venv\Scripts\python -m alembic -c database/alembic.ini upgrade head
 ```
 
 Implemented domain models:
 
 - `User`: identity and teacher/student role.
+- `UserCredential`: one-to-one Argon2id password credential.
+- `AuthSession`: refresh-token hash, device metadata, expiry, and revocation.
+- `TeacherProfile` and `StudentProfile`: optional one-to-one user profiles.
 - `Course`: course metadata, join code, draft/published status.
 - `CourseMember`: course membership and role.
 - `CourseInvite`: invite lifecycle, usage limit, and expiry metadata.
@@ -262,6 +280,9 @@ Migrations:
 - `b7c8d9e0f1a2`: learning events, knowledge state, and mastery snapshots.
 - `c8d9e0f1a2b3`: AI answer review flags and teacher decisions.
 - `d9e0f1a2b3c4`: original citation index persisted on message citations.
+- `e1a2b3c4d5e6`: user account status, username, avatar, and last login fields.
+- `f2b3c4d5e6f7`: password credentials and refresh-token sessions.
+- `a3c4d5e6f7a8`: optional teacher and student profiles.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

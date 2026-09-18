@@ -1,8 +1,9 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.65`
+> 冻结版本：`v0.0.74`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
+> 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
 
 ## 1. 通用约定
 
@@ -56,8 +57,10 @@
 - `qwen3.8-flash` 的上下文窗口按 `1,000,000 Token` 配置。
 - 单次输入安全预算为上下文的 `0.7`，即 `700,000 Token`，其余预算留给系统提示词、输出和安全余量。
 - 请求超过安全预算时，服务按页码分段抽取，再递归合并章节与知识点；不会静默截断。
+- 相邻提取批次默认保留 `2,000 Token` 重叠上下文，避免章节和知识点在切分边界丢失。
+- 每次 LLM 请求显式设置 `max_tokens`，默认输出上限为 `32,768 Token`。
 - 只有不可继续拆分的单个片段仍超过预算时，才返回 `422`。
-- 可通过 `ECHO_LLM_CONTEXT_WINDOW_TOKENS` 和 `ECHO_LLM_CONTEXT_SAFETY_RATIO` 调整。
+- 可通过 `ECHO_LLM_CONTEXT_WINDOW_TOKENS`、`ECHO_LLM_CONTEXT_SAFETY_RATIO`、`ECHO_LLM_BATCH_OVERLAP_TOKENS` 和 `ECHO_LLM_MAX_OUTPUT_TOKENS` 调整。
 
 ### 3.2 知识点合并
 
