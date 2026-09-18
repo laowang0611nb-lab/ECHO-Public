@@ -2,15 +2,15 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from database.models.course import CourseMember
+from database.models.knowledge import KnowledgePoint
+from database.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
+from database.models.review import AIReviewFlag, ReviewStatus
+from database.models.user import UserRole
 from sqlalchemy import and_, case, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.course import CourseMember
-from app.models.knowledge import KnowledgePoint
-from app.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
-from app.models.review import AIReviewFlag, ReviewStatus
-from app.models.user import UserRole
 from app.schemas.dashboard import (
     CourseDashboardResponse,
     DashboardInsight,

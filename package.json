@@ -1,16 +1,17 @@
 {
   "name": "echo",
-  "version": "0.0.73",
+  "version": "0.0.74",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "dev:web": "pnpm --filter @echo/web dev",
     "dev:mobile": "pnpm --filter @echo/mobile start",
-    "dev:api": "python -m uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --reload",
+    "dev:api": "apps\\api\\.venv\\Scripts\\python -m uvicorn app.main:app --app-dir apps/api --host 0.0.0.0 --reload",
     "build:web": "pnpm --filter @echo/web build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test:api": "python -m pytest apps/api/tests",
+    "test:api": "apps\\api\\.venv\\Scripts\\python -m pytest apps/api/tests",
+    "test:database": "apps\\api\\.venv\\Scripts\\python -m pytest -c database/pytest.ini database/tests",
     "check": "pnpm run lint && pnpm run typecheck"
   },
   "devDependencies": {

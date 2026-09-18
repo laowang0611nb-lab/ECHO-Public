@@ -1,12 +1,12 @@
 from uuid import UUID
 
+from database.models.course import CourseMember
+from database.models.knowledge import Chapter, KnowledgePoint
+from database.models.learning import LearningEvent, StudentKnowledgeState
+from database.models.user import User, UserRole
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.course import CourseMember
-from app.models.knowledge import Chapter, KnowledgePoint
-from app.models.learning import LearningEvent, StudentKnowledgeState
-from app.models.user import User, UserRole
 from app.schemas.dashboard_details import (
     ChapterAnalyticsResponse,
     KnowledgePointAnalyticsResponse,

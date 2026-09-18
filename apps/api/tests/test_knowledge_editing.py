@@ -1,20 +1,19 @@
 from io import BytesIO
 from uuid import UUID
 
-from httpx import AsyncClient
-from pypdf import PdfWriter
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-from app.models.course import CourseMember
-from app.models.knowledge import KnowledgeRelation
-from app.models.learning import (
+from database.models.course import CourseMember
+from database.models.knowledge import KnowledgeRelation
+from database.models.learning import (
     LearningEvent,
     LearningEventType,
     MasterySnapshot,
     StudentKnowledgeState,
 )
-from app.models.user import UserRole
+from database.models.user import UserRole
+from httpx import AsyncClient
+from pypdf import PdfWriter
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 def make_pdf(page_count: int = 2) -> bytes:

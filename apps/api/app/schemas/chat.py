@@ -1,10 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
+from database.models.chat import MessageRole
+from database.models.review import ReviewStatus
 from pydantic import BaseModel, ConfigDict, Field
-
-from app.models.chat import MessageRole
-from app.models.review import ReviewStatus
 
 
 class ConversationCreate(BaseModel):

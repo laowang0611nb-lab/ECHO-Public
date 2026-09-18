@@ -2,13 +2,13 @@ import re
 from dataclasses import dataclass
 from uuid import UUID
 
+from database.models.course import CourseMember
+from database.models.document import Document, DocumentPage, DocumentStatus
+from database.models.knowledge import KnowledgeChunk
+from database.models.user import UserRole
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.course import CourseMember
-from app.models.document import Document, DocumentPage, DocumentStatus
-from app.models.knowledge import KnowledgeChunk
-from app.models.user import UserRole
 from app.services.knowledge import (
     KnowledgeDocumentNotFoundError,
     KnowledgeDocumentNotReadyError,

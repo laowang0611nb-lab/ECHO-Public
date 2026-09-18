@@ -2,9 +2,8 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from database.models.review import ReviewReason, ReviewSeverity, ReviewStatus
 from pydantic import BaseModel, Field, model_validator
-
-from app.models.review import ReviewReason, ReviewSeverity, ReviewStatus
 
 
 class ReviewDecision(StrEnum):

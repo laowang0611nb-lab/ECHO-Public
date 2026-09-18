@@ -2,15 +2,15 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import anyio
+from database.models.course import Course, CourseMember
+from database.models.document import Document, DocumentPage, DocumentStatus
+from database.models.knowledge import KnowledgeChunk
+from database.models.user import User, UserRole
 from fastapi import UploadFile
 from pypdf import PdfReader
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.course import Course, CourseMember
-from app.models.document import Document, DocumentPage, DocumentStatus
-from app.models.knowledge import KnowledgeChunk
-from app.models.user import User, UserRole
 from app.services.course import CourseNotFoundError
 from app.services.storage import LocalDocumentStorage, UnsupportedDocumentTypeError
 

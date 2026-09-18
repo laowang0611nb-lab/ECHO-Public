@@ -1,9 +1,9 @@
 from uuid import UUID
 
+from database.models.knowledge import Chapter
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DBSession, KnowledgeProviderDep
-from app.models.knowledge import Chapter
 from app.schemas.knowledge import (
     ChapterCreate,
     ChapterResponse,
@@ -150,7 +150,11 @@ async def create_course_chapter(
 ) -> Chapter:
     try:
         return await create_chapter(session, document_id, current_user.id, payload)
-    except (KnowledgeDocumentNotFoundError, KnowledgeEditForbiddenError) as exc:
+    except (
+        KnowledgeDocumentNotFoundError,
+        KnowledgeEditForbiddenError,
+        KnowledgeStructureConflictError,
+    ) as exc:
         raise _translate_edit_error(exc) from exc
 
 
@@ -163,7 +167,11 @@ async def patch_chapter(
 ) -> Chapter:
     try:
         return await update_chapter(session, chapter_id, current_user.id, payload)
-    except (KnowledgeNodeNotFoundError, KnowledgeEditForbiddenError) as exc:
+    except (
+        KnowledgeNodeNotFoundError,
+        KnowledgeEditForbiddenError,
+        KnowledgeStructureConflictError,
+    ) as exc:
         raise _translate_edit_error(exc) from exc
 
 
@@ -175,7 +183,11 @@ async def remove_chapter(
 ) -> None:
     try:
         await delete_chapter(session, chapter_id, current_user.id)
-    except (KnowledgeNodeNotFoundError, KnowledgeEditForbiddenError) as exc:
+    except (
+        KnowledgeNodeNotFoundError,
+        KnowledgeEditForbiddenError,
+        KnowledgeStructureConflictError,
+    ) as exc:
         raise _translate_edit_error(exc) from exc
 
 

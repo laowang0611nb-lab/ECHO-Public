@@ -1,9 +1,9 @@
 from uuid import UUID
 
+from database.models.course import Course
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DBSession
-from app.models.course import Course
 from app.schemas.course import (
     CourseCreate,
     CourseJoinRequest,

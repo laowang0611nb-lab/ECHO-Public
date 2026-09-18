@@ -1,6 +1,9 @@
 import asyncio
 import json
 
+import httpx
+import pytest
+
 from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft
 from app.services.llm import (
     EXTRACTION_SYSTEM_PROMPT,
@@ -24,10 +27,61 @@ def test_material_partition_respects_token_budget() -> None:
     pages = ["中" * 80, "文" * 80]
     budget = 144
     parts = _build_material_parts(pages, budget)
-    batches = _pack_material_parts(parts, budget)
+    batches = _pack_material_parts(parts, budget, 0)
 
     assert len(batches) >= 2
     assert all(estimate_tokens(batch) <= budget for batch in batches)
+
+
+def test_material_partition_adds_token_overlap() -> None:
+    parts = _build_material_parts(["中" * 80, "文" * 80], 144)
+    batches = _pack_material_parts(parts, 144, 20)
+
+    assert len(batches) >= 2
+    assert batches[0][-10:] in batches[1]
+
+
+def test_llm_request_sets_max_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [
+                    {"message": {"content": '{"chapters":[{"title":"A","knowledge_points":[]}]}'}}
+                ]
+            }
+
+    class FakeClient:
+        def __init__(self, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def post(self, url: str, **kwargs: object) -> FakeResponse:
+            captured["url"] = url
+            captured.update(kwargs)
+            return FakeResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeClient)
+    provider = QwenKnowledgeStructureProvider(
+        api_key="test-key",
+        base_url="https://example.invalid/v1",
+        model="test-model",
+        timeout_seconds=1,
+        max_input_tokens=1000,
+        max_output_tokens=1234,
+    )
+
+    asyncio.run(provider.generate(["short material"]))
+    assert captured["json"]["max_tokens"] == 1234
 
 
 def test_agentic_generation_splits_and_merges_large_material() -> None:

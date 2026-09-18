@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.65"
+    app_version: str = "0.0.74"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 60.0
     llm_context_window_tokens: int = 1_000_000
     llm_context_safety_ratio: float = 0.7
+    llm_batch_overlap_tokens: int = 2000
+    llm_max_output_tokens: int = 32768
     chat_api_key: str | None = None
     chat_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     chat_model: str = "qwen3.8-flash"
@@ -74,6 +76,13 @@ class Settings(BaseSettings):
     def require_context_safety_ratio(cls, value: float) -> float:
         if value <= 0 or value >= 1:
             raise ValueError("llm_context_safety_ratio must be between 0 and 1")
+        return value
+
+    @field_validator("llm_batch_overlap_tokens", "llm_max_output_tokens")
+    @classmethod
+    def require_non_negative_llm_budgets(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("LLM token budgets must not be negative")
         return value
 
     @field_validator("business_timezone")

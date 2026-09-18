@@ -2,18 +2,19 @@ import re
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import and_, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.chat import Conversation, Message, MessageRole
-from app.models.course import CourseMember
-from app.models.review import (
+from database.models.chat import Conversation, Message, MessageRole
+from database.models.course import CourseMember
+from database.models.review import (
     AIReviewFlag,
     ReviewReason,
     ReviewSeverity,
     ReviewStatus,
 )
-from app.models.user import User, UserRole
+from database.models.user import User, UserRole
+from sqlalchemy import and_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.schemas.review import (
     NotResolvedRequest,
     ReviewDecision,
@@ -46,6 +47,10 @@ CONVERSATIONAL_PREFIX_PATTERN = re.compile(
 TRIVIAL_QUESTION_PATTERNS = (
     "你是谁",
     "你能做什么",
+    "在吗",
+    "在么",
+    "有人吗",
+    "你在吗",
     "whoareyou",
     "whatcanyoudo",
 )
@@ -74,7 +79,10 @@ QUESTION_INTENT_MARKERS = (
     "评价",
     "总结",
     "概括",
+    "列出",
+    "罗列",
     "说明",
+    "描述",
     "举个例子",
     "举一个",
     "示例",
@@ -104,6 +112,10 @@ class ReviewFlagNotFoundError(Exception):
 
 
 class ReviewFlagForbiddenError(Exception):
+    pass
+
+
+class ReviewFlagConflictError(Exception):
     pass
 
 
@@ -429,6 +441,29 @@ async def mark_message_not_resolved(
     requester_id: UUID,
     payload: NotResolvedRequest,
 ) -> ReviewFlagResponse:
+    for attempt in range(3):
+        try:
+            return await _mark_message_not_resolved_once(
+                session,
+                course_id,
+                message_id,
+                requester_id,
+                payload,
+            )
+        except IntegrityError as exc:
+            await session.rollback()
+            if attempt == 2:
+                raise ReviewFlagConflictError from exc
+    raise ReviewFlagConflictError
+
+
+async def _mark_message_not_resolved_once(
+    session: AsyncSession,
+    course_id: UUID,
+    message_id: UUID,
+    requester_id: UUID,
+    payload: NotResolvedRequest,
+) -> ReviewFlagResponse:
     message = await session.get(Message, message_id)
     if message is None or message.role != MessageRole.ASSISTANT:
         raise ReviewFlagNotFoundError
@@ -449,10 +484,12 @@ async def mark_message_not_resolved(
         raise ReviewFlagForbiddenError
 
     flag = await session.scalar(
-        select(AIReviewFlag).where(
+        select(AIReviewFlag)
+        .where(
             AIReviewFlag.message_id == message_id,
             AIReviewFlag.reason == ReviewReason.STUDENT_NOT_RESOLVED,
         )
+        .with_for_update()
     )
     details: dict[str, object] = {"note": payload.note} if payload.note else {}
     if flag is None:

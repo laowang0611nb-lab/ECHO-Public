@@ -1,8 +1,8 @@
+from database.models.user import User, UserRole
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User, UserRole
 from app.schemas.auth import LoginRequest
 
 

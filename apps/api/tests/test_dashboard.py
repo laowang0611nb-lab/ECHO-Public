@@ -1,14 +1,14 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+from database.models.course import CourseMember
+from database.models.document import Document, DocumentStatus
+from database.models.knowledge import Chapter, KnowledgePoint
+from database.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
+from database.models.user import UserRole
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models.course import CourseMember
-from app.models.document import Document, DocumentStatus
-from app.models.knowledge import Chapter, KnowledgePoint
-from app.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
-from app.models.user import UserRole
 from app.services.dashboard import dashboard_day_bounds
 
 

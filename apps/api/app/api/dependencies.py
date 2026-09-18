@@ -1,12 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
+from database.db.session import get_db_session
+from database.models.user import User
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import get_db_session
-from app.models.user import User
 from app.services.chat_provider import QwenChatProvider
 from app.services.embedding import QwenEmbeddingProvider
 from app.services.llm import QwenKnowledgeStructureProvider
@@ -29,6 +29,8 @@ def get_knowledge_structure_provider() -> QwenKnowledgeStructureProvider:
         model=settings.llm_model,
         timeout_seconds=settings.llm_timeout_seconds,
         max_input_tokens=settings.llm_max_input_tokens,
+        batch_overlap_tokens=settings.llm_batch_overlap_tokens,
+        max_output_tokens=settings.llm_max_output_tokens,
     )
 
 

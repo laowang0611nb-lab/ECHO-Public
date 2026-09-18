@@ -1,12 +1,12 @@
 from uuid import UUID, uuid4
 
 import pytest
+from database.models.document import Document
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
-from app.models.document import Document
 from app.services.storage import LocalDocumentStorage
 
 PDF_BYTES = b"%PDF-1.7\ntrailer\n%%EOF\n"

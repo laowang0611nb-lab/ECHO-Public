@@ -1,11 +1,10 @@
 from uuid import UUID, uuid4
 
+from database.models.course import CourseMember
+from database.models.user import UserRole
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-from app.models.course import CourseMember
-from app.models.user import UserRole
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:

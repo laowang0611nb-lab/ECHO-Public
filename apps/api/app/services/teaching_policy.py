@@ -1,12 +1,12 @@
 from uuid import UUID
 
+from database.models.chat import TeachingPolicy
+from database.models.course import CourseMember
+from database.models.user import User, UserRole
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.chat import TeachingPolicy
-from app.models.course import CourseMember
-from app.models.user import User, UserRole
 from app.services.course import get_course_for_member
 
 

@@ -1,10 +1,10 @@
 from typing import Annotated
 from uuid import UUID
 
+from database.models.review import ReviewSeverity, ReviewStatus
 from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies import CurrentUser, DBSession
-from app.models.review import ReviewSeverity, ReviewStatus
 from app.schemas.review import (
     NotResolvedRequest,
     ReviewDecisionRequest,
@@ -12,6 +12,7 @@ from app.schemas.review import (
 )
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 from app.services.review import (
+    ReviewFlagConflictError,
     ReviewFlagForbiddenError,
     ReviewFlagNotFoundError,
     get_review_flag,
@@ -131,3 +132,8 @@ async def report_message_not_resolved(
         ReviewFlagForbiddenError,
     ) as exc:
         raise _review_error(exc) from exc
+    except ReviewFlagConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Review flag was updated concurrently",
+        ) from exc

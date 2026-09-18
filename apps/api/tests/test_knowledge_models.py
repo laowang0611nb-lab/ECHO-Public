@@ -1,4 +1,4 @@
-from app.db.base import Base
+from database.db.base import Base
 
 
 def test_knowledge_tables_are_registered() -> None:

@@ -1,19 +1,19 @@
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.models.chat import Conversation, Message
-from app.models.course import CourseMember
-from app.models.knowledge import KnowledgePoint
-from app.models.learning import (
+from database.models.chat import Conversation, Message
+from database.models.course import CourseMember
+from database.models.knowledge import KnowledgePoint
+from database.models.learning import (
     LearningEvent,
     LearningEventType,
     MasterySnapshot,
     StudentKnowledgeState,
 )
-from app.models.user import UserRole
+from database.models.user import UserRole
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.schemas.learning import LearningEventCreate
 from app.services.course import get_course_for_member
 

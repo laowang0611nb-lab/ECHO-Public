@@ -1,9 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
+from database.models.learning import LearningEventType
 from pydantic import BaseModel, ConfigDict, Field
-
-from app.models.learning import LearningEventType
 
 
 class LearningEventCreate(BaseModel):

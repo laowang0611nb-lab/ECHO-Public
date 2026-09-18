@@ -1,12 +1,12 @@
 from uuid import UUID, uuid4
 
 import pytest
+from database.models.document import Document, DocumentStatus
+from database.models.knowledge import KnowledgeChunk
+from database.models.review import ReviewReason, ReviewStatus
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models.document import Document, DocumentStatus
-from app.models.knowledge import KnowledgeChunk
-from app.models.review import ReviewReason, ReviewStatus
 from app.services.review import _detect_review_reasons
 
 
@@ -18,6 +18,8 @@ from app.services.review import _detect_review_reasons
         "解释一下软件测试",
         "什么是边界值分析",
         "总结第三章",
+        "列出第三章的要点",
+        "描述一下黑盒测试",
         "Give an example of black-box testing",
         "你好，请解释一下黑盒测试",
     ],
@@ -35,7 +37,16 @@ def test_short_chinese_questions_require_course_basis(question: str) -> None:
 
 @pytest.mark.parametrize(
     "question",
-    ["你好", "谢谢", "你是谁", "你是谁？", "你能做什么？", "hello"],
+    [
+        "你好",
+        "在吗？",
+        "有人吗？",
+        "谢谢",
+        "你是谁",
+        "你是谁？",
+        "你能做什么？",
+        "hello",
+    ],
 )
 def test_trivial_messages_do_not_require_course_basis(question: str) -> None:
     reasons = _detect_review_reasons(

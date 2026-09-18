@@ -1,9 +1,9 @@
 # ECHO Database
 
-This directory is the database package for ECHO. It was copied from the
-current backend and extended in place. Some backend files already contain
-work-in-progress `database.*` imports; final migration-entry unification is
-still pending the backend worktree freeze.
+This directory is the database package for ECHO. The API now imports this
+package through the `database.*` namespace, and the former backend-local
+`app.db`, `app.models`, `app.scripts`, and `apps/api/alembic` entry points have
+been removed so there is one source of truth.
 
 ## Contents
 
@@ -52,9 +52,8 @@ SQLite is used only for fast unit and migration checks. The production target
 remains PostgreSQL with `pgvector`; a real PostgreSQL run is still required
 before this package is accepted as the integrated backend database layer.
 
-## Integration Boundary
+## Integration Status
 
-Do not overwrite the backend work in progress. The backend may temporarily
-contain `database.*` imports while other threads continue; those changes do
-not mean every legacy entry point has been unified. Final integration must
-leave one Alembic entry point and pass the full regression suite.
+The API, tests, seed command, and Alembic command use this package directly.
+There is one migration entry point at `database/alembic.ini`; the legacy
+backend-local database directories are no longer active.

@@ -1,5 +1,5 @@
-from app.db.base import Base
-from app.models.document import DocumentStatus
+from database.db.base import Base
+from database.models.document import DocumentStatus
 
 
 def test_document_tables_are_registered() -> None:

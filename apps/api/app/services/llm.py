@@ -88,11 +88,34 @@ def _build_material_parts(pages: list[str], token_budget: int) -> list[str]:
     return parts
 
 
-def _pack_material_parts(parts: list[str], token_budget: int) -> list[str]:
+def _tail_by_tokens(text: str, max_tokens: int) -> str:
+    if max_tokens <= 0 or not text:
+        return ""
+    if estimate_tokens(text) <= max_tokens:
+        return text
+    low = 0
+    high = len(text)
+    while low < high:
+        midpoint = (low + high + 1) // 2
+        if estimate_tokens(text[-midpoint:]) <= max_tokens:
+            low = midpoint
+        else:
+            high = midpoint - 1
+    return text[-low:] if low else ""
+
+
+def _pack_material_parts(
+    parts: list[str],
+    token_budget: int,
+    overlap_tokens: int,
+) -> list[str]:
     batches: list[str] = []
     current: list[str] = []
     current_tokens = 0
-    for part in parts:
+    pending = list(parts)
+    index = 0
+    while index < len(pending):
+        part = pending[index]
         part_tokens = estimate_tokens(part) + 4
         if part_tokens > token_budget:
             split_parts = _split_text_to_budget(part, token_budget)
@@ -100,14 +123,17 @@ def _pack_material_parts(parts: list[str], token_budget: int) -> list[str]:
                 batches.append(PART_SEPARATOR.join(current))
                 current = []
                 current_tokens = 0
-            batches.extend(split_parts)
+            pending[index : index + 1] = split_parts
             continue
         if current and current_tokens + part_tokens > token_budget:
-            batches.append(PART_SEPARATOR.join(current))
-            current = []
-            current_tokens = 0
+            completed = PART_SEPARATOR.join(current)
+            batches.append(completed)
+            overlap = _tail_by_tokens(completed, overlap_tokens)
+            current = [overlap] if overlap else []
+            current_tokens = estimate_tokens(overlap) + 4 if overlap else 0
         current.append(part)
         current_tokens += part_tokens
+        index += 1
     if current:
         batches.append(PART_SEPARATOR.join(current))
     return batches
@@ -184,12 +210,16 @@ class QwenKnowledgeStructureProvider:
         model: str,
         timeout_seconds: float,
         max_input_tokens: int,
+        batch_overlap_tokens: int = 0,
+        max_output_tokens: int = 32768,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_seconds = timeout_seconds
         self.max_input_tokens = max_input_tokens
+        self.batch_overlap_tokens = batch_overlap_tokens
+        self.max_output_tokens = max_output_tokens
 
     async def generate(self, pages: list[str]) -> list[ChapterDraft]:
         if not self.api_key:
@@ -217,7 +247,11 @@ class QwenKnowledgeStructureProvider:
                 EXTRACTION_PROMPT_PREFIX + full_context,
             )
 
-        batches = _pack_material_parts(parts, material_budget)
+        batches = _pack_material_parts(
+            parts,
+            material_budget,
+            self.batch_overlap_tokens,
+        )
         partial_drafts: list[list[ChapterDraft]] = []
         for batch in batches:
             drafts = await self._request_chapters(
@@ -286,6 +320,7 @@ class QwenKnowledgeStructureProvider:
                             {"role": "user", "content": prompt},
                         ],
                         "temperature": 0.2,
+                        "max_tokens": self.max_output_tokens,
                     },
                 )
                 response.raise_for_status()

@@ -1,11 +1,11 @@
 from uuid import UUID, uuid4
 
+from database.models.document import Document, DocumentPage, DocumentStatus
+from database.models.knowledge import KnowledgeChunk
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models.document import Document, DocumentPage, DocumentStatus
-from app.models.knowledge import KnowledgeChunk
 from app.services.search import cosine_distance
 
 

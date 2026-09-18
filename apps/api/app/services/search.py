@@ -1,14 +1,14 @@
 import math
 from uuid import UUID
 
+from database.models.course import CourseMember
+from database.models.document import Document, DocumentStatus
+from database.models.knowledge import KnowledgeChunk
+from database.models.user import UserRole
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.course import CourseMember
-from app.models.document import Document, DocumentStatus
-from app.models.knowledge import KnowledgeChunk
-from app.models.user import UserRole
 from app.schemas.search import ChunkSearchResult
 from app.services.course import get_course_for_member
 from app.services.embedding import EmbeddingProvider

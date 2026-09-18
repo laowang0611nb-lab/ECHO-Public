@@ -1,13 +1,12 @@
 from io import BytesIO
 from uuid import UUID, uuid4
 
+from database.models.document import Document, DocumentPage
+from database.models.knowledge import KnowledgeChunk
 from httpx import AsyncClient
 from pypdf import PdfWriter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-from app.models.document import Document, DocumentPage
-from app.models.knowledge import KnowledgeChunk
 
 PDF_BYTES = b"%PDF-1.7\ntrailer\n%%EOF\n"
 

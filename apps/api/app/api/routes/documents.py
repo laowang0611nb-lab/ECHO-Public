@@ -1,12 +1,12 @@
 from typing import Annotated
 from uuid import UUID
 
+from database.models.document import Document
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DBSession, DocumentStorageDep
 from app.core.config import settings
-from app.models.document import Document
 from app.schemas.document import DocumentResponse
 from app.services.course import CourseNotFoundError
 from app.services.document import (

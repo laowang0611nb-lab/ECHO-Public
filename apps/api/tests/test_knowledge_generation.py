@@ -1,16 +1,16 @@
 from io import BytesIO
 from uuid import UUID, uuid4
 
+from database.models.course import CourseMember
+from database.models.document import Document
+from database.models.knowledge import Chapter, KnowledgePoint
+from database.models.learning import MasterySnapshot, StudentKnowledgeState
+from database.models.user import UserRole
 from httpx import AsyncClient
 from pypdf import PdfWriter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.models.course import CourseMember
-from app.models.document import Document
-from app.models.knowledge import Chapter, KnowledgePoint
-from app.models.learning import MasterySnapshot, StudentKnowledgeState
-from app.models.user import UserRole
 from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft
 from app.services.knowledge import _replace_document_structure
 

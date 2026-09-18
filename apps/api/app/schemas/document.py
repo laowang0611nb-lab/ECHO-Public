@@ -1,9 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
+from database.models.document import DocumentStatus
 from pydantic import BaseModel, ConfigDict
-
-from app.models.document import DocumentStatus
 
 
 class DocumentResponse(BaseModel):

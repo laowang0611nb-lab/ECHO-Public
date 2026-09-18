@@ -1,10 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
+from database.models.course import CourseStatus
+from database.models.user import UserRole
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from app.models.course import CourseStatus
-from app.models.user import UserRole
 
 
 class CourseCreate(BaseModel):

@@ -2,12 +2,12 @@ import secrets
 import string
 from uuid import UUID
 
+from database.models.course import Course, CourseMember, CourseStatus
+from database.models.user import User, UserRole
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.course import Course, CourseMember, CourseStatus
-from app.models.user import User, UserRole
 from app.schemas.course import CourseCreate, CourseJoinRequest, CourseMemberResponse
 
 COURSE_CODE_LENGTH = 8

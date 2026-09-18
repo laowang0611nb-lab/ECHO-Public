@@ -1,9 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
+from database.models.user import UserRole
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
-
-from app.models.user import UserRole
 
 
 class LoginRequest(BaseModel):

@@ -2,20 +2,19 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from httpx import AsyncClient
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
-from app.models.chat import Message, MessageCitation, MessageRole
-from app.models.document import Document, DocumentPage, DocumentStatus
-from app.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
-from app.models.learning import LearningEvent, LearningEventType
-from app.models.review import (
+from database.models.chat import Message, MessageCitation, MessageRole
+from database.models.document import Document, DocumentPage, DocumentStatus
+from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
+from database.models.learning import LearningEvent, LearningEventType
+from database.models.review import (
     AIReviewFlag,
     ReviewReason,
     ReviewSeverity,
     ReviewStatus,
 )
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:

@@ -1,20 +1,20 @@
 from uuid import UUID
 
-from sqlalchemy import delete, or_, select, update
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
-from app.models.course import CourseMember
-from app.models.document import Document, DocumentPage, DocumentStatus
-from app.models.knowledge import (
+from database.models.course import CourseMember
+from database.models.document import Document, DocumentPage, DocumentStatus
+from database.models.knowledge import (
     Chapter,
     KnowledgeChunk,
     KnowledgePoint,
     KnowledgeRelation,
 )
-from app.models.learning import LearningEvent, MasterySnapshot, StudentKnowledgeState
-from app.models.user import UserRole
+from database.models.learning import LearningEvent, MasterySnapshot, StudentKnowledgeState
+from database.models.user import UserRole
+from sqlalchemy import delete, or_, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.schemas.knowledge import (
     ChapterCreate,
     ChapterDraft,
@@ -330,7 +330,9 @@ async def create_chapter(
     requester_id: UUID,
     payload: ChapterCreate,
 ) -> Chapter:
-    document = await session.get(Document, document_id)
+    document = await session.scalar(
+        select(Document).where(Document.id == document_id).with_for_update()
+    )
     if document is None:
         raise KnowledgeDocumentNotFoundError
     await _ensure_course_teacher(session, document.course_id, requester_id)
@@ -355,12 +357,15 @@ async def create_chapter(
         order_index=len(existing_ids) + REORDER_OFFSET,
     )
     session.add(chapter)
-    await session.flush()
-
-    ordered_ids = existing_ids.copy()
-    ordered_ids.insert(position, chapter.id)
-    await _set_chapter_order(session, document_id, ordered_ids)
-    await session.commit()
+    try:
+        await session.flush()
+        ordered_ids = existing_ids.copy()
+        ordered_ids.insert(position, chapter.id)
+        await _set_chapter_order(session, document_id, ordered_ids)
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise KnowledgeStructureConflictError from exc
     created = await _load_chapter(session, chapter.id)
     if created is None:
         raise KnowledgeNodeNotFoundError
@@ -383,6 +388,9 @@ async def update_chapter(
     if "summary" in payload.model_fields_set:
         chapter.summary = payload.summary
     if "order_index" in payload.model_fields_set and payload.order_index is not None:
+        await session.scalar(
+            select(Document.id).where(Document.id == chapter.document_id).with_for_update()
+        )
         ordered_ids = list(
             await session.scalars(
                 select(Chapter.id)
@@ -407,7 +415,9 @@ async def delete_chapter(
     chapter_id: UUID,
     requester_id: UUID,
 ) -> None:
-    chapter = await session.get(Chapter, chapter_id)
+    chapter = await session.scalar(
+        select(Chapter).where(Chapter.id == chapter_id).with_for_update()
+    )
     if chapter is None:
         raise KnowledgeNodeNotFoundError
     await _ensure_course_teacher(session, chapter.course_id, requester_id)
@@ -426,6 +436,9 @@ async def delete_chapter(
     await session.delete(chapter)
     await session.flush()
 
+    await session.scalar(
+        select(Document.id).where(Document.id == chapter.document_id).with_for_update()
+    )
     remaining_ids = list(
         await session.scalars(
             select(Chapter.id)
@@ -470,14 +483,13 @@ async def create_knowledge_point(
     session.add(point)
     try:
         await session.flush()
+        ordered_ids = existing_ids.copy()
+        ordered_ids.insert(position, point.id)
+        await _set_point_order(session, chapter_id, ordered_ids)
+        await session.commit()
     except IntegrityError as exc:
         await session.rollback()
         raise KnowledgeStructureConflictError from exc
-
-    ordered_ids = existing_ids.copy()
-    ordered_ids.insert(position, point.id)
-    await _set_point_order(session, chapter_id, ordered_ids)
-    await session.commit()
     await session.refresh(point)
     return point
 
@@ -504,6 +516,14 @@ async def update_knowledge_point(
         await _ensure_course_teacher(session, target_chapter.course_id, requester_id)
         point.chapter_id = target_chapter.id
         target_chapter_id = target_chapter.id
+
+    locked_chapter_ids = sorted({source_chapter_id, target_chapter_id}, key=str)
+    await session.scalars(
+        select(Chapter)
+        .where(Chapter.id.in_(locked_chapter_ids))
+        .order_by(Chapter.id)
+        .with_for_update()
+    )
 
     if "name" in payload.model_fields_set and payload.name is not None:
         point.name = payload.name
@@ -568,6 +588,7 @@ async def delete_knowledge_point(
         raise KnowledgeNodeNotFoundError
     await _ensure_course_teacher(session, point.course_id, requester_id)
     chapter_id = point.chapter_id
+    await session.scalar(select(Chapter.id).where(Chapter.id == chapter_id).with_for_update())
     await _remove_knowledge_points(session, [point.id])
     await session.flush()
 

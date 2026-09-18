@@ -5,23 +5,23 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
-from app.models.chat import (
+from database.models.chat import (
     Conversation,
     Message,
     MessageCitation,
     MessageRole,
     TeachingPolicy,
 )
-from app.models.course import CourseMember
-from app.models.document import Document, DocumentStatus
-from app.models.knowledge import KnowledgeChunk
-from app.models.learning import LearningEvent, LearningEventType
-from app.models.review import AIReviewFlag, ReviewStatus
-from app.models.user import User, UserRole
+from database.models.course import CourseMember
+from database.models.document import Document, DocumentStatus
+from database.models.knowledge import KnowledgeChunk
+from database.models.learning import LearningEvent, LearningEventType
+from database.models.review import AIReviewFlag, ReviewStatus
+from database.models.user import User, UserRole
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.schemas.chat import ConversationCreate, TeacherMessageResponse
 from app.schemas.learning import LearningEventCreate
 from app.schemas.search import ChunkSearchResult

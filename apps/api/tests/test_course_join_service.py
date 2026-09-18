@@ -1,10 +1,10 @@
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
+from database.models.course import CourseStatus
+from database.models.user import UserRole
 from sqlalchemy.exc import IntegrityError
 
-from app.models.course import CourseStatus
-from app.models.user import UserRole
 from app.schemas.course import CourseJoinRequest
 from app.services.course import join_course_by_code
 

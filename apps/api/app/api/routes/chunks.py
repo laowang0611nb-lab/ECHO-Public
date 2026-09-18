@@ -1,11 +1,11 @@
 from uuid import UUID
 
+from database.models.knowledge import KnowledgeChunk
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DBSession
 from app.core.config import settings
-from app.models.knowledge import KnowledgeChunk
 from app.schemas.chunk import KnowledgeChunkResponse
 from app.services.chunking import chunk_document
 from app.services.knowledge import (
