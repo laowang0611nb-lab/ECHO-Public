@@ -7,7 +7,7 @@ import type {
 import { ArrowLeft, Check, ExternalLink, FileText, RefreshCw, Save, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -63,7 +63,7 @@ export function ReviewWorkspacePage({
     sort: filters.sort,
     limit: 100,
   });
-  const visibleFlags = useMemo(() => queueQuery.data?.items ?? [], [queueQuery.data?.items]);
+  const visibleFlags = queueQuery.data?.items ?? [];
   const requestedId = reviewId ?? visibleFlags[0]?.id ?? null;
   const flagQuery = useReviewFlag(courseId, requestedId);
   const flag = flagQuery.data ?? null;
@@ -79,23 +79,24 @@ export function ReviewWorkspacePage({
     ?? flag?.versions.find((version) => version.version === flag.current_version)
     ?? null;
 
-  useEffect(() => {
-    if (!courseId || !visibleFlags.length) return;
-    const selectedId = reviewId ?? visibleFlags[0]?.id;
-    if (!selectedId) return;
-    if (selectedId === reviewId && visibleFlags.some((item) => item.id === selectedId)) return;
-    const nextId = visibleFlags.some((item) => item.id === selectedId)
-      ? selectedId
-      : visibleFlags[0]?.id;
-    if (nextId) {
-      router.replace(buildReviewWorkspaceHref(nextId, courseId, filters), { scroll: false });
-    }
-  }, [courseId, filters, reviewId, router, visibleFlags]);
+
+  function matchesFilters(flag: ReviewFlag, next: ReviewQueueFilters) {
+    const keyword = next.search.trim().toLowerCase();
+    return (
+      (!keyword
+        || flag.student_display_name.toLowerCase().includes(keyword)
+        || (flag.question ?? "").toLowerCase().includes(keyword)
+        || flag.answer.toLowerCase().includes(keyword))
+      && (next.status === "all" || flag.status === next.status)
+      && (next.reason === "all" || flag.reason === next.reason)
+      && (next.severity === "all" || flag.severity === next.severity)
+    );
+  }
 
   function updateFilters(patch: Partial<ReviewQueueFilters>) {
     const next = { ...filters, ...patch };
     setFilters(next);
-    const nextReview = flag?.id ?? null;
+    const nextReview = visibleFlags.find((item) => matchesFilters(item, next))?.id ?? null;
     const params = new URLSearchParams();
     if (courseId) params.set("courseId", courseId);
     if (nextReview) params.set("reviewId", nextReview);
