@@ -1,13 +1,26 @@
 from uuid import UUID, uuid4
 
 import pytest
+from database.models.chat import Message
 from database.models.document import Document, DocumentStatus
 from database.models.knowledge import KnowledgeChunk
-from database.models.review import ReviewReason, ReviewStatus
+from database.models.review import (
+    AIReviewFlag,
+    ReviewGenerationStatus,
+    ReviewHistoryAction,
+    ReviewReason,
+    ReviewStatus,
+)
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.schemas.review import ReviewRegenerationRequest
 from app.services.review import _detect_review_reasons
+from app.services.review_workflow import (
+    ReviewRegenerationConflictError,
+    complete_review_regeneration,
+    start_review_regeneration,
+)
 
 
 @pytest.mark.parametrize(
@@ -153,6 +166,40 @@ async def add_unrelated_course_material(
             )
         )
         await session.commit()
+
+
+async def create_review_flag(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    teacher: dict[str, str],
+    student: dict[str, str],
+    *,
+    question: str = "What is not covered by the course?",
+) -> tuple[dict[str, str], dict[str, object]]:
+    course = await create_course_without_sources(client, teacher)
+    await add_unrelated_course_material(session_factory, teacher, course)
+    await enroll_student(client, teacher, student, course)
+    conversation = await create_conversation(client, course["id"], student)
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation['id']}/messages/stream",
+        headers=auth_headers(student),
+        json={"content": question, "retrieval_limit": 5},
+    )
+    assert stream.status_code == 200
+    flags = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags",
+        headers=auth_headers(teacher),
+    )
+    assert flags.status_code == 200
+    assert flags.json()
+    return course, flags.json()[0]
+
+
+def assert_completed_regeneration(body: dict[str, object]) -> None:
+    assert body["status"] == ReviewGenerationStatus.COMPLETED
+    assert body["version"] == 2
+    assert body["answer"] == "Regenerated answer [1]"
+    assert body["error"] is None
 
 
 async def test_chat_creates_missing_basis_flag_and_teacher_reviews_it(
@@ -362,3 +409,275 @@ async def test_review_endpoints_are_teacher_only(client: AsyncClient) -> None:
     )
 
     assert response.status_code == 403
+
+
+async def test_regeneration_creates_version_pending_rereview_and_history(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "regen-teacher@example.com", "teacher")
+    student = await login(client, "regen-student@example.com", "student")
+    course, flag = await create_review_flag(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+    original_answer = flag["answer"]
+    chat_provider.answer = "Regenerated answer [1]"
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/regenerate",
+        headers=auth_headers(teacher),
+        json={"instruction": "Make it more concise", "base_version": 1},
+    )
+
+    assert response.status_code == 200
+    assert_completed_regeneration(response.json())
+
+    detail = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}",
+        headers=auth_headers(teacher),
+    )
+    body = detail.json()
+    assert detail.status_code == 200
+    assert body["answer"] == original_answer
+    assert body["status"] == ReviewStatus.PENDING_REREVIEW
+    assert body["current_version"] == 2
+    assert [version["version"] for version in body["versions"]] == [1, 2]
+    assert body["versions"][0]["source"] == "original"
+    assert body["versions"][1]["source"] == "regenerated"
+    assert body["versions"][1]["answer"] == "Regenerated answer [1]"
+    async with session_factory() as session:
+        persisted_message = await session.get(Message, UUID(flag["message_id"]))
+    assert persisted_message is not None
+    assert persisted_message.content == original_answer
+    assert [entry["action"] for entry in body["review_history"]] == [
+        ReviewHistoryAction.REGENERATE,
+        ReviewHistoryAction.REGENERATE,
+    ]
+    assert body["review_history"][0]["from_status"] == ReviewStatus.OPEN
+    assert body["review_history"][1]["to_status"] == ReviewStatus.PENDING_REREVIEW
+
+    versions = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/versions",
+        headers=auth_headers(teacher),
+    )
+    history = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/history",
+        headers=auth_headers(teacher),
+    )
+    assert versions.status_code == 200
+    assert len(versions.json()) == 2
+    assert history.status_code == 200
+    assert len(history.json()) == 2
+    regeneration_status = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/regeneration",
+        headers=auth_headers(teacher),
+    )
+    assert regeneration_status.status_code == 200
+    assert regeneration_status.json()["status"] == "completed"
+    assert regeneration_status.json()["progress"] == 100
+    assert regeneration_status.json()["answer"] == "Regenerated answer [1]"
+
+
+async def test_regeneration_failure_can_retry_without_version_gap(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "retry-teacher@example.com", "teacher")
+    student = await login(client, "retry-student@example.com", "student")
+    course, flag = await create_review_flag(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+    endpoint = f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/regenerate"
+
+    chat_provider.fail = True
+    failed = await client.post(
+        endpoint,
+        headers=auth_headers(teacher),
+        json={"instruction": "Try again"},
+    )
+    assert failed.status_code == 200
+    assert failed.json()["status"] == ReviewGenerationStatus.FAILED
+    assert failed.json()["version"] == 2
+    assert failed.json()["error"]
+
+    failed_detail = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}",
+        headers=auth_headers(teacher),
+    )
+    assert failed_detail.json()["status"] == ReviewStatus.REGENERATION_FAILED
+    assert len(failed_detail.json()["versions"]) == 1
+    failed_status = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/regeneration",
+        headers=auth_headers(teacher),
+    )
+    assert failed_status.json()["status"] == "failed"
+    assert failed_status.json()["error"]
+
+    chat_provider.fail = False
+    chat_provider.answer = "Retried answer [1]"
+    retry = await client.post(
+        endpoint,
+        headers=auth_headers(teacher),
+        json={"instruction": "Try again"},
+    )
+    assert retry.status_code == 200
+    assert retry.json()["status"] == ReviewGenerationStatus.COMPLETED
+    retry_detail = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/versions",
+        headers=auth_headers(teacher),
+    )
+    assert [version["version"] for version in retry_detail.json()] == [1, 2]
+    assert retry_detail.json()[1]["answer"] == "Retried answer [1]"
+
+
+async def test_generation_service_transitions_and_conflict(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    embedding_provider,
+) -> None:
+    teacher = await login(client, "state-teacher@example.com", "teacher")
+    student = await login(client, "state-student@example.com", "student")
+    course, flag = await create_review_flag(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+    flag_id = UUID(flag["id"])
+    course_id = UUID(course["id"])
+    teacher_id = UUID(teacher["id"])
+    async with session_factory() as session:
+        flag_obj = await session.get(AIReviewFlag, flag_id)
+        assert flag_obj is not None
+        _, run = await start_review_regeneration(
+            session,
+            course_id,
+            flag_id,
+            teacher_id,
+            ReviewRegenerationRequest(instruction="State transition"),
+        )
+        assert flag_obj.status == ReviewStatus.GENERATING
+        assert run.status == ReviewGenerationStatus.GENERATING
+        run_id = run.id
+        with pytest.raises(ReviewRegenerationConflictError):
+            await start_review_regeneration(
+                session,
+                course_id,
+                flag_id,
+                teacher_id,
+                ReviewRegenerationRequest(instruction="Concurrent request"),
+            )
+        await session.rollback()
+        chat_provider.answer = "Transition answer [1]"
+        _, completed = await complete_review_regeneration(
+            session,
+            course_id,
+            flag_id,
+            run_id,
+            embedding_provider=embedding_provider,
+            chat_provider=chat_provider,
+        )
+        assert completed.status == ReviewGenerationStatus.COMPLETED
+        await session.refresh(flag_obj)
+        assert flag_obj.status == ReviewStatus.PENDING_REREVIEW
+
+
+async def test_teacher_version_and_history_are_traceable(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "version-teacher@example.com", "teacher")
+    student = await login(client, "version-student@example.com", "student")
+    course, flag = await create_review_flag(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+    chat_provider.answer = "Regenerated before teacher edit [1]"
+    await client.post(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/regenerate",
+        headers=auth_headers(teacher),
+        json={"instruction": "Tighten the explanation"},
+    )
+    decision = await client.post(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/review",
+        headers=auth_headers(teacher),
+        json={"decision": "mark_incorrect", "corrected_answer": "Teacher answer"},
+    )
+    assert decision.status_code == 200
+    detail = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}",
+        headers=auth_headers(teacher),
+    )
+    body = detail.json()
+    assert [version["source"] for version in body["versions"]] == [
+        "original",
+        "regenerated",
+        "teacher",
+    ]
+    assert body["versions"][2]["answer"] == "Teacher answer"
+    assert body["review_history"][-1]["action"] == ReviewHistoryAction.MARK_INCORRECT
+    assert body["review_history"][-1]["corrected_answer_snapshot"] == "Teacher answer"
+
+
+async def test_review_query_summary_context_and_permission(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "query-teacher@example.com", "teacher")
+    student = await login(client, "query-student@example.com", "student")
+    course, flag = await create_review_flag(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+    query = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/query",
+        headers=auth_headers(teacher),
+        params={"reason": ReviewReason.MISSING_COURSE_BASIS.value, "limit": 1},
+    )
+    summary = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/summary",
+        headers=auth_headers(teacher),
+    )
+    context = await client.get(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/context",
+        headers=auth_headers(teacher),
+    )
+    denied = await client.post(
+        f"/api/v1/courses/{course['id']}/review-flags/{flag['id']}/regenerate",
+        headers=auth_headers(student),
+        json={"instruction": "No permission"},
+    )
+    assert query.status_code == 200
+    assert set(query.json()) == {"items", "total", "nextCursor", "summary"}
+    assert query.json()["total"] == 1
+    assert summary.status_code == 200
+    assert summary.json()["pending"] == 1
+    assert context.status_code == 200
+    assert context.json()["messageId"] == flag["message_id"]
+    assert denied.status_code == 403
+
+
+def test_review_regeneration_openapi_paths() -> None:
+    from app.main import app
+
+    paths = app.openapi()["paths"]
+    prefix = "/api/v1/courses/{course_id}/review-flags/{flag_id}"
+    assert prefix + "/regenerate" in paths
+    assert prefix + "/regeneration" in paths
+    assert prefix + "/versions" in paths
+    assert prefix + "/history" in paths
+    assert prefix + "/context" in paths

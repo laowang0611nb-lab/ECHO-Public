@@ -6,9 +6,13 @@ from database.models.chat import Conversation, Message, MessageRole
 from database.models.course import CourseMember
 from database.models.review import (
     AIReviewFlag,
+    ReviewAnswerVersion,
+    ReviewGenerationStatus,
+    ReviewHistoryAction,
     ReviewReason,
     ReviewSeverity,
     ReviewStatus,
+    ReviewVersionSource,
 )
 from database.models.user import User, UserRole
 from sqlalchemy import and_, select
@@ -312,6 +316,8 @@ async def _build_review_responses(
                 details=flag.details,
                 question=question.content if question else None,
                 answer=message.content,
+                current_version=flag.current_version or 1,
+                generation_status=flag.generation_status or ReviewGenerationStatus.IDLE,
                 teacher_note=flag.teacher_note,
                 corrected_answer=flag.corrected_answer,
                 reviewed_by=flag.reviewed_by,
@@ -415,20 +421,60 @@ async def review_flag(
             AIReviewFlag.course_id == course_id,
             CourseMember.role == UserRole.STUDENT,
         )
+        .with_for_update()
     )
     if flag is None:
         raise ReviewFlagNotFoundError
+    if flag.status == ReviewStatus.GENERATING:
+        raise ReviewFlagConflictError
 
+    from app.services.review_workflow import _append_history, ensure_original_version
+
+    current = await ensure_original_version(session, flag)
+    previous_status = flag.status
     status_by_decision = {
         ReviewDecision.CONFIRM_CORRECT: ReviewStatus.CONFIRMED_CORRECT,
         ReviewDecision.MARK_INCORRECT: ReviewStatus.MARKED_INCORRECT,
         ReviewDecision.DISMISS: ReviewStatus.DISMISSED,
     }
-    flag.status = status_by_decision[payload.decision]
+    target_status = status_by_decision[payload.decision]
+    version = flag.current_version
+    if payload.decision == ReviewDecision.MARK_INCORRECT and payload.corrected_answer:
+        version = flag.current_version + 1
+        session.add(
+            ReviewAnswerVersion(
+                review_flag_id=flag.id,
+                version=version,
+                answer=payload.corrected_answer,
+                knowledge_point_ids=current.knowledge_point_ids,
+                citations=current.citations,
+                source=ReviewVersionSource.TEACHER,
+                instruction=payload.note,
+                created_by=requester_id,
+            )
+        )
+        flag.current_version = version
+    flag.status = target_status
     flag.teacher_note = payload.note
     flag.corrected_answer = payload.corrected_answer
     flag.reviewed_by = requester_id
     flag.reviewed_at = datetime.now(UTC)
+    await _append_history(
+        session,
+        flag,
+        version=version,
+        action={
+            ReviewDecision.CONFIRM_CORRECT: ReviewHistoryAction.CONFIRM_CORRECT,
+            ReviewDecision.MARK_INCORRECT: ReviewHistoryAction.MARK_INCORRECT,
+            ReviewDecision.DISMISS: ReviewHistoryAction.DISMISS,
+        }[payload.decision],
+        from_status=previous_status,
+        to_status=target_status,
+        teacher_id=requester_id,
+        note=payload.note,
+        answer_snapshot=current.answer,
+        corrected_answer_snapshot=payload.corrected_answer,
+    )
     await session.commit()
     await session.refresh(flag)
     return await _build_review_response(session, flag)

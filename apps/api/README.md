@@ -208,6 +208,13 @@ student distributions, and a student's recent learning evidence.
 GET  /api/v1/courses/{course_id}/review-flags
 GET  /api/v1/courses/{course_id}/review-flags/{flag_id}
 POST /api/v1/courses/{course_id}/review-flags/{flag_id}/review
+GET  /api/v1/courses/{course_id}/review-flags/query
+GET  /api/v1/courses/{course_id}/review-flags/summary
+GET  /api/v1/courses/{course_id}/review-flags/{flag_id}/context
+POST /api/v1/courses/{course_id}/review-flags/{flag_id}/regenerate
+GET  /api/v1/courses/{course_id}/review-flags/{flag_id}/regeneration
+GET  /api/v1/courses/{course_id}/review-flags/{flag_id}/versions
+GET  /api/v1/courses/{course_id}/review-flags/{flag_id}/history
 POST /api/v1/courses/{course_id}/messages/{message_id}/not-resolved
 ```
 
@@ -216,6 +223,8 @@ course-external material, or follow an unresolved repeated question. Students
 can explicitly report an answer as not resolved. Teachers can filter open
 flags and mark them correct, incorrect, or dismissed. Full request and response
 contracts are frozen in `docs/API契约.md`.
+Teachers can also regenerate an answer with an instruction without overwriting the
+original message, then inspect versions, regeneration status, and audit history.
 
 Seed repeatable teacher student analytics demo data:
 
@@ -267,6 +276,9 @@ Implemented domain models:
 - `StudentKnowledgeState`: current explainable mastery score per knowledge point.
 - `MasterySnapshot`: historical score record linked to an event.
 - `AIReviewFlag`: explainable assistant-answer anomaly with teacher review state.
+- `ReviewAnswerVersion`: immutable original, regenerated, and teacher-edit answer versions.
+- `ReviewRegenerationRun`: persisted regeneration status, progress, instruction, and error.
+- `ReviewHistoryEntry`: ordered audit trail for review decisions and regeneration.
 
 Migrations:
 
@@ -283,6 +295,7 @@ Migrations:
 - `e1a2b3c4d5e6`: user account status, username, avatar, and last login fields.
 - `f2b3c4d5e6f7`: password credentials and refresh-token sessions.
 - `a3c4d5e6f7a8`: optional teacher and student profiles.
+- `b4c5d6e7f8a9`: review answer versions, regeneration runs, and review history.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

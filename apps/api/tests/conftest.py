@@ -64,9 +64,12 @@ class FakeChatProvider:
     def __init__(self, answer: str = "Echo [1] answer") -> None:
         self.answer = answer
         self.last_messages: list[dict[str, str]] = []
+        self.fail = False
 
     async def stream(self, messages: list[dict[str, str]]):
         self.last_messages = messages
+        if self.fail:
+            raise RuntimeError("fake chat failure")
         yield self.answer
 
 

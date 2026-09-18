@@ -20,9 +20,10 @@ been removed so there is one source of truth.
 ## Current Schema
 
 - Existing history head: `d9e0f1a2b3c4`
-- DB V1 account head: `a3c4d5e6f7a8`
+- Current workflow head: `b4c5d6e7f8a9`
 - Added models: `UserCredential`, `AuthSession`, `TeacherProfile`,
-  `StudentProfile`
+  `StudentProfile`, `ReviewAnswerVersion`, `ReviewRegenerationRun`,
+  `ReviewHistoryEntry`
 - Added user fields: `username`, `avatar_url`, `status`, `last_login_at`
 
 ## Verification

@@ -23,9 +23,15 @@ from database.models.learning import (
 from database.models.profile import StudentProfile, TeacherProfile
 from database.models.review import (
     AIReviewFlag,
+    ReviewAnswerVersion,
+    ReviewGenerationStatus,
+    ReviewHistoryAction,
+    ReviewHistoryEntry,
     ReviewReason,
+    ReviewRegenerationRun,
     ReviewSeverity,
     ReviewStatus,
+    ReviewVersionSource,
 )
 from database.models.user import User, UserRole, UserStatus
 
@@ -50,9 +56,15 @@ __all__ = [
     "Message",
     "MessageCitation",
     "MessageRole",
+    "ReviewAnswerVersion",
+    "ReviewGenerationStatus",
+    "ReviewHistoryAction",
+    "ReviewHistoryEntry",
     "ReviewReason",
+    "ReviewRegenerationRun",
     "ReviewSeverity",
     "ReviewStatus",
+    "ReviewVersionSource",
     "StudentKnowledgeState",
     "StudentProfile",
     "TeacherProfile",

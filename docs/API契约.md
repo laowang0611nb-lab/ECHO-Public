@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.74`
+> 冻结版本：`v0.0.75`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
@@ -211,6 +211,9 @@ open
 confirmed_correct
 marked_incorrect
 dismissed
+generating
+pending_rereview
+regeneration_failed
 ```
 
 ### 7.2 查询待审核项
@@ -254,6 +257,8 @@ GET /api/v1/courses/{course_id}/review-flags/{flag_id}
 
 权限：课程教师。
 
+在原有字段基础上新增 `knowledgePointIds`、`citations`、`current_version`、`generation_status`、`versions` 和 `review_history`。`answer` 仍保留原 Message 回答，不会被重新生成或教师修改稿覆盖。
+
 ### 7.4 教师审核
 
 ```text
@@ -285,6 +290,7 @@ dismiss
 - `mark_incorrect` 可以携带 `corrected_answer`。
 - `confirm_correct` 和 `dismiss` 不得携带 `corrected_answer`。
 - 审核会写入 `reviewed_by` 和 `reviewed_at`。
+- 审核同时写入 `review_history`；`mark_incorrect` 携带 `corrected_answer` 时创建 `source=teacher` 的新回答版本。
 
 ### 7.5 学生标记未解决
 
@@ -308,7 +314,83 @@ POST /api/v1/courses/{course_id}/messages/{message_id}/not-resolved
 - 同一消息重复标记时保持幂等。
 - 已关闭的审核项会重新变为 `open`，严重级别升为 `high`。
 
-### 7.6 自动检测
+### 7.6 重新生成回答
+
+```text
+POST /api/v1/courses/{course_id}/review-flags/{flag_id}/regenerate
+```
+
+权限：课程教师。
+
+请求：
+
+```json
+{
+  "instruction": "请按教材定义重写，并补充引用。",
+  "base_version": 1
+}
+```
+
+响应：
+
+```json
+{
+  "review_id": "uuid",
+  "status": "completed",
+  "version": 2,
+  "answer": "重新生成后的回答",
+  "knowledgePointIds": [],
+  "citations": [],
+  "error": null
+}
+```
+
+`status` 为 `completed`、`generating` 或 `failed`。同步调用已完成时返回新版本；失败会保留原回答并把审核项置为 `regeneration_failed`，再次调用即可重试。
+
+### 7.7 查询重新生成状态
+
+```text
+GET /api/v1/courses/{course_id}/review-flags/{flag_id}/regeneration
+```
+
+返回 `status`、`progress`、`version`、`answer`、`error`、`knowledgePointIds` 和 `citations`。
+
+### 7.8 查询回答版本
+
+```text
+GET /api/v1/courses/{course_id}/review-flags/{flag_id}/versions
+```
+
+返回原回答、重新生成回答和教师修改稿，字段包括 `version`、`answer`、`knowledgePointIds`、`citations`、`source`、`instruction` 和 `created_at`。版本按升序返回。
+
+### 7.9 查询审核历史
+
+```text
+GET /api/v1/courses/{course_id}/review-flags/{flag_id}/history
+```
+
+返回按发生顺序排列的审核记录，`action` 至少包含：
+
+```text
+confirm_correct
+mark_incorrect
+dismiss
+regenerate
+```
+
+每条记录包含教师、前后状态、备注、回答快照和修正答案快照。
+
+### 7.10 高级筛选、摘要和上下文
+
+```text
+GET /api/v1/courses/{course_id}/review-flags/query?status=open&severity=high&reason=missing_course_basis&studentId=uuid&knowledgePointId=uuid&q=测试&sort=newest&cursor=opaque&limit=50
+GET /api/v1/courses/{course_id}/review-flags/summary
+GET /api/v1/courses/{course_id}/review-flags/{flag_id}/context
+```
+
+`query` 返回 `{ items, total, nextCursor, summary }`，旧 `/review-flags` 数组契约保持不变。`summary` 返回 `pending`、`high_risk`、各 reason 计数、`generating`、`pending_rereview` 和 `regeneration_failed`。`context` 聚合学生问题、当前版本、教材引用、知识点、消息/会话标识、最近 LearningEvent、教学规则和审核历史。
+
+### 7.11 自动检测
 
 当前基础版自动检测：
 

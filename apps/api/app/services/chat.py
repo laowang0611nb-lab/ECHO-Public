@@ -227,7 +227,10 @@ async def list_conversation_messages_for_teacher(
     )
     flag_priority = {
         ReviewStatus.OPEN: 0,
+        ReviewStatus.GENERATING: 0,
+        ReviewStatus.PENDING_REREVIEW: 0,
         ReviewStatus.MARKED_INCORRECT: 1,
+        ReviewStatus.REGENERATION_FAILED: 1,
         ReviewStatus.CONFIRMED_CORRECT: 2,
         ReviewStatus.DISMISSED: 3,
     }

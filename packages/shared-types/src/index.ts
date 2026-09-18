@@ -267,7 +267,109 @@ export type ReviewStatus =
   | "open"
   | "confirmed_correct"
   | "marked_incorrect"
-  | "dismissed";
+  | "dismissed"
+  | "generating"
+  | "pending_rereview"
+  | "regeneration_failed";
+
+export type ReviewGenerationStatus = "idle" | "generating" | "completed" | "failed";
+
+export type ReviewVersionSource = "original" | "regenerated" | "teacher";
+
+export type ReviewHistoryAction =
+  | "confirm_correct"
+  | "mark_incorrect"
+  | "dismiss"
+  | "regenerate";
+
+export interface ReviewCitation {
+  document_id: string | null;
+  chunk_id: string | null;
+  page_start: number;
+  page_end: number;
+  quote: string;
+}
+
+export interface ReviewVersion {
+  version: number;
+  answer: string;
+  knowledgePointIds: string[];
+  citations: ReviewCitation[];
+  source: ReviewVersionSource;
+  instruction: string | null;
+  created_at: string;
+}
+
+export interface ReviewHistoryEntry {
+  id: string;
+  review_flag_id: string;
+  version: number;
+  action: ReviewHistoryAction;
+  from_status: ReviewStatus;
+  to_status: ReviewStatus;
+  teacher_id: string | null;
+  teacher_display_name: string | null;
+  note: string | null;
+  answer_snapshot: string | null;
+  corrected_answer_snapshot: string | null;
+  created_at: string;
+}
+
+export interface ReviewRegenerationRequest {
+  instruction: string;
+  base_version?: number;
+}
+
+export interface ReviewRegeneration {
+  review_id: string;
+  status: ReviewGenerationStatus;
+  version: number;
+  answer: string;
+  knowledgePointIds: string[];
+  citations: ReviewCitation[];
+  error: string | null;
+}
+
+export interface ReviewRegenerationStatus {
+  status: ReviewGenerationStatus;
+  progress: number;
+  version: number;
+  answer: string | null;
+  error: string | null;
+  knowledgePointIds: string[];
+  citations: ReviewCitation[];
+}
+
+export interface ReviewFlagSummary {
+  pending: number;
+  high_risk: number;
+  reasons: Record<ReviewReason, number>;
+  generating: number;
+  pending_rereview: number;
+  regeneration_failed: number;
+}
+
+export interface ReviewFlagQuery {
+  items: ReviewFlag[];
+  total: number;
+  nextCursor: string | null;
+  summary: ReviewFlagSummary;
+}
+
+export interface ReviewContext {
+  review_id: string;
+  question: string | null;
+  current_version: ReviewVersion;
+  citations: ReviewCitation[];
+  knowledgePointIds: string[];
+  messageId: string;
+  conversationId: string;
+  studentId: string;
+  recent_learning_events: LearningEventRecord[];
+  teaching_policy: string | null;
+  teaching_policy_conflicts: Array<{ code: string; detail: string }>;
+  review_history: ReviewHistoryEntry[];
+}
 
 export type ReviewDecision = "confirm_correct" | "mark_incorrect" | "dismiss";
 
@@ -290,6 +392,12 @@ export interface ReviewFlag {
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+  knowledgePointIds: string[];
+  citations: ReviewCitation[];
+  current_version: number;
+  generation_status: ReviewGenerationStatus;
+  versions: ReviewVersion[];
+  review_history: ReviewHistoryEntry[];
 }
 
 export interface ReviewDecisionRequest {

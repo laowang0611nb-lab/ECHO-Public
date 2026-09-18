@@ -120,7 +120,13 @@ async def get_course_dashboard(
         )
         .where(
             AIReviewFlag.course_id == course_id,
-            AIReviewFlag.status == ReviewStatus.OPEN,
+            AIReviewFlag.status.in_(
+                [
+                    ReviewStatus.OPEN,
+                    ReviewStatus.PENDING_REREVIEW,
+                    ReviewStatus.REGENERATION_FAILED,
+                ]
+            ),
             CourseMember.role == UserRole.STUDENT,
         )
     )

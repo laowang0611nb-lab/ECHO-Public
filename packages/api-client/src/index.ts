@@ -28,10 +28,19 @@ import type {
   MasteryState,
   Message,
   NotResolvedRequest,
+  ReviewContext,
   ReviewDecisionRequest,
   ReviewFlag,
+  ReviewFlagQuery,
+  ReviewFlagSummary,
+  ReviewHistoryEntry,
+  ReviewReason,
+  ReviewRegeneration,
+  ReviewRegenerationRequest,
+  ReviewRegenerationStatus,
   ReviewSeverity,
   ReviewStatus,
+  ReviewVersion,
   StudentLearningDetail,
   TeacherMessage,
   TeachingPolicy,
@@ -352,11 +361,28 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
     listReviewFlags: (
       userId: string,
       courseId: string,
-      options?: { status?: ReviewStatus; severity?: ReviewSeverity; limit?: number },
+      options?: {
+        status?: ReviewStatus;
+        severity?: ReviewSeverity;
+        reason?: ReviewReason;
+        studentId?: string;
+        knowledgePointId?: string;
+        q?: string;
+        sort?: "newest" | "oldest" | "priority" | "severity";
+        cursor?: string;
+        limit?: number;
+      },
     ) => {
       const params = new URLSearchParams();
       if (options?.status) params.set("status", options.status);
       if (options?.severity) params.set("severity", options.severity);
+      if (options?.reason) params.set("reason", options.reason);
+      if (options?.studentId) params.set("studentId", options.studentId);
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.q) params.set("q", options.q);
+      if (options?.sort) params.set("sort", options.sort);
+      if (options?.cursor) params.set("cursor", options.cursor);
       if (options?.limit) params.set("limit", String(options.limit));
       const query = params.toString();
       return request<ReviewFlag[]>(
@@ -365,9 +391,83 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
         userId,
       );
     },
+    queryReviewFlags: (
+      userId: string,
+      courseId: string,
+      options?: {
+        status?: ReviewStatus;
+        severity?: ReviewSeverity;
+        reason?: ReviewReason;
+        studentId?: string;
+        knowledgePointId?: string;
+        q?: string;
+        sort?: "newest" | "oldest" | "priority" | "severity";
+        cursor?: string;
+        limit?: number;
+      },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.status) params.set("status", options.status);
+      if (options?.severity) params.set("severity", options.severity);
+      if (options?.reason) params.set("reason", options.reason);
+      if (options?.studentId) params.set("studentId", options.studentId);
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.q) params.set("q", options.q);
+      if (options?.sort) params.set("sort", options.sort);
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<ReviewFlagQuery>(
+        `/api/v1/courses/${courseId}/review-flags/query${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getReviewSummary: (userId: string, courseId: string) =>
+      request<ReviewFlagSummary>(
+        `/api/v1/courses/${courseId}/review-flags/summary`,
+        undefined,
+        userId,
+      ),
     getReviewFlag: (userId: string, courseId: string, flagId: string) =>
       request<ReviewFlag>(
         `/api/v1/courses/${courseId}/review-flags/${flagId}`,
+        undefined,
+        userId,
+      ),
+    getReviewContext: (userId: string, courseId: string, flagId: string) =>
+      request<ReviewContext>(
+        `/api/v1/courses/${courseId}/review-flags/${flagId}/context`,
+        undefined,
+        userId,
+      ),
+    regenerateReview: (
+      userId: string,
+      courseId: string,
+      flagId: string,
+      payload: ReviewRegenerationRequest,
+    ) =>
+      request<ReviewRegeneration>(
+        `/api/v1/courses/${courseId}/review-flags/${flagId}/regenerate`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    getReviewRegeneration: (userId: string, courseId: string, flagId: string) =>
+      request<ReviewRegenerationStatus>(
+        `/api/v1/courses/${courseId}/review-flags/${flagId}/regeneration`,
+        undefined,
+        userId,
+      ),
+    listReviewVersions: (userId: string, courseId: string, flagId: string) =>
+      request<ReviewVersion[]>(
+        `/api/v1/courses/${courseId}/review-flags/${flagId}/versions`,
+        undefined,
+        userId,
+      ),
+    getReviewHistory: (userId: string, courseId: string, flagId: string) =>
+      request<ReviewHistoryEntry[]>(
+        `/api/v1/courses/${courseId}/review-flags/${flagId}/history`,
         undefined,
         userId,
       ),
