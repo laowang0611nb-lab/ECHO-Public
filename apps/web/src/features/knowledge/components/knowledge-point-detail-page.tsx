@@ -127,8 +127,8 @@ export function KnowledgePointDetailPage({
       />
 
       <Tabs onValueChange={handleTabChange} value={activeTab}>
-        <TabsList className="h-auto w-full justify-start overflow-x-auto border-b border-border px-0" variant="line">
-          {tabs.map((tab) => <TabsTrigger className="h-10 flex-none px-4" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
+        <TabsList className="grid h-auto w-full grid-cols-3 justify-start rounded-none border-b border-border px-0 sm:grid-cols-6" variant="line">
+          {tabs.map((tab) => <TabsTrigger className="h-10 w-full px-2" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
         </TabsList>
         <TabsContent className="mt-5" value={activeTab}>
           {activeTab === "overview" ? (
@@ -143,22 +143,22 @@ export function KnowledgePointDetailPage({
                 />
                 <StudentMasteryCard context={context} />
                 <UnavailableCard
-                  description="后端没有知识点随时间的掌握度聚合接口，当前不使用虚构趋势。"
+                  description="掌握趋势接口需求已登记；后端接入后显示真实时间序列，不用估算曲线替代。"
                   icon={AlertTriangle}
-                  title="掌握趋势暂不可用"
+                  title="掌握趋势待接入"
                 />
                 <UnavailableCard
-                  description="常见错误聚类依赖学生学习证据与错误模式分析接口，当前阶段不生成无依据结论。"
+                  description="常见错误聚类接口需求已登记；后端需返回可回查 LearningEvent 的错误模式。"
                   icon={CircleHelp}
-                  title="常见错误暂不可用"
+                  title="常见错误待接入"
                 />
               </div>
               <aside className="space-y-4">
                 <RelatedPointsCard context={context} />
                 <UnavailableCard
-                  description="当前后端没有题库或知识点与题目关联接口。"
+                  description="题库与知识点关联接口需求已登记，接入后展示真实题目、难度和来源。"
                   icon={FileQuestion}
-                  title="相关习题暂不可用"
+                  title="相关习题待接入"
                 />
                 <TeachingSuggestionCard mastery={mastery} />
               </aside>
@@ -166,7 +166,7 @@ export function KnowledgePointDetailPage({
           ) : null}
           {activeTab === "related" ? <RelatedContentTab context={context} /> : null}
           {activeTab === "students" ? <StudentMasteryTab context={context} /> : null}
-          {activeTab === "exercises" ? <EmptyState description="当前后端未提供题库和知识点关联接口。" title="暂无相关习题" /> : null}
+          {activeTab === "exercises" ? <EmptyState description="题库接口需求已登记，后端接入 question-items 后在这里显示真实题目。" title="相关习题待接入" /> : null}
           {activeTab === "suggestions" ? <TeachingSuggestionDetail mastery={mastery} /> : null}
           {activeTab === "analysis" ? <AnalysisTab affectedStudents={affectedStudents} context={context} mastery={mastery} /> : null}
         </TabsContent>
@@ -501,9 +501,9 @@ function EditKnowledgePointDialog({
 
 function UnavailableCard({ title, description, icon: Icon }: { title: string; description: string; icon: typeof AlertTriangle }) {
   return (
-    <Card className="gap-3 border-orange-100 bg-orange-50/35 py-5">
-      <CardHeader className="px-5"><CardTitle className="flex items-center gap-2 text-orange-800"><Icon className="size-4" />{title}</CardTitle></CardHeader>
-      <CardContent className="px-5 text-sm leading-6 text-orange-800/80">{description}</CardContent>
+    <Card className="gap-3 border-dashed bg-muted/20 py-5">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 px-5"><CardTitle className="flex items-center gap-2"><Icon className="size-4 text-muted-foreground" />{title}</CardTitle><StatusBadge tone="info">接口待接入</StatusBadge></CardHeader>
+      <CardContent className="px-5 text-sm leading-6 text-muted-foreground">{description}</CardContent>
     </Card>
   );
 }

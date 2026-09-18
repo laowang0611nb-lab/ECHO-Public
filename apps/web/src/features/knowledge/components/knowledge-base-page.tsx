@@ -161,9 +161,9 @@ export function KnowledgeBasePage({
       ) : null}
 
       <Tabs onValueChange={handleTabChange} value={activeTab}>
-        <TabsList className="h-auto w-full justify-start overflow-x-auto border-b border-border px-0" variant="line">
+        <TabsList className="grid h-auto w-full grid-cols-3 justify-start rounded-none border-b border-border px-0 sm:grid-cols-6" variant="line">
           {tabs.map((tab) => (
-            <TabsTrigger className="h-10 flex-none px-4" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
+            <TabsTrigger className="h-10 w-full px-2" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
           ))}
         </TabsList>
 
@@ -246,7 +246,7 @@ export function KnowledgeBasePage({
             <Card className="gap-5 py-5">
               <CardHeader className="px-5">
                 <CardTitle>课程知识图谱预览</CardTitle>
-                <p className="text-sm text-muted-foreground">P1 完整关系图尚未提供接口，当前展示真实章节结构和知识点数量。</p>
+                <p className="text-sm text-muted-foreground">跨知识点关系接口需求已登记，当前展示真实章节结构和知识点数量。</p>
               </CardHeader>
               <CardContent className="px-5">
                 <KnowledgeGraphPreview chapters={data.chapters} courseId={courseId} courseName={course?.name ?? "课程"} />
@@ -272,12 +272,12 @@ export function KnowledgeBasePage({
             <EmptyState
               description={
                 activeTab === "examples"
-                  ? "题库、代码示例和实验资料尚未提供独立资源类型与接口。"
+                  ? "题库、代码示例和实验资源接口需求已登记，后端接入后在这里显示真实内容。"
                   : activeTab === "external"
-                    ? "外部链接、来源校验和最后更新时间尚未提供后端能力。"
-                    : "资源删除、回收站和恢复接口尚未提供，当前不会伪造删除状态。"
+                    ? "外部资源、来源校验和更新时间接口需求已登记。"
+                    : "资源删除、回收站和恢复接口需求已登记，当前不会伪造删除状态。"
               }
-              title={activeTab === "examples" ? "暂无示例与习题数据" : activeTab === "external" ? "暂无外部资源" : "回收站尚未开放"}
+              title={activeTab === "examples" ? "示例与习题待接入" : activeTab === "external" ? "外部资源待接入" : "回收站待接入"}
             />
           ) : null}
         </TabsContent>
