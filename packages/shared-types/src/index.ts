@@ -29,6 +29,91 @@ export interface HealthResponse {
   environment: string;
 }
 
+export type ServiceState = "healthy" | "warning" | "offline" | "unconfigured";
+
+export interface SystemDatabaseStatus {
+  status: ServiceState;
+  dialect: string;
+  current_label: string;
+  target_architecture: string;
+  latency_ms: number;
+  message: string;
+}
+
+export interface SystemVectorStatus {
+  status: ServiceState;
+  available: boolean;
+  engine: string;
+  message: string;
+}
+
+export interface SystemAIProviderStatus {
+  status: ServiceState;
+  configured: boolean;
+  chat_configured: boolean;
+  embedding_configured: boolean;
+  model: string;
+  chat_model: string;
+  embedding_model: string;
+  message: string;
+}
+
+export interface SystemStorageStatus {
+  status: ServiceState;
+  mode: string;
+  path_label: string;
+  writable: boolean;
+  message: string;
+}
+
+export interface SystemLanStatus {
+  api_base_url: string;
+  api_port: number;
+  candidate_lan_ips: string[];
+  student_api_base_url: string | null;
+  message: string;
+}
+
+export interface SystemStatusResponse {
+  status: ServiceState;
+  service: string;
+  version: string;
+  environment: string;
+  database: SystemDatabaseStatus;
+  vector: SystemVectorStatus;
+  ai_provider: SystemAIProviderStatus;
+  storage: SystemStorageStatus;
+  lan: SystemLanStatus;
+  checked_at: string;
+}
+
+export interface DemoDatasetStatus {
+  available: boolean;
+  seeded: boolean;
+  isolated: boolean;
+  namespace: string;
+  dataset_tag: string;
+  course_id: string | null;
+  course_name: string | null;
+  course_code: string | null;
+  student_count: number;
+  knowledge_point_count: number;
+  learning_event_count: number;
+  review_count: number;
+  strategy_count: number;
+  plan_count: number;
+  strategy_id: string | null;
+  student_id: string | null;
+  plan_id: string | null;
+  plan_task_id: string | null;
+  review_id: string | null;
+  message_id: string | null;
+  conversation_id: string | null;
+  knowledge_point_id: string | null;
+  resource_id: string | null;
+  checked_at: string;
+}
+
 export interface User {
   id: string;
   email: string;

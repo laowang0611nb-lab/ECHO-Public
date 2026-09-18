@@ -14,6 +14,7 @@ import type {
   CourseDocument,
   CourseMember,
   DevelopmentLoginRequest,
+  DemoDatasetStatus,
   DocumentCitationPage,
   DocumentIndexStatus,
   DocumentPageEvidence,
@@ -87,6 +88,7 @@ import type {
   ReviewStatus,
   ReviewVersion,
   StudentLearningDetail,
+  SystemStatusResponse,
   TeacherMessage,
   TeachingPolicy,
   TeachingPolicyUpdateRequest,
@@ -239,6 +241,12 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
 
   return {
     health: () => request<HealthResponse>("/api/v1/health"),
+    getSystemStatus: (userId: string) =>
+      request<SystemStatusResponse>("/api/v1/system/status", undefined, userId),
+    getDemoStatus: (userId: string) =>
+      request<DemoDatasetStatus>("/api/v1/demo/status", undefined, userId),
+    resetDemoData: (userId: string) =>
+      request<DemoDatasetStatus>("/api/v1/demo/reset", { method: "POST" }, userId),
     login: (payload: DevelopmentLoginRequest) =>
       request<User>("/api/v1/auth/login", {
         method: "POST",

@@ -16,12 +16,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiClient } from "@/lib/api";
+import { useDemoMode } from "@/features/demo/demo-provider";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 export function Header() {
   const router = useRouter();
   const { user, logout } = useTeacherSession();
+  const demo = useDemoMode();
   const { courses, selectedCourseId, setSelectedCourseId } = useCourseWorkspace();
   const healthQuery = useQuery({
     queryKey: ["system", "health"],
@@ -69,6 +71,7 @@ export function Header() {
             ? `Local Server 已连接 · ${healthQuery.data?.latencyMs ?? 1} ms`
             : "Local Server 状态检查中"}
         </p>
+        {demo.active ? <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700">DEMO · 演示数据</span> : null}
         <Button aria-label="通知" size="icon" type="button" variant="ghost">
           <Bell data-icon="inline-start" />
         </Button>

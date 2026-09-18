@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.88`
+> 冻结版本：`v0.0.89`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
@@ -23,6 +23,9 @@
 | 方法 | 路径 | 权限 | 说明 |
 |---|---|---|---|
 | GET | `/health` | 公开 | 服务存活检查 |
+| GET | `/system/status` | 教师 | 只读本地部署状态、数据库目标、Qwen、文件和局域网检查 |
+| GET | `/demo/status` | 教师 | 隔离 Demo 数据集状态和固定上下文 ID |
+| POST | `/demo/reset` | 教师 | 重建隔离 Demo 数据集，不触碰真实课程 |
 | POST | `/auth/login` | 公开 | 创建或恢复开发用户 |
 | GET | `/auth/me` | 已登录 | 当前用户 |
 | POST | `/courses` | 教师 | 创建课程并自动成为教师成员 |

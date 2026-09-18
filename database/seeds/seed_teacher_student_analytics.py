@@ -23,6 +23,29 @@ from database.models.learning import (
     MasterySnapshot,
     StudentKnowledgeState,
 )
+from database.models.planning import (
+    ExecutionPlan,
+    ExecutionPlanGeneration,
+    ExecutionPlanStatus,
+    ExecutionPlanWeek,
+    PlanTargetScope,
+    PlanTask,
+    PlanTaskStatus,
+    PlanTaskType,
+    TeachingStrategy,
+    TeachingStrategyHistoryAction,
+    TeachingStrategyPriority,
+    TeachingStrategySource,
+    TeachingStrategyStatus,
+    TeachingStrategyType,
+    TeachingStrategyVersion,
+    plan_target_knowledge_points,
+    plan_target_students,
+    plan_task_knowledge_points,
+    plan_task_target_students,
+    strategy_target_knowledge_points,
+    strategy_target_students,
+)
 from database.models.review import (
     AIReviewFlag,
     ReviewReason,
@@ -108,6 +131,22 @@ def _scoped_id(course_id: UUID, kind: str, key: str) -> UUID:
 
 def _document_id(course_id: UUID) -> UUID:
     return _scoped_id(course_id, "document", "software-engineering-demo")
+
+
+def _strategy_id(course_id: UUID) -> UUID:
+    return _scoped_id(course_id, "strategy", "boundary-value-demo")
+
+
+def _plan_id(course_id: UUID) -> UUID:
+    return _scoped_id(course_id, "plan", "boundary-value-demo")
+
+
+def _week_id(course_id: UUID, week_number: int) -> UUID:
+    return _scoped_id(course_id, "plan-week", f"{week_number}")
+
+
+def _task_id(course_id: UUID, task_key: str) -> UUID:
+    return _scoped_id(course_id, "plan-task", task_key)
 
 
 def _target_message_id(course_id: UUID) -> UUID:
@@ -247,6 +286,13 @@ async def _clear_previous_seed(
     ]
     document_id = _document_id(course_id)
     await session.execute(
+        delete(CourseMember).where(
+            CourseMember.course_id == course_id,
+            CourseMember.role == UserRole.STUDENT,
+            CourseMember.user_id.not_in(student_ids),
+        )
+    )
+    await session.execute(
         delete(AIReviewFlag).where(
             AIReviewFlag.course_id == course_id,
             AIReviewFlag.student_id.in_(student_ids),
@@ -258,6 +304,59 @@ async def _clear_previous_seed(
                 select(Message.id).where(Message.conversation_id.in_(conversation_ids))
             )
         )
+    )
+    plan_ids = select(ExecutionPlan.id).where(ExecutionPlan.course_id == course_id)
+    task_ids = select(PlanTask.id).where(PlanTask.plan_id.in_(plan_ids))
+    strategy_ids = select(TeachingStrategy.id).where(
+        TeachingStrategy.course_id == course_id
+    )
+    await session.execute(
+        delete(plan_task_knowledge_points).where(
+            plan_task_knowledge_points.c.task_id.in_(task_ids)
+        )
+    )
+    await session.execute(
+        delete(plan_task_target_students).where(
+            plan_task_target_students.c.task_id.in_(task_ids)
+        )
+    )
+    await session.execute(
+        delete(plan_target_knowledge_points).where(
+            plan_target_knowledge_points.c.plan_id.in_(plan_ids)
+        )
+    )
+    await session.execute(
+        delete(plan_target_students).where(
+            plan_target_students.c.plan_id.in_(plan_ids)
+        )
+    )
+    await session.execute(
+        delete(strategy_target_knowledge_points).where(
+            strategy_target_knowledge_points.c.strategy_id.in_(strategy_ids)
+        )
+    )
+    await session.execute(
+        delete(strategy_target_students).where(
+            strategy_target_students.c.strategy_id.in_(strategy_ids)
+        )
+    )
+    await session.execute(delete(PlanTask).where(PlanTask.plan_id.in_(plan_ids)))
+    await session.execute(
+        delete(ExecutionPlanWeek).where(ExecutionPlanWeek.plan_id.in_(plan_ids))
+    )
+    await session.execute(
+        delete(ExecutionPlanGeneration).where(
+            ExecutionPlanGeneration.plan_id.in_(plan_ids)
+        )
+    )
+    await session.execute(delete(ExecutionPlan).where(ExecutionPlan.course_id == course_id))
+    await session.execute(
+        delete(TeachingStrategyVersion).where(
+            TeachingStrategyVersion.strategy_id.in_(strategy_ids)
+        )
+    )
+    await session.execute(
+        delete(TeachingStrategy).where(TeachingStrategy.course_id == course_id)
     )
     await session.execute(
         delete(LearningEvent).where(
@@ -744,6 +843,221 @@ async def _create_learning_data(
     return events, states, snapshots
 
 
+async def _create_demo_planning_data(
+    session: AsyncSession,
+    course: Course,
+    teacher: User,
+    students: list[User],
+    points: list[KnowledgePoint],
+    document: Document,
+    states: list[StudentKnowledgeState],
+    now: datetime,
+) -> tuple[TeachingStrategy, ExecutionPlan, list[PlanTask]]:
+    target_point = next(
+        (point for point in points if point.name == "边界值分析"),
+        points[-1],
+    )
+    target_students = students[:6]
+    resource_ref = [
+        {
+            "id": str(document.id),
+            "title": document.original_name,
+            "resource_type": "textbook",
+        }
+    ]
+
+    strategy = TeachingStrategy(
+        id=_strategy_id(course.id),
+        course_id=course.id,
+        title="边界值分析强化教学策略",
+        description="DEMO 演示数据：围绕边界值分析开展概念讲解、专项练习和 Quick Check，展示教师采纳策略并跟踪学习效果的完整闭环。",
+        type=TeachingStrategyType.CONTENT_ADJUSTMENT,
+        priority=TeachingStrategyPriority.HIGH,
+        status=TeachingStrategyStatus.ACTIVE,
+        source=TeachingStrategySource.AI_GENERATED,
+        version=2,
+        goals=["理解边界值与邻近值", "能独立设计边界测试用例", "减少边界判断重复错误"],
+        teaching_methods=[
+            {"name": "概念讲解", "weight": 0.35},
+            {"name": "案例演示", "weight": 0.35},
+            {"name": "专项练习", "weight": 0.3},
+        ],
+        teaching_flow=[
+            {"order": 1, "title": "课前诊断", "description": "读取目标知识点的真实掌握证据。"},
+            {"order": 2, "title": "课堂讲解", "description": "围绕边界值和邻近值进行对比讲解。"},
+            {"order": 3, "title": "专项练习", "description": "安排有效、无效和边界输入练习。"},
+            {"order": 4, "title": "快速验证", "description": "用 Quick Check 检查迁移能力。"},
+            {"order": 5, "title": "效果复盘", "description": "根据学习事件评估是否需要二次干预。"},
+        ],
+        personalization_rules=["根据掌握度调整练习难度", "对重复错误学生提供额外讲解"],
+        ai_rules=["涉及课程材料时展示来源", "无法确认时进入教师审核"],
+        expected_effect={
+            "summary": "DEMO 演示数据：预期提升边界条件识别与用例设计表现，不代表真实学生结果。",
+            "impact": 0.12,
+            "metrics": [{"metric": "quick_check_accuracy", "demo": True}],
+        },
+        generated_context={"demo": True, "source": "seeded_demo"},
+        resources_json=resource_ref,
+        created_by=teacher.id,
+        updated_by=teacher.id,
+        created_at=now - timedelta(days=14),
+        updated_at=now - timedelta(days=2),
+    )
+    strategy.target_knowledge_points = [target_point]
+    strategy.target_students = target_students
+    session.add(strategy)
+    await session.flush()
+    session.add_all(
+        [
+            TeachingStrategyVersion(
+                strategy_id=strategy.id,
+                version=1,
+                action=TeachingStrategyHistoryAction.GENERATED,
+                snapshot_json={"demo": True, "status": "suggested", "version": 1},
+                changed_by=teacher.id,
+                created_at=now - timedelta(days=14),
+            ),
+            TeachingStrategyVersion(
+                strategy_id=strategy.id,
+                version=2,
+                action=TeachingStrategyHistoryAction.ACTIVATE,
+                snapshot_json={"demo": True, "status": "active", "version": 2},
+                changed_by=teacher.id,
+                created_at=now - timedelta(days=10),
+            ),
+        ]
+    )
+
+    plan = ExecutionPlan(
+        id=_plan_id(course.id),
+        course_id=course.id,
+        strategy_id=strategy.id,
+        title="边界值分析强化执行计划",
+        description="DEMO 演示数据：把已采纳策略转化为课堂讲解、专项练习和 Quick Check。",
+        status=ExecutionPlanStatus.ACTIVE,
+        start_date=(now - timedelta(days=14)).date(),
+        end_date=(now + timedelta(days=7)).date(),
+        target_scope=PlanTargetScope.WHOLE_CLASS,
+        actions=["classroom_lecture", "supplementary_practice", "quick_check"],
+        plan_parameters={"demo": True, "weekly_sessions": 2, "difficulty": "medium"},
+        evaluation_metrics=["quick_check_accuracy", "mastery_change"],
+        resources_json=resource_ref,
+        teacher_note="DEMO 演示数据，仅用于比赛演示与稳定复现。",
+        created_by=teacher.id,
+        updated_by=teacher.id,
+        created_at=now - timedelta(days=14),
+        updated_at=now - timedelta(days=2),
+    )
+    plan.target_students = target_students
+    plan.knowledge_points = [target_point]
+    session.add(plan)
+    await session.flush()
+
+    week_one = ExecutionPlanWeek(
+        id=_week_id(course.id, 1),
+        plan_id=plan.id,
+        week_number=1,
+        start_date=(now - timedelta(days=14)).date(),
+        end_date=(now - timedelta(days=8)).date(),
+        content="DEMO：完成边界值概念讲解，并组织第一轮专项练习。",
+        knowledge_point_ids=[str(target_point.id)],
+        resources_json=resource_ref,
+    )
+    week_two = ExecutionPlanWeek(
+        id=_week_id(course.id, 2),
+        plan_id=plan.id,
+        week_number=2,
+        start_date=(now - timedelta(days=7)).date(),
+        end_date=(now + timedelta(days=7)).date(),
+        content="DEMO：通过 Quick Check 和学习事件观察掌握变化。",
+        knowledge_point_ids=[str(target_point.id)],
+        resources_json=resource_ref,
+    )
+    session.add_all([week_one, week_two])
+    await session.flush()
+
+    completed_task = PlanTask(
+        id=_task_id(course.id, "practice"),
+        plan_id=plan.id,
+        week_id=week_one.id,
+        week_number=1,
+        order_index=0,
+        title="边界值专项练习",
+        description="DEMO：完成边界值与邻近值专项练习。",
+        type=PlanTaskType.SUPPLEMENTARY_PRACTICE,
+        status=PlanTaskStatus.COMPLETED,
+        due_at=now - timedelta(days=8),
+        resources_json=resource_ref,
+        created_by=teacher.id,
+    )
+    completed_task.knowledge_points = [target_point]
+    completed_task.target_students = target_students
+    active_task = PlanTask(
+        id=_task_id(course.id, "quick-check"),
+        plan_id=plan.id,
+        week_id=week_two.id,
+        week_number=2,
+        order_index=0,
+        title="边界条件 Quick Check",
+        description="DEMO：用 Quick Check 观察目标知识点的迁移表现。",
+        type=PlanTaskType.QUICK_CHECK,
+        status=PlanTaskStatus.IN_PROGRESS,
+        due_at=now + timedelta(days=2),
+        resources_json=resource_ref,
+        created_by=teacher.id,
+    )
+    active_task.knowledge_points = [target_point]
+    active_task.target_students = target_students
+    session.add_all([completed_task, active_task])
+    await session.flush()
+
+    state_by_student = {
+        state.user_id: state
+        for state in states
+        if state.knowledge_point_id == target_point.id
+    }
+    for index, student in enumerate(target_students[:4]):
+        is_correct = index != 1
+        event_type = (
+            LearningEventType.QUIZ_CORRECT
+            if is_correct
+            else LearningEventType.QUIZ_WRONG
+        )
+        created_at = now - timedelta(days=6 - index)
+        event = LearningEvent(
+            id=_scoped_id(course.id, "plan-event", student.email),
+            course_id=course.id,
+            user_id=student.id,
+            knowledge_point_id=target_point.id,
+            plan_id=plan.id,
+            task_id=completed_task.id,
+            week_number=1,
+            event_type=event_type,
+            weight=1.0,
+            evidence="DEMO 演示数据：学生完成边界值 Quick Check。",
+            metadata_json={"seed": True, "demo": True},
+            created_at=created_at,
+        )
+        session.add(event)
+        state = state_by_student.get(student.id)
+        if state is not None:
+            state.score = max(
+                0.0,
+                min(100.0, state.score + (6.0 if is_correct else -4.0)),
+            )
+            session.add(
+                MasterySnapshot(
+                    course_id=course.id,
+                    user_id=student.id,
+                    knowledge_point_id=target_point.id,
+                    source_event_id=event.id,
+                    score=state.score,
+                    created_at=created_at + timedelta(hours=1),
+                )
+            )
+    await session.flush()
+    return strategy, plan, [completed_task, active_task]
+
 async def seed_teacher_student_analytics(
     session: AsyncSession,
     requested_course_id: UUID | None,
@@ -783,6 +1097,16 @@ async def seed_teacher_student_analytics(
         conversation_data,
         now,
     )
+    strategy, plan, plan_tasks = await _create_demo_planning_data(
+        session,
+        course,
+        teacher,
+        students,
+        points,
+        document,
+        states,
+        now,
+    )
     await session.commit()
 
     conversations = conversation_data["conversations"]
@@ -817,6 +1141,9 @@ async def seed_teacher_student_analytics(
         "resourceIds": [str(resource_id) for resource_id in resource_ids],
         "chunkIds": [str(chunk_id) for chunk_id in chunk_ids],
         "targetMessageId": str(_target_message_id(course.id)),
+        "strategyId": str(strategy.id),
+        "planId": str(plan.id),
+        "planTaskIds": [str(task.id) for task in plan_tasks],
         "students": [
             {
                 "userId": str(student.id),

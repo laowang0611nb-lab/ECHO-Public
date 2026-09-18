@@ -10,7 +10,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="min-h-screen lg:pl-[258px]">
         <Header />
         <main className="mx-auto w-full max-w-[1680px] px-4 py-6 lg:px-6">{children}</main>
+        <GuidedDemoBar />
       </div>
     </div>
   );
 }
+import { GuidedDemoBar } from "@/features/demo/components/guided-demo-bar";

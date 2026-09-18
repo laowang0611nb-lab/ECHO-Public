@@ -2,8 +2,14 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { apiClient } from "@/lib/api";
 
 export function DashboardFooter() {
+  const health = useQuery({
+    queryKey: ["system", "health"],
+    queryFn: () => apiClient.health(),
+    staleTime: 30_000,
+  });
   return (
     <footer className="flex flex-col gap-2 border-t border-border py-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
       <p>ECHO 让 AI 与教育产生真正的回响。</p>
@@ -40,8 +46,9 @@ export function DashboardFooter() {
             </div>
           </DialogContent>
         </Dialog>
-        <span>v0.0.83</span>
+        <span>v{health.data?.version ?? "—"}</span>
       </div>
     </footer>
   );
 }
+import { useQuery } from "@tanstack/react-query";

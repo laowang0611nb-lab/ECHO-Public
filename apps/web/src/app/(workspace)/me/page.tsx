@@ -1,5 +1,21 @@
-import { PlaceholderPage } from "@/components/common/placeholder-page";
+import { MePage } from "@/features/me/components/me-page";
 
-export default function MePage() {
-  return <PlaceholderPage breadcrumbs={[{ label: "我的" }]} description="个人资料、服务器设置、Demo 模式将在后续阶段实现。" title="我的" />;
+const meTabs = ["profile", "security", "system", "notifications", "appearance", "about"] as const;
+
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeTab(value: string | string[] | undefined) {
+  const tab = first(value);
+  return meTabs.find((candidate) => candidate === tab) ?? "profile";
+}
+
+export default async function MeRoute({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
+  const query = await searchParams;
+  return <MePage initialTab={normalizeTab(query.tab)} />;
 }
