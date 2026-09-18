@@ -601,7 +601,6 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
               <ReviewQueue
               courseId={selectedCourse.id}
               onChanged={() => setDashboardReloadKey((current) => current + 1)}
-              userId={user.id}
               />
               <KnowledgeEditor courseId={selectedCourse.id} userId={user.id} />
             </>

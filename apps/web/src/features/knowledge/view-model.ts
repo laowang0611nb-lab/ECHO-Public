@@ -94,11 +94,13 @@ export function buildSourceHref(
     chunkId?: string;
     conversationId?: string;
     messageId?: string;
+    reviewId?: string;
   } = {},
 ) {
   const params = new URLSearchParams();
   params.set("from", options.from || "resource");
   if (options.courseId) params.set("courseId", options.courseId);
+  if (options.reviewId) params.set("reviewId", options.reviewId);
   if (options.knowledgePointId) params.set("knowledgePointId", options.knowledgePointId);
   if (options.page) params.set("page", String(options.page));
   if (options.chunkId) params.set("chunkId", options.chunkId);

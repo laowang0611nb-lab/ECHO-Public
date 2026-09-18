@@ -1,5 +1,18 @@
-import { PlaceholderPage } from "@/components/common/placeholder-page";
+import { ReviewOverviewPage } from "@/features/ai-review/components/review-overview-page";
+import { buildReviewFilters, firstQueryValue } from "@/features/ai-review/normalizers";
 
-export default function AiReviewPage() {
-  return <PlaceholderPage breadcrumbs={[{ label: "AI 教学" }, { label: "AI 回答审核" }]} description="AI 回答审核总览将在后续阶段实现。" title="AI 回答审核" />;
+export default async function AiReviewRoute({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    courseId?: string | string[];
+    q?: string | string[];
+    status?: string | string[];
+    reason?: string | string[];
+    severity?: string | string[];
+    sort?: string | string[];
+  }>;
+}) {
+  const query = await searchParams;
+  return <ReviewOverviewPage initialCourseId={firstQueryValue(query.courseId)} initialFilters={buildReviewFilters(query)} />;
 }

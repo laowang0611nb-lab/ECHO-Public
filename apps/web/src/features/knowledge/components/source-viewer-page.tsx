@@ -22,6 +22,7 @@ export function SourceViewerPage({
   chunkId,
   knowledgePointId,
   messageId,
+  reviewId,
 }: {
   resourceId: string;
   from: string;
@@ -29,6 +30,7 @@ export function SourceViewerPage({
   chunkId?: string;
   knowledgePointId?: string;
   messageId?: string;
+  reviewId?: string;
 }) {
   const router = useRouter();
   const data = useKnowledgeResourceData(resourceId);
@@ -156,6 +158,7 @@ export function SourceViewerPage({
           isLoading={evidence.isLoading}
           isError={evidence.isError}
           messageId={messageId}
+          reviewId={reviewId}
           onCopy={() => void copyQuote()}
           pointName={currentPoint?.name}
           resourceName={resource.document.original_name}
@@ -185,6 +188,7 @@ function SourceEvidenceAside({
   isLoading,
   isError,
   messageId,
+  reviewId,
   onCopy,
 }: {
   resourceName: string;
@@ -195,6 +199,7 @@ function SourceEvidenceAside({
   isLoading: boolean;
   isError: boolean;
   messageId?: string;
+  reviewId?: string;
   onCopy: () => void;
 }) {
   return (
@@ -208,6 +213,7 @@ function SourceEvidenceAside({
           <SourceLine label="页码" value={evidence ? `${evidence.page_start}-${evidence.page_end}` : "待检索"} />
           <SourceLine label="Chunk ID" value={chunkId ?? "暂无"} />
           {messageId ? <SourceLine label="消息 ID" value={messageId} /> : null}
+          {reviewId ? <SourceLine label="审核项 ID" value={reviewId} /> : null}
         </CardContent>
       </Card>
 
@@ -242,7 +248,7 @@ function SourceLine({ label, value }: { label: string; value: string }) {
 
 function sourceBreadcrumbs(from: string, resourceName: string, pointName?: string) {
   if (from === "point") return [{ label: "知识库", href: "/knowledge" }, { label: pointName ?? "知识点详情" }, { label: "来源查看" }];
-  if (from === "ai-review") return [{ label: "AI 回答审核", href: "/ai-review" }, { label: "审核工作台" }, { label: "来源查看" }];
+  if (from === "ai-review" || from === "review") return [{ label: "AI 回答审核", href: "/ai-review" }, { label: "审核工作台" }, { label: "来源查看" }];
   if (from === "conversation") return [{ label: "学生学情", href: "/students" }, { label: "完整对话" }, { label: "来源查看" }];
   return [{ label: "知识库", href: "/knowledge" }, { label: resourceName }, { label: "来源查看" }];
 }

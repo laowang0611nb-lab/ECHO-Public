@@ -38,6 +38,8 @@ export default async function StudentConversationRoute({
     from?: string | string[];
     messageId?: string | string[];
     knowledgePointId?: string | string[];
+    courseId?: string | string[];
+    reviewId?: string | string[];
     q?: string | string[];
     status?: string | string[];
     reason?: string | string[];
@@ -46,6 +48,7 @@ export default async function StudentConversationRoute({
 }) {
   const { studentId, conversationId } = await params;
   const query = await searchParams;
+  const courseId = first(query.courseId);
   const initialQuery: ConversationEvidenceQuery = {
     search: first(query.q)?.trim() ?? "",
     status: normalizeStatus(query.status),
@@ -54,11 +57,13 @@ export default async function StudentConversationRoute({
   };
   return (
     <StudentConversationPage
+      courseId={courseId}
       initialQuery={initialQuery}
       conversationId={conversationId}
       from={first(query.from) ?? "student"}
       knowledgePointId={first(query.knowledgePointId)}
       messageId={first(query.messageId)}
+      reviewId={first(query.reviewId)}
       studentId={studentId}
     />
   );

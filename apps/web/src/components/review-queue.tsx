@@ -1,17 +1,11 @@
 "use client";
 
-import type { ReviewFlag, ReviewReason } from "@echo/shared-types";
-import { useEffect, useState } from "react";
+import type { ReviewFlag } from "@echo/shared-types";
+import { useState } from "react";
 
-import { apiClient } from "@/lib/api";
+import { useReviewDecision, useReviewQueue } from "@/features/ai-review/queries";
+import { reviewReasonLabels } from "@/features/ai-review/view-model";
 
-const reasonLabels: Record<ReviewReason, string> = {
-  missing_course_basis: "缺少课程依据",
-  outside_material_heavy: "课程外内容偏多",
-  repeated_follow_up: "连续追问",
-  student_not_resolved: "学生标记未解决",
-  teacher_rule_violation: "可能违反教学规则",
-};
 
 function severityClass(severity: ReviewFlag["severity"]): string {
   if (severity === "high") return "border-[#f2b8b5] bg-[#fff4f3] text-[#b42318]";
@@ -22,49 +16,20 @@ function severityClass(severity: ReviewFlag["severity"]): string {
 export function ReviewQueue({
   courseId,
   onChanged,
-  userId,
 }: {
   courseId: string;
   onChanged: () => void;
-  userId: string;
 }) {
-  const [flags, setFlags] = useState<ReviewFlag[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [correctedAnswers, setCorrectedAnswers] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const items = await apiClient.listReviewFlags(userId, courseId, {
-          status: "open",
-          limit: 50,
-        });
-        if (!cancelled) {
-          setFlags(items);
-        }
-      } catch (requestError) {
-        if (!cancelled) {
-          setError(requestError instanceof Error ? requestError.message : "加载审核队列失败。");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [courseId, reloadKey, userId]);
+  const queueQuery = useReviewQueue(courseId, { status: "open" });
+  const decisionMutation = useReviewDecision(courseId);
+  const flags = queueQuery.data ?? [];
+  const loading = queueQuery.isLoading;
+  const queueError = queueQuery.isError ? (queueQuery.error instanceof Error ? queueQuery.error.message : "加载审核队列失败。") : null;
 
   async function handleDecision(
     flag: ReviewFlag,
@@ -76,13 +41,13 @@ export function ReviewQueue({
     const note = notes[flag.id]?.trim();
     const correctedAnswer = correctedAnswers[flag.id]?.trim();
     try {
-      await apiClient.reviewFlag(userId, courseId, flag.id, {
+      await decisionMutation.mutateAsync({ flagId: flag.id, payload: {
         decision,
         note: note || undefined,
         corrected_answer:
           decision === "mark_incorrect" ? correctedAnswer || undefined : undefined,
-      });
-      setFlags((current) => current.filter((item) => item.id !== flag.id));
+      } });
+      void queueQuery.refetch();
       setNotice("审核结果已保存。");
       onChanged();
     } catch (requestError) {
@@ -101,13 +66,19 @@ export function ReviewQueue({
         </div>
         <button
           className="border border-[#cfd5df] bg-white px-3 py-2 text-sm font-medium text-[#344054] hover:bg-[#f8fafc]"
-          onClick={() => setReloadKey((current) => current + 1)}
+          disabled={queueQuery.isFetching}
+          onClick={() => void queueQuery.refetch()}
           type="button"
         >
           刷新
         </button>
       </div>
 
+      {queueError ? (
+        <p className="border-b border-[#f2b8b5] bg-[#fff4f3] px-4 py-3 text-sm text-[#b42318]">
+          {queueError}
+        </p>
+      ) : null}
       {error ? (
         <p className="border-b border-[#f2b8b5] bg-[#fff4f3] px-4 py-3 text-sm text-[#b42318]">
           {error}
@@ -132,7 +103,7 @@ export function ReviewQueue({
                   {flag.severity.toUpperCase()}
                 </span>
                 <span className="text-sm font-semibold text-[#1d2939]">
-                  {reasonLabels[flag.reason]}
+                  {reviewReasonLabels[flag.reason]}
                 </span>
                 <span className="text-xs text-[#667085]">{flag.student_display_name}</span>
               </div>

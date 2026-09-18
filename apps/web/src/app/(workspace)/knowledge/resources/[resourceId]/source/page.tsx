@@ -15,6 +15,7 @@ export default async function KnowledgeSourcePage({
     chunkId?: string | string[];
     knowledgePointId?: string | string[];
     messageId?: string | string[];
+    reviewId?: string | string[];
   }>;
 }) {
   const { resourceId } = await params;
@@ -27,6 +28,7 @@ export default async function KnowledgeSourcePage({
       initialPage={Number.isFinite(pageValue) && pageValue > 0 ? pageValue : undefined}
       knowledgePointId={first(query.knowledgePointId)}
       messageId={first(query.messageId)}
+      reviewId={first(query.reviewId)}
       resourceId={resourceId}
     />
   );

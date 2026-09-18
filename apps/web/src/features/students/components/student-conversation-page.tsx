@@ -34,6 +34,8 @@ export function StudentConversationPage({
   from,
   messageId,
   knowledgePointId,
+  courseId,
+  reviewId,
   initialQuery,
 }: {
   studentId: string;
@@ -41,6 +43,8 @@ export function StudentConversationPage({
   from: string;
   messageId?: string;
   knowledgePointId?: string;
+  courseId?: string;
+  reviewId?: string;
   initialQuery: ConversationEvidenceQuery;
 }) {
   const router = useRouter();
@@ -94,6 +98,8 @@ export function StudentConversationPage({
 
     const params = new URLSearchParams();
     params.set("from", from);
+    if (courseId) params.set("courseId", courseId);
+    if (reviewId) params.set("reviewId", reviewId);
     if (messageId) params.set("messageId", messageId);
     if (knowledgePointId) params.set("knowledgePointId", knowledgePointId);
     if (next.search.trim()) params.set("q", next.search.trim());
@@ -106,6 +112,8 @@ export function StudentConversationPage({
   function buildConversationHref(nextConversationId: string) {
     const params = new URLSearchParams();
     params.set("from", from);
+    if (courseId) params.set("courseId", courseId);
+    if (reviewId) params.set("reviewId", reviewId);
     if (messageId && nextConversationId === conversationId) params.set("messageId", messageId);
     if (knowledgePointId) params.set("knowledgePointId", knowledgePointId);
     if (search.trim()) params.set("q", search.trim());
@@ -135,8 +143,9 @@ export function StudentConversationPage({
     return <EmptyState description="学生不存在，或不属于当前教师账号。" title="无法打开对话" />;
   }
 
+  const reviewWorkspaceHref = reviewId ? `/ai-review/pending?reviewId=${reviewId}${courseId ? `&courseId=${courseId}` : ""}` : "/ai-review";
   const breadcrumbs = from === "ai-review"
-    ? [{ label: "AI 回答审核", href: "/ai-review" }, { label: "审核工作台" }, { label: "完整对话" }]
+    ? [{ label: "AI 回答审核", href: "/ai-review" }, { label: "审核工作台", href: reviewWorkspaceHref }, { label: "完整对话" }]
     : [{ label: "学生学情", href: "/students" }, { label: "学生详情", href: `/students/${studentId}?from=student&courseId=${data.course.id}&tab=conversations` }, { label: "完整对话" }];
 
   return (
