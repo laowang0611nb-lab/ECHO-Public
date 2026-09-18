@@ -13,6 +13,7 @@ from app.api.routes import (
     learning,
     review,
     search,
+    teacher_resources,
     teaching_policy,
 )
 
@@ -29,4 +30,5 @@ api_router.include_router(learning.router)
 api_router.include_router(review.router)
 api_router.include_router(search.router)
 api_router.include_router(teaching_policy.router)
+api_router.include_router(teacher_resources.router)
 api_router.include_router(health.router)

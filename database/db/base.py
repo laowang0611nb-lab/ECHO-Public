@@ -2,7 +2,7 @@ from database.db.base_class import Base
 from database.models.auth import AuthSession, UserCredential
 from database.models.chat import Conversation, Message, MessageCitation, TeachingPolicy
 from database.models.course import Course, CourseInvite, CourseMember
-from database.models.document import Document, DocumentPage
+from database.models.document import Document, DocumentPage, ResourceType
 from database.models.knowledge import (
     Chapter,
     KnowledgeChunk,
@@ -16,6 +16,13 @@ from database.models.learning import (
     StudentKnowledgeState,
 )
 from database.models.profile import StudentProfile, TeacherProfile
+from database.models.resource import (
+    ExternalResource,
+    ExternalResourceStatus,
+    QuestionDifficulty,
+    QuestionItem,
+    QuestionType,
+)
 from database.models.review import (
     AIReviewFlag,
     ReviewAnswerVersion,
@@ -41,6 +48,8 @@ __all__ = [
     "CourseMember",
     "Document",
     "DocumentPage",
+    "ExternalResource",
+    "ExternalResourceStatus",
     "KnowledgeChunk",
     "KnowledgePoint",
     "KnowledgeRelation",
@@ -49,6 +58,10 @@ __all__ = [
     "MasterySnapshot",
     "Message",
     "MessageCitation",
+    "QuestionDifficulty",
+    "QuestionItem",
+    "QuestionType",
+    "ResourceType",
     "ReviewAnswerVersion",
     "ReviewGenerationStatus",
     "ReviewHistoryAction",

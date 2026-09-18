@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.76`
+> 冻结版本：`v0.0.80`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
@@ -401,7 +401,64 @@ GET /api/v1/courses/{course_id}/review-flags/{flag_id}/context
 
 `teacher_rule_violation` 已保留为稳定枚举，但自动检测将在后续审核版本中启用。
 
-## 8. 接口冻结规则
+## 8. 教师端资源与证据接口
+
+### 8.1 知识点与学生长期证据
+
+```text
+GET /api/v1/courses/{course_id}/knowledge-points/{knowledge_point_id}/mastery-trend?days=30
+GET /api/v1/courses/{course_id}/knowledge-points/{knowledge_point_id}/error-patterns?days=30
+GET /api/v1/courses/{course_id}/students/{student_id}/mastery-trend?days=90
+GET /api/v1/courses/{course_id}/students/{student_id}/error-patterns?days=90
+```
+
+掌握趋势返回 `range.start_date`、`range.end_date`、`range.days` 和按日期升序的真实 `points`，不插值。错误聚类只聚合可回查的 LearningEvent，每个 pattern 返回 `sample_evidence_ids`。
+
+### 8.2 习题与外部资源
+
+```text
+GET/POST /api/v1/courses/{course_id}/question-items
+GET/PATCH/DELETE /api/v1/courses/{course_id}/question-items/{question_item_id}
+GET/POST /api/v1/courses/{course_id}/external-resources
+PATCH/DELETE /api/v1/courses/{course_id}/external-resources/{resource_id}
+```
+
+列表统一返回 `items`、`total`、`next_cursor`，支持 `cursor`、`limit` 和知识点筛选。习题类型包括 `single_choice`、`multiple_choice`、`true_false`、`short_answer`、`coding`、`experiment`。
+
+资源类型统一为：
+
+```text
+textbook
+outline
+question_bank
+code_example
+lab
+external_link
+```
+
+### 8.3 PDF 文件、页面与索引
+
+```text
+GET /api/v1/courses/{course_id}/documents/{document_id}/file
+GET /api/v1/courses/{course_id}/documents/{document_id}/pages/{page_number}
+GET /api/v1/courses/{course_id}/documents/{document_id}/index-status
+GET /api/v1/courses/{course_id}/documents/{document_id}/citations
+```
+
+文件接口返回 `application/pdf` 并支持 HTTP Range。页面接口返回宽高、文本和 Chunk blocks；只有 Chunk 元数据存在真实 `bbox` 时返回坐标，否则 `bbox=null`。
+
+### 8.4 回收站与知识图谱
+
+```text
+GET /api/v1/courses/{course_id}/resources?trashed=true
+POST /api/v1/courses/{course_id}/resources/{resource_id}/trash
+POST /api/v1/courses/{course_id}/resources/{resource_id}/restore
+DELETE /api/v1/courses/{course_id}/resources/{resource_id}?permanent=true
+GET /api/v1/courses/{course_id}/knowledge-graph?chapterId=&pointId=
+```
+
+回收站覆盖普通资源、章节、知识点、习题和外部资源。永久删除必须显式传 `permanent=true`，并返回受影响引用数量。图谱节点和边全部来自数据库，不使用前端模拟关系。
+## 9. 接口冻结规则
 
 - 已登记的方法、路径和枚举值视为稳定契约。
 - 新功能只能新增可选字段、新枚举值或新路径。

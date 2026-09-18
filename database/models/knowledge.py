@@ -8,12 +8,14 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,8 +31,13 @@ if TYPE_CHECKING:
 class Chapter(Base):
     __tablename__ = "chapters"
     __table_args__ = (
-        UniqueConstraint(
-            "document_id", "order_index", name="uq_chapters_document_order"
+        Index(
+            "uq_chapters_active_document_order",
+            "document_id",
+            "order_index",
+            unique=True,
+            sqlite_where=text("trashed_at IS NULL"),
+            postgresql_where=text("trashed_at IS NULL"),
         ),
         CheckConstraint("order_index >= 0", name="ck_chapters_order_index_nonnegative"),
     )
@@ -53,6 +60,7 @@ class Chapter(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    trashed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -75,7 +83,14 @@ class Chapter(Base):
 class KnowledgePoint(Base):
     __tablename__ = "knowledge_points"
     __table_args__ = (
-        UniqueConstraint("chapter_id", "name", name="uq_knowledge_points_chapter_name"),
+        Index(
+            "uq_knowledge_points_active_chapter_name",
+            "chapter_id",
+            "name",
+            unique=True,
+            sqlite_where=text("trashed_at IS NULL"),
+            postgresql_where=text("trashed_at IS NULL"),
+        ),
         CheckConstraint(
             "order_index >= 0", name="ck_knowledge_points_order_index_nonnegative"
         ),
@@ -99,6 +114,7 @@ class KnowledgePoint(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    trashed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

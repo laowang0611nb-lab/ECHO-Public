@@ -74,6 +74,14 @@ export interface CourseMember {
 
 export type DocumentStatus = "uploaded" | "parsing" | "ready" | "failed";
 
+export type ResourceType =
+  | "textbook"
+  | "outline"
+  | "question_bank"
+  | "code_example"
+  | "lab"
+  | "external_link";
+
 export interface CourseDocument {
   id: string;
   course_id: string;
@@ -82,7 +90,9 @@ export interface CourseDocument {
   content_type: string;
   size_bytes: number;
   status: DocumentStatus;
+  resource_type: ResourceType;
   page_count: number | null;
+  trashed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -527,6 +537,229 @@ export interface StudentLearningDetail {
   recent_evidence: LearningEvidence[];
 }
 
+
+export interface MasteryTrendPoint {
+  date: string;
+  average_mastery: number | null;
+  affected_students: number;
+  evidence_count: number;
+  snapshot_ids: string[];
+  event_ids: string[];
+}
+
+export interface MasteryTrendRange {
+  start_date: string;
+  end_date: string;
+  days: number;
+}
+
+export interface MasteryTrend {
+  knowledge_point_id: string | null;
+  student_id: string | null;
+  range: MasteryTrendRange;
+  points: MasteryTrendPoint[];
+}
+
+export type ErrorPatternTrend = "up" | "stable" | "down" | "unknown";
+
+export interface ErrorPattern {
+  code: string;
+  label: string;
+  description: string;
+  occurrence_count: number;
+  affected_students: number;
+  trend: ErrorPatternTrend;
+  sample_evidence_ids: string[];
+}
+
+export interface ErrorPatternReport {
+  knowledge_point_id: string | null;
+  student_id: string | null;
+  window_days: number;
+  patterns: ErrorPattern[];
+}
+
+export type QuestionType =
+  | "single_choice"
+  | "multiple_choice"
+  | "true_false"
+  | "short_answer"
+  | "coding"
+  | "experiment";
+
+export type QuestionDifficulty = "easy" | "medium" | "hard";
+
+export interface QuestionItem {
+  id: string;
+  course_id: string;
+  knowledge_point_ids: string[];
+  type: QuestionType;
+  difficulty: QuestionDifficulty;
+  title: string;
+  content: string;
+  answer: string | null;
+  explanation: string | null;
+  source_document_id: string | null;
+  source_page: number | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuestionItemCreateRequest {
+  knowledge_point_ids?: string[];
+  type: QuestionType;
+  difficulty?: QuestionDifficulty;
+  title: string;
+  content: string;
+  answer?: string | null;
+  explanation?: string | null;
+  source_document_id?: string | null;
+  source_page?: number | null;
+  metadata_json?: Record<string, unknown>;
+}
+
+export type QuestionItemUpdateRequest = Partial<QuestionItemCreateRequest>;
+
+export interface QuestionItemPage {
+  items: QuestionItem[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export type ExternalResourceStatus = "unchecked" | "valid" | "invalid" | "unknown";
+
+export interface ExternalResource {
+  id: string;
+  course_id: string;
+  title: string;
+  url: string;
+  provider: string | null;
+  description: string | null;
+  knowledge_point_ids: string[];
+  check_status: ExternalResourceStatus;
+  last_verified_at: string | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExternalResourceCreateRequest {
+  title: string;
+  url: string;
+  provider?: string | null;
+  description?: string | null;
+  knowledge_point_ids?: string[];
+  metadata_json?: Record<string, unknown>;
+}
+
+export type ExternalResourceUpdateRequest = Partial<ExternalResourceCreateRequest> & {
+  check_status?: ExternalResourceStatus;
+};
+
+export interface ExternalResourcePage {
+  items: ExternalResource[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export type ResourceItemType =
+  | "document"
+  | "chapter"
+  | "knowledge_point"
+  | "question_item"
+  | "external_resource";
+
+export interface ResourceListItem {
+  id: string;
+  course_id: string;
+  item_type: ResourceItemType;
+  title: string;
+  resource_type: ResourceType | "chapter" | "knowledge_point" | null;
+  trashed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResourceListPage {
+  items: ResourceListItem[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface PermanentDeleteResult {
+  id: string;
+  item_type: ResourceItemType;
+  affected_reference_count: number;
+  deleted: boolean;
+}
+
+export interface KnowledgeGraphNode {
+  id: string;
+  type: "course" | "chapter" | "knowledge_point" | "resource";
+  label: string;
+  parent_id: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface KnowledgeGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: "contains" | "prerequisite" | "related" | "assessed_by" | "sourced_from";
+  weight: number;
+  evidence_count: number;
+}
+
+export interface KnowledgeGraph {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+}
+
+export interface DocumentIndexStatus {
+  document_id: string;
+  status: string;
+  pages_total: number;
+  pages_parsed: number;
+  chunks_total: number;
+  chunks_embedded: number;
+  last_indexed_at: string | null;
+  error: string | null;
+}
+
+export interface DocumentCitationItem {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  student_id: string;
+  citation_index: number;
+  document_id: string | null;
+  chunk_id: string | null;
+  page_start: number;
+  page_end: number;
+  quote: string;
+  created_at: string;
+}
+
+export interface DocumentCitationPage {
+  items: DocumentCitationItem[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface DocumentPageBlock {
+  chunk_id: string;
+  text: string;
+  bbox: number[] | null;
+}
+
+export interface DocumentPageEvidence {
+  page_number: number;
+  width: number | null;
+  height: number | null;
+  text: string;
+  blocks: DocumentPageBlock[];
+}
 export type ChatStreamEvent =
   | { event: "text_delta"; data: { delta: string } }
   | {

@@ -165,4 +165,11 @@ class ChapterResponse(ChapterDraft):
     order_index: int
     knowledge_points: list[KnowledgePointResponse]
 
+    @field_validator("knowledge_points", mode="before")
+    @classmethod
+    def exclude_trashed_points(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        return [point for point in value if getattr(point, "trashed_at", None) is None]
+
     model_config = ConfigDict(from_attributes=True)

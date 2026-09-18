@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 import anyio
 from database.models.course import Course, CourseMember
-from database.models.document import Document, DocumentPage, DocumentStatus
+from database.models.document import Document, DocumentPage, DocumentStatus, ResourceType
 from database.models.knowledge import KnowledgeChunk
 from database.models.user import User, UserRole
 from fastapi import UploadFile
@@ -48,6 +48,7 @@ async def upload_course_document(
     uploader: User,
     upload: UploadFile,
     max_bytes: int,
+    resource_type: ResourceType = ResourceType.TEXTBOOK,
 ) -> Document:
     course = await session.get(Course, course_id)
     if course is None:
@@ -84,6 +85,7 @@ async def upload_course_document(
         storage_key=storage_key,
         content_type="application/pdf",
         size_bytes=size_bytes,
+        resource_type=resource_type,
     )
     session.add(document)
     try:
@@ -117,15 +119,20 @@ async def list_course_documents(
 
     documents = await session.scalars(
         select(Document)
-        .where(Document.course_id == course_id)
+        .where(Document.course_id == course_id, Document.trashed_at.is_(None))
         .order_by(Document.created_at.desc(), Document.id.desc())
     )
     return list(documents)
 
 
-def _extract_pdf_pages(path: Path) -> list[str]:
+def _extract_pdf_pages(path: Path) -> list[tuple[str, int | None, int | None]]:
     reader = PdfReader(str(path))
-    return [(page.extract_text() or "") for page in reader.pages]
+    pages: list[tuple[str, int | None, int | None]] = []
+    for page in reader.pages:
+        width = round(float(page.mediabox.width)) if page.mediabox.width else None
+        height = round(float(page.mediabox.height)) if page.mediabox.height else None
+        pages.append((page.extract_text() or "", width, height))
+    return pages
 
 
 async def parse_document(
@@ -135,7 +142,9 @@ async def parse_document(
     requester_id: UUID,
 ) -> Document:
     document = await session.scalar(
-        select(Document).where(Document.id == document_id).with_for_update()
+        select(Document)
+        .where(Document.id == document_id, Document.trashed_at.is_(None))
+        .with_for_update()
     )
     if document is None:
         raise DocumentNotFoundError
@@ -174,8 +183,10 @@ async def parse_document(
                 page_number=page_number,
                 text=text or None,
                 char_count=len(text),
+                width=width,
+                height=height,
             )
-            for page_number, text in enumerate(page_texts, start=1)
+            for page_number, (text, width, height) in enumerate(page_texts, start=1)
         ]
     )
     document.page_count = len(page_texts)

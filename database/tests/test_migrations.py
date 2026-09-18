@@ -104,9 +104,9 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "b4c5d6e7f8a9 (head)" in current.stdout
+    assert "c5d6e7f8a9b0 (head)" in current.stdout
 
     _run_alembic(database_url, "downgrade", "d9e0f1a2b3c4")
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "b4c5d6e7f8a9 (head)" in current.stdout
+    assert "c5d6e7f8a9b0 (head)" in current.stdout

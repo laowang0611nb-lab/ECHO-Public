@@ -226,6 +226,31 @@ contracts are frozen in `docs/API契约.md`.
 Teachers can also regenerate an answer with an instruction without overwriting the
 original message, then inspect versions, regeneration status, and audit history.
 
+## Teacher resources and evidence
+
+```text
+GET  /api/v1/courses/{course_id}/knowledge-points/{knowledge_point_id}/mastery-trend
+GET  /api/v1/courses/{course_id}/knowledge-points/{knowledge_point_id}/error-patterns
+GET  /api/v1/courses/{course_id}/students/{student_id}/mastery-trend
+GET  /api/v1/courses/{course_id}/students/{student_id}/error-patterns
+GET/POST /api/v1/courses/{course_id}/question-items
+GET/PATCH/DELETE /api/v1/courses/{course_id}/question-items/{question_item_id}
+GET/POST /api/v1/courses/{course_id}/external-resources
+PATCH/DELETE /api/v1/courses/{course_id}/external-resources/{resource_id}
+GET  /api/v1/courses/{course_id}/resources
+POST /api/v1/courses/{course_id}/resources/{resource_id}/trash
+POST /api/v1/courses/{course_id}/resources/{resource_id}/restore
+DELETE /api/v1/courses/{course_id}/resources/{resource_id}?permanent=true
+GET  /api/v1/courses/{course_id}/knowledge-graph
+GET  /api/v1/courses/{course_id}/documents/{document_id}/file
+GET  /api/v1/courses/{course_id}/documents/{document_id}/pages/{page_number}
+GET  /api/v1/courses/{course_id}/documents/{document_id}/index-status
+GET  /api/v1/courses/{course_id}/documents/{document_id}/citations
+```
+
+Teacher-facing resource lists use cursor pagination. The PDF file endpoint supports
+HTTP Range. Page evidence includes real dimensions and only returns bounding
+boxes when they exist in chunk metadata.
 Seed repeatable teacher student analytics demo data:
 
 ```powershell
@@ -296,6 +321,7 @@ Migrations:
 - `f2b3c4d5e6f7`: password credentials and refresh-token sessions.
 - `a3c4d5e6f7a8`: optional teacher and student profiles.
 - `b4c5d6e7f8a9`: review answer versions, regeneration runs, and review history.
+- `c5d6e7f8a9b0`: teacher resources, page dimensions, soft deletion, and graph relationships.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

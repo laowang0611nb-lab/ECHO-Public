@@ -14,7 +14,26 @@ import type {
   CourseDocument,
   CourseMember,
   DevelopmentLoginRequest,
+  DocumentCitationPage,
+  DocumentIndexStatus,
+  DocumentPageEvidence,
   DocumentUploadSource,
+  ErrorPatternReport,
+  ExternalResource,
+  ExternalResourceCreateRequest,
+  ExternalResourcePage,
+  ExternalResourceStatus,
+  ExternalResourceUpdateRequest,
+  KnowledgeGraph,
+  MasteryTrend,
+  PermanentDeleteResult,
+  QuestionItem,
+  QuestionItemCreateRequest,
+  QuestionItemPage,
+  QuestionItemUpdateRequest,
+  ResourceListPage,
+  ResourceListItem,
+  ResourceType,
   EmbeddingResult,
   HealthResponse,
   KnowledgeChunk,
@@ -244,9 +263,10 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       courseId: string,
       file: DocumentUploadSource,
       fileName?: string,
+      resourceType: ResourceType = "textbook",
     ) =>
       request<CourseDocument>(
-        `/api/v1/courses/${courseId}/documents`,
+        `/api/v1/courses/${courseId}/documents?resource_type=${resourceType}`,
         {
           method: "POST",
           body: createDocumentFormData(file, fileName),
@@ -485,7 +505,233 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
         },
         userId,
       ),
-    listChapters: (userId: string, courseId: string) =>
+    getKnowledgePointMasteryTrend: (
+      userId: string,
+      courseId: string,
+      knowledgePointId: string,
+      days = 30,
+    ) =>
+      request<MasteryTrend>(
+        `/api/v1/courses/${courseId}/knowledge-points/${knowledgePointId}/mastery-trend?days=${days}`,
+        undefined,
+        userId,
+      ),
+    getKnowledgePointErrorPatterns: (
+      userId: string,
+      courseId: string,
+      knowledgePointId: string,
+      days = 30,
+    ) =>
+      request<ErrorPatternReport>(
+        `/api/v1/courses/${courseId}/knowledge-points/${knowledgePointId}/error-patterns?days=${days}`,
+        undefined,
+        userId,
+      ),
+    getStudentMasteryTrend: (userId: string, courseId: string, studentId: string, days = 90) =>
+      request<MasteryTrend>(
+        `/api/v1/courses/${courseId}/students/${studentId}/mastery-trend?days=${days}`,
+        undefined,
+        userId,
+      ),
+    getStudentErrorPatterns: (userId: string, courseId: string, studentId: string, days = 90) =>
+      request<ErrorPatternReport>(
+        `/api/v1/courses/${courseId}/students/${studentId}/error-patterns?days=${days}`,
+        undefined,
+        userId,
+      ),
+    listQuestionItems: (
+      userId: string,
+      courseId: string,
+      options?: { knowledgePointId?: string; cursor?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<QuestionItemPage>(
+        `/api/v1/courses/${courseId}/question-items${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getQuestionItem: (userId: string, courseId: string, questionItemId: string) =>
+      request<QuestionItem>(
+        `/api/v1/courses/${courseId}/question-items/${questionItemId}`,
+        undefined,
+        userId,
+      ),
+    createQuestionItem: (
+      userId: string,
+      courseId: string,
+      payload: QuestionItemCreateRequest,
+    ) =>
+      request<QuestionItem>(
+        `/api/v1/courses/${courseId}/question-items`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    updateQuestionItem: (
+      userId: string,
+      courseId: string,
+      questionItemId: string,
+      payload: QuestionItemUpdateRequest,
+    ) =>
+      request<QuestionItem>(
+        `/api/v1/courses/${courseId}/question-items/${questionItemId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+        userId,
+      ),
+    deleteQuestionItem: (userId: string, courseId: string, questionItemId: string) =>
+      request<void>(
+        `/api/v1/courses/${courseId}/question-items/${questionItemId}`,
+        { method: "DELETE" },
+        userId,
+      ),
+    listExternalResources: (
+      userId: string,
+      courseId: string,
+      options?: {
+        knowledgePointId?: string;
+        status?: ExternalResourceStatus;
+        cursor?: string;
+        limit?: number;
+      },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.status) params.set("status", options.status);
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<ExternalResourcePage>(
+        `/api/v1/courses/${courseId}/external-resources${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    createExternalResource: (
+      userId: string,
+      courseId: string,
+      payload: ExternalResourceCreateRequest,
+    ) =>
+      request<ExternalResource>(
+        `/api/v1/courses/${courseId}/external-resources`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    updateExternalResource: (
+      userId: string,
+      courseId: string,
+      resourceId: string,
+      payload: ExternalResourceUpdateRequest,
+    ) =>
+      request<ExternalResource>(
+        `/api/v1/courses/${courseId}/external-resources/${resourceId}`,
+        { method: "PATCH", body: JSON.stringify(payload) },
+        userId,
+      ),
+    deleteExternalResource: (userId: string, courseId: string, resourceId: string) =>
+      request<void>(
+        `/api/v1/courses/${courseId}/external-resources/${resourceId}`,
+        { method: "DELETE" },
+        userId,
+      ),
+    listResources: (
+      userId: string,
+      courseId: string,
+      options?: { trashed?: boolean; cursor?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.trashed) params.set("trashed", "true");
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<ResourceListPage>(
+        `/api/v1/courses/${courseId}/resources${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    trashResource: (userId: string, courseId: string, resourceId: string) =>
+      request<ResourceListItem>(
+        `/api/v1/courses/${courseId}/resources/${resourceId}/trash`,
+        { method: "POST" },
+        userId,
+      ),
+    restoreResource: (userId: string, courseId: string, resourceId: string) =>
+      request<ResourceListItem>(
+        `/api/v1/courses/${courseId}/resources/${resourceId}/restore`,
+        { method: "POST" },
+        userId,
+      ),
+    permanentlyDeleteResource: (userId: string, courseId: string, resourceId: string) =>
+      request<PermanentDeleteResult>(
+        `/api/v1/courses/${courseId}/resources/${resourceId}?permanent=true`,
+        { method: "DELETE" },
+        userId,
+      ),
+    getKnowledgeGraph: (
+      userId: string,
+      courseId: string,
+      options?: { chapterId?: string; pointId?: string },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.chapterId) params.set("chapterId", options.chapterId);
+      if (options?.pointId) params.set("pointId", options.pointId);
+      const query = params.toString();
+      return request<KnowledgeGraph>(
+        `/api/v1/courses/${courseId}/knowledge-graph${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getDocumentIndexStatus: (userId: string, courseId: string, documentId: string) =>
+      request<DocumentIndexStatus>(
+        `/api/v1/courses/${courseId}/documents/${documentId}/index-status`,
+        undefined,
+        userId,
+      ),
+    listDocumentCitations: (
+      userId: string,
+      courseId: string,
+      documentId: string,
+      options?: { cursor?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<DocumentCitationPage>(
+        `/api/v1/courses/${courseId}/documents/${documentId}/citations${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getDocumentPageEvidence: (
+      userId: string,
+      courseId: string,
+      documentId: string,
+      pageNumber: number,
+    ) =>
+      request<DocumentPageEvidence>(
+        `/api/v1/courses/${courseId}/documents/${documentId}/pages/${pageNumber}`,
+        undefined,
+        userId,
+      ),
+    getDocumentFileBlob: async (userId: string, courseId: string, documentId: string) => {
+      const headers = new Headers({ "X-User-Id": userId });
+      const response = await fetchImpl(
+        `${root}/api/v1/courses/${courseId}/documents/${documentId}/file`,
+        { headers },
+      );
+      if (!response.ok) {
+        throw await readError(response);
+      }
+      return response.blob();
+    },    listChapters: (userId: string, courseId: string) =>
       request<Chapter[]>(`/api/v1/courses/${courseId}/chapters`, undefined, userId),
     createChapter: (userId: string, documentId: string, payload: ChapterCreateRequest) =>
       request<Chapter>(

@@ -16,19 +16,10 @@ def test_chapter_and_knowledge_point_constraints() -> None:
     assert "uq_knowledge_chunks_document_index" in chunk_names
     assert "ck_knowledge_chunks_page_range" in chunk_names
 
-    chapter_constraints = {
-        constraint.name
-        for constraint in Base.metadata.tables["chapters"].constraints
-        if constraint.name
-    }
-    point_constraints = {
-        constraint.name
-        for constraint in Base.metadata.tables["knowledge_points"].constraints
-        if constraint.name
-    }
-
-    assert "uq_chapters_document_order" in chapter_constraints
-    assert "uq_knowledge_points_chapter_name" in point_constraints
+    chapter_indexes = {index.name for index in Base.metadata.tables["chapters"].indexes}
+    point_indexes = {index.name for index in Base.metadata.tables["knowledge_points"].indexes}
+    assert "uq_chapters_active_document_order" in chapter_indexes
+    assert "uq_knowledge_points_active_chapter_name" in point_indexes
 
 
 def test_knowledge_relation_cannot_reference_itself() -> None:

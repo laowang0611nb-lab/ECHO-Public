@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from database.models.document import DocumentStatus
+from database.models.document import DocumentStatus, ResourceType
 from pydantic import BaseModel, ConfigDict
 
 
@@ -13,7 +13,9 @@ class DocumentResponse(BaseModel):
     content_type: str
     size_bytes: int
     status: DocumentStatus
+    resource_type: ResourceType
     page_count: int | None
+    trashed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

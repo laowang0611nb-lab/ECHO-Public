@@ -1,8 +1,8 @@
 from typing import Annotated
 from uuid import UUID
 
-from database.models.document import Document
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from database.models.document import Document, ResourceType
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.dependencies import CurrentUser, DBSession, DocumentStorageDep
@@ -56,6 +56,7 @@ async def upload_document(
     current_user: CurrentUser,
     session: DBSession,
     storage: DocumentStorageDep,
+    resource_type: Annotated[ResourceType, Query()] = ResourceType.TEXTBOOK,
 ) -> Document:
     try:
         return await upload_course_document(
@@ -65,6 +66,7 @@ async def upload_document(
             uploader=current_user,
             upload=file,
             max_bytes=settings.max_upload_bytes,
+            resource_type=resource_type,
         )
     except CourseNotFoundError as exc:
         raise HTTPException(

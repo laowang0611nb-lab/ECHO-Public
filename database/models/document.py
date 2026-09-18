@@ -32,6 +32,15 @@ class DocumentStatus(StrEnum):
     FAILED = "failed"
 
 
+class ResourceType(StrEnum):
+    TEXTBOOK = "textbook"
+    OUTLINE = "outline"
+    QUESTION_BANK = "question_bank"
+    CODE_EXAMPLE = "code_example"
+    LAB = "lab"
+    EXTERNAL_LINK = "external_link"
+
+
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
@@ -77,6 +86,20 @@ class Document(Base):
         nullable=False,
     )
     page_count: Mapped[int | None] = mapped_column(Integer)
+    resource_type: Mapped[ResourceType] = mapped_column(
+        Enum(
+            ResourceType,
+            name="document_resource_type",
+            native_enum=False,
+            length=24,
+            create_constraint=False,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        default=ResourceType.TEXTBOOK,
+        server_default=ResourceType.TEXTBOOK.value,
+        nullable=False,
+    )
+    trashed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -131,6 +154,8 @@ class DocumentPage(Base):
         server_default="0",
         nullable=False,
     )
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
