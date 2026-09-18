@@ -40,7 +40,12 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const currentUser = await apiClient.me(storedUserId);
+        const currentUser = await Promise.race([
+          apiClient.me(storedUserId),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(() => reject(new Error("Teacher session restore timed out")), 4000);
+          }),
+        ]);
         if (!cancelled) {
           setUser(currentUser);
         }
