@@ -1,5 +1,30 @@
-import { PlaceholderPage } from "@/components/common/placeholder-page";
+import { CreateExecutionPlanPage } from "@/features/execution-plans/components/create-execution-plan-page";
 
-export default function NewExecutionPlanPage() {
-  return <PlaceholderPage breadcrumbs={[{ label: "教学策略", href: "/teaching-strategies" }, { label: "创建执行计划" }]} description="五步教学执行计划向导将在后续阶段实现。" title="创建教学执行计划" />;
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeStep(value: string | string[] | undefined) {
+  const step = Number(first(value));
+  return Number.isInteger(step) && step >= 1 && step <= 5 ? step : undefined;
+}
+
+export default async function NewExecutionPlanRoute({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    courseId?: string | string[];
+    strategyId?: string | string[];
+    step?: string | string[];
+  }>;
+}) {
+  const query = await searchParams;
+
+  return (
+    <CreateExecutionPlanPage
+      initialCourseId={first(query.courseId)}
+      initialStep={normalizeStep(query.step)}
+      initialStrategyId={first(query.strategyId)}
+    />
+  );
 }

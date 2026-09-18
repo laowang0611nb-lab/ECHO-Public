@@ -159,7 +159,7 @@ export function KnowledgePointDetailPage({
           {activeTab === "related" ? <RelatedContentTab context={context} /> : null}
           {activeTab === "students" ? <StudentMasteryTab context={context} /> : null}
           {activeTab === "exercises" ? <QuestionItemsPanel query={questionItemsQuery} /> : null}
-          {activeTab === "suggestions" ? <TeachingSuggestionDetail mastery={mastery} /> : null}
+          {activeTab === "suggestions" ? <TeachingSuggestionDetail courseId={courseId} knowledgePointId={pointId} mastery={mastery} /> : null}
           {activeTab === "analysis" ? <AnalysisTab affectedStudents={affectedStudents} context={context} mastery={mastery} /> : null}
         </TabsContent>
       </Tabs>
@@ -403,15 +403,16 @@ function StudentMasteryTab({ context }: { context: NonNullable<ReturnType<typeof
   );
 }
 
-function TeachingSuggestionDetail({ mastery }: { mastery: number | null }) {
+function TeachingSuggestionDetail({ mastery, courseId, knowledgePointId }: { mastery: number | null; courseId: string; knowledgePointId: string }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
       <TeachingSuggestionCard mastery={mastery} />
       <Card className="gap-4 py-5">
         <CardHeader className="px-5"><CardTitle>建议执行边界</CardTitle></CardHeader>
         <CardContent className="space-y-3 px-5 text-sm leading-6 text-muted-foreground">
-          <p>当前教学策略和执行计划接口未在本阶段实现，建议先作为教师参考，不自动创建任务。</p>
-          <p>后续接入教学策略模块后，可将建议转为策略或补充任务。</p>
+          <p>教学建议只作为教师判断依据；正式执行必须先生成并采纳教学策略，再创建教学执行计划。</p>
+          <p>系统不会根据当前建议自动创建任务或向学生发布内容。</p>
+          {courseId ? <Link className={buttonVariants({ variant: "outline" })} href={`/teaching-strategies?courseId=${courseId}&knowledgePointId=${knowledgePointId}`}><Sparkles data-icon="inline-start" />生成教学策略</Link> : null}
         </CardContent>
       </Card>
     </div>

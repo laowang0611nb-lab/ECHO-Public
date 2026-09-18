@@ -1,5 +1,27 @@
-import { PlaceholderPage } from "@/components/common/placeholder-page";
+import { TeachingStrategiesPage } from "@/features/teaching-strategies/components/teaching-strategies-page";
 
-export default function TeachingStrategiesPage() {
-  return <PlaceholderPage breadcrumbs={[{ label: "AI 教学" }, { label: "教学策略" }]} description="教学策略列表与策略详情将在后续阶段实现。" title="教学策略" />;
+function first(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function TeachingStrategiesRoute({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    courseId?: string | string[];
+    knowledgePointId?: string | string[];
+    studentGroup?: string | string[];
+    suggestionId?: string | string[];
+  }>;
+}) {
+  const query = await searchParams;
+
+  return (
+    <TeachingStrategiesPage
+      initialCourseId={first(query.courseId)}
+      initialKnowledgePointId={first(query.knowledgePointId)}
+      initialStudentGroup={first(query.studentGroup)}
+      initialSuggestionId={first(query.suggestionId)}
+    />
+  );
 }

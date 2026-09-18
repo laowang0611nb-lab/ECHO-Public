@@ -104,8 +104,8 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
         <CardContent className="grid gap-3 px-5 xl:grid-cols-2">
           {topDifficulty ? (
             <InsightCard
-              actionHref={`/knowledge/points/${topDifficulty.knowledge_point_id}?from=insights&courseId=${courseId}`}
-              actionLabel="查看知识点详情"
+              actionHref={`/teaching-strategies?courseId=${courseId}&knowledgePointId=${topDifficulty.knowledge_point_id}`}
+              actionLabel="生成针对该知识点的策略"
               evidence={`${topDifficulty.affected_students} 名学生受影响，平均掌握度 ${Math.round(topDifficulty.average_score)}%`}
               title={`${topDifficulty.name} 是当前主要薄弱知识点`}
             />
@@ -291,7 +291,7 @@ function teacherActionPresentation(actionType: string, targetId: string | null, 
     return { href: `/ai-review?courseId=${courseId}&status=open`, title: "审核 AI 回答", description: "存在待教师判断的 AI 回答，请结合引用和完整对话审核。" };
   }
   if (actionType === "support_knowledge_point" && targetId) {
-    return { href: `/knowledge/points/${targetId}?from=insights&courseId=${courseId}`, title: "支持薄弱知识点", description: "后端已将某知识点标记为需要教学支持，可查看来源、学生掌握和教学建议。" };
+    return { href: `/teaching-strategies?courseId=${courseId}&knowledgePointId=${targetId}`, title: "生成薄弱知识点教学策略", description: "后端已将某知识点标记为需要教学支持，可带入该知识点直接生成可采纳的教学策略。" };
   }
   if (actionType === "encourage_inactive_students") {
     return { href: `/students?courseId=${courseId}&tab=students&activity=inactive`, title: "关注低活跃学生", description: "部分学生最近缺少学习证据，可查看学生列表并继续下钻。" };
