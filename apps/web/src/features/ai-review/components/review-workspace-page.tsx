@@ -53,7 +53,8 @@ export function ReviewWorkspacePage({
     () => sortReviewFlags(filterReviewFlags(allFlags, filters), filters.sort),
     [allFlags, filters],
   );
-  const current = allFlags.find((flag) => flag.id === reviewId) ?? visibleFlags[0] ?? null;
+  const requestedFlag = reviewId ? allFlags.find((flag) => flag.id === reviewId) ?? null : null;
+  const current = reviewId ? requestedFlag : visibleFlags[0] ?? null;
   const flagQuery = useReviewFlag(courseId, current?.id ?? null);
   const flag = flagQuery.data ?? current;
   const messagesQuery = useTeacherConversationMessages(courseId, flag?.conversation_id ?? "none");
@@ -61,14 +62,19 @@ export function ReviewWorkspacePage({
   const message = messagesQuery.data?.find((item) => item.id === flag?.message_id) ?? null;
   const evidence = flag ? extractFlagEvidence(flag) : { knowledgePointIds: [], citations: [] };
   const knowledgePointIds = new Set([...evidence.knowledgePointIds, ...(message?.knowledgePointIds ?? [])]);
-  const citations = [
-    ...evidence.citations,
-    ...(message?.citations ?? []).flatMap((citation) =>
-      citation.document_id
-        ? [{ documentId: citation.document_id, page: citation.page_start, chunkId: citation.chunk_id ?? undefined }]
-        : [],
-    ),
-  ];
+  const citations = Array.from(
+    new Map(
+      [
+        ...evidence.citations,
+        ...(message?.citations ?? []).flatMap((citation) =>
+          citation.document_id
+            ? [{ documentId: citation.document_id, page: citation.page_start, chunkId: citation.chunk_id ?? undefined }]
+            : [],
+        ),
+      ]
+        .map((citation) => [`${citation.documentId}:${citation.page}:${citation.chunkId ?? ""}`, citation]),
+    ).values(),
+  );
 
   function updateFilters(patch: Partial<ReviewQueueFilters>) {
     const next = { ...filters, ...patch };
@@ -108,6 +114,15 @@ export function ReviewWorkspacePage({
   }
   if (queueQuery.isLoading) return <LoadingState label="正在加载审核工作台..." />;
   if (queueQuery.isError) return <ErrorState description="审核工作台加载失败，请确认后端服务后重试。" onRetry={() => void queueQuery.refetch()} />;
+  if (reviewId && !requestedFlag) {
+    return (
+      <EmptyState
+        action={<Link className={buttonVariants({ variant: "outline" })} href={`/ai-review?courseId=${courseId}`}>返回审核总览</Link>}
+        description="审核项不存在，或已被其他教师处理并移出当前队列。"
+        title="未找到审核项"
+      />
+    );
+  }
   if (!flag) {
     return (
       <EmptyState
