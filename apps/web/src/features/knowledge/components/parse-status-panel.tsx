@@ -5,7 +5,11 @@ import { AlertCircle, CheckCircle2, Circle, LoaderCircle, Play, RefreshCw } from
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { LoadingState } from "@/components/common/loading-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useDocumentIndexStatus } from "@/features/knowledge/queries";
 import { Progress } from "@/components/ui/progress";
 import { apiClient } from "@/lib/api";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
@@ -24,6 +28,7 @@ const stages = [
 ] as const;
 
 export function ParseStatusPanel({
+  courseId,
   document,
   chapterCount,
   knowledgePointCount,
@@ -37,38 +42,40 @@ export function ParseStatusPanel({
 }) {
   const { user } = useTeacherSession();
   const [stage, setStage] = React.useState<PipelineStage>("idle");
-  const [chunkCount, setChunkCount] = React.useState<number | null>(null);
-  const [embeddingCount, setEmbeddingCount] = React.useState<number | null>(null);
+  const indexQuery = useDocumentIndexStatus(courseId, document.id);
   const [error, setError] = React.useState<string | null>(null);
 
   const running = ["parsing", "structuring", "chunking", "indexing"].includes(stage);
   const currentIndex = stageOrder.indexOf(stage as (typeof stageOrder)[number]);
-  const progress = stage === "done" ? 100 : stage === "idle" ? document.status === "ready" ? 60 : 0 : stage === "error" ? 25 : Math.max(12, (currentIndex + 1) * 20);
+  const indexStatus = indexQuery.data;
+  const chunkCount = indexStatus?.chunks_total ?? null;
+  const embeddingCount = indexStatus?.chunks_embedded ?? null;
+  const embeddingProgress = chunkCount && chunkCount > 0 ? Math.round(((embeddingCount ?? 0) / chunkCount) * 100) : 0;
+  const progress = stage === "done" ? 100 : stage === "idle" ? (indexStatus ? embeddingProgress : document.status === "ready" ? 60 : 0) : stage === "error" ? 25 : Math.max(12, (currentIndex + 1) * 20);
   const inferredCompleted = {
     upload: true,
     parsing: document.status === "ready" || document.status === "parsing",
     structuring: chapterCount > 0,
-  } as const;
-  const inferredUnknown = document.status === "ready" ? ["chunking", "indexing"] : [];
+    chunking: Boolean(chunkCount && chunkCount > 0),
+    indexing: Boolean(chunkCount && chunkCount > 0 && (embeddingCount ?? 0) >= chunkCount),
+  };
+  const inferredUnknown = document.status === "ready" && indexQuery.isLoading ? ["chunking", "indexing"] : [];
 
   async function runPipeline() {
     if (!user) return;
     setError(null);
-    setChunkCount(null);
-    setEmbeddingCount(null);
     try {
       setStage("parsing");
       await apiClient.parseCourseDocument(user.id, document.id);
       setStage("structuring");
       await apiClient.generateKnowledgeStructure(user.id, document.id);
       setStage("chunking");
-      const chunks = await apiClient.createDocumentChunks(user.id, document.id);
-      setChunkCount(chunks.length);
+      await apiClient.createDocumentChunks(user.id, document.id);
       setStage("indexing");
-      const embeddings = await apiClient.createDocumentEmbeddings(user.id, document.id);
-      setEmbeddingCount(embeddings.embedded_chunks);
+      await apiClient.createDocumentEmbeddings(user.id, document.id);
       setStage("done");
       onChanged();
+      await indexQuery.refetch();
     } catch (requestError) {
       setStage("error");
       setError(requestError instanceof Error ? requestError.message : "解析任务失败，请重试。");
@@ -110,17 +117,26 @@ export function ParseStatusPanel({
           })}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Stat label="章节" value={chapterCount} />
-          <Stat label="知识点" value={knowledgePointCount} />
-          <Stat label="文本块" value={chunkCount ?? "未知"} note={chunkCount === null ? "后端未提供查询接口" : "本次运行结果"} />
-          <Stat label="Embedding" value={embeddingCount ?? "未知"} note={embeddingCount === null ? "后端未提供查询接口" : "本次运行结果"} />
-        </div>
-
-        {document.status === "ready" && chunkCount === null ? (
-          <div className="flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-sm text-blue-800">
-            <AlertCircle className="mt-0.5 size-4 shrink-0" />
-            <p>该文档已可检索，但当前后端没有持久化返回 Chunk 数量、Embedding 状态和最后索引时间；这里不会伪造完成度。</p>
+        {indexQuery.isLoading ? <LoadingState label="正在读取索引状态..." /> : null}
+        {indexQuery.isError ? <ErrorState description="索引状态加载失败。" onRetry={() => void indexQuery.refetch()} /> : null}
+        {!indexQuery.isLoading && !indexQuery.isError && !indexStatus ? <EmptyState description="该文档还没有可读取的索引记录。" title="尚未建立索引" /> : null}
+        {indexStatus ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <Stat label="章节" value={chapterCount} />
+              <Stat label="知识点" value={knowledgePointCount} />
+              <Stat label="总页数" value={indexStatus.pages_total} note={`${indexStatus.pages_parsed} 页已解析`} />
+              <Stat label="文本块" value={indexStatus.chunks_total} />
+              <Stat label="Embedding" value={`${indexStatus.chunks_embedded}/${indexStatus.chunks_total}`} />
+              <Stat label="索引进度" value={`${embeddingProgress}%`} note={indexStatus.last_indexed_at ? indexStatus.last_indexed_at.slice(0, 19).replace("T", " ") : "尚未完成"} />
+            </div>
+            {indexStatus.chunks_total === 0 ? (
+              <div className="rounded-lg border border-orange-200 bg-orange-50/55 px-4 py-3 text-sm text-orange-900">文档已解析，但尚未生成文本块。</div>
+            ) : indexStatus.chunks_embedded < indexStatus.chunks_total ? (
+              <div className="rounded-lg border border-blue-200 bg-blue-50/55 px-4 py-3 text-sm text-blue-900">正在建立向量索引：已完成 {indexStatus.chunks_embedded}/{indexStatus.chunks_total} 个文本块。</div>
+            ) : (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/55 px-4 py-3 text-sm text-emerald-900">索引已完成{indexStatus.last_indexed_at ? `，最后索引时间 ${indexStatus.last_indexed_at.slice(0, 19).replace("T", " ")}` : "。"}</div>
+            )}
           </div>
         ) : null}
 

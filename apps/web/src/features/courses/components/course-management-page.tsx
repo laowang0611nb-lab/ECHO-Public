@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { StatCard } from "@/components/common/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -195,10 +195,6 @@ export function CourseManagementPage() {
                     <Upload className="size-4" />
                     上传资料
                   </Link>
-                  <Button className="h-auto flex-col gap-2 px-3 py-4" disabled type="button" variant="outline">
-                    <ClipboardList className="size-4" />
-                    复制课程
-                  </Button>
                   <Link className={cn(buttonVariants({ variant: "outline" }), "h-auto flex-col gap-2 px-3 py-4")} href={items[0] ? `/courses/${items[0].course.id}?tab=settings` : "/courses"}>
                     <Settings className="size-4" />
                     课程设置

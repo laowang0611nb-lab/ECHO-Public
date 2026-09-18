@@ -239,7 +239,7 @@ function ProfileTab({
           <CardHeader className="px-5"><CardTitle>教学领域</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-2 px-5">
             {fields.length ? fields.map((field) => <span className="rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-primary" key={field}>{field}</span>) : <p className="text-sm text-muted-foreground">暂无可识别教学领域。</p>}
-            <span className="rounded-full border border-dashed border-border px-3 py-1.5 text-xs text-muted-foreground">+ 添加领域（后端未提供）</span>
+            <p className="w-full text-xs text-muted-foreground">教学领域编辑接口尚未提供，当前仅展示课程中可识别的真实领域。</p>
           </CardContent>
         </Card>
       </div>

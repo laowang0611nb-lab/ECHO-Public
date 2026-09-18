@@ -8,7 +8,6 @@ import {
   Download,
   ExternalLink,
   Layers3,
-  RefreshCw,
   ScanText,
   Sparkles,
 } from "lucide-react";
@@ -101,7 +100,6 @@ export function KnowledgeResourceDetailPage({
               <ExternalLink data-icon="inline-start" />
               查看原文
             </Link>
-            <Button disabled type="button" variant="outline"><RefreshCw data-icon="inline-start" />替换文件</Button>
           </>
         }
         breadcrumbs={breadcrumbs}
@@ -289,6 +287,7 @@ function OverviewTab({ resource }: { resource: NonNullable<ReturnType<typeof use
         <CardHeader className="px-5"><CardTitle>内容概览</CardTitle></CardHeader>
         <CardContent className="space-y-4 px-5 text-sm leading-7 text-muted-foreground">
           <p>该资源当前被识别为“{resource.kind}”，后端未提供版权、作者、出版社、摘要和关键词字段。</p>
+          <p>当前版本暂不支持替换已解析文件。如需更新教材，请上传一份新资源，避免覆盖已有章节、引用和学习证据。</p>
           <p>已有解析结果包含 {resource.chapters.length} 个章节、{resource.knowledgePointCount} 个知识点，最后章节为“{lastChapter?.title ?? "暂无"}”。</p>
           <p>当前页面只展示可验证的文档元数据和课程结构，不补写教材摘要。</p>
         </CardContent>
@@ -413,7 +412,7 @@ function ResourceAside({
       <Card className="gap-4 py-5">
         <CardHeader className="px-5"><CardTitle>后端缺口</CardTitle></CardHeader>
         <CardContent className="space-y-2 px-5 text-sm leading-6 text-muted-foreground">
-          <p>原始 PDF 文件流、作者/出版社/版权元数据、资源标签、删除/回收站、被引用次数和索引详情查询暂无接口。</p>
+          <p>作者/出版社/版权元数据、资源标签、替换已解析文件以及扩展摘要字段尚未提供。</p>
         </CardContent>
       </Card>
     </section>
