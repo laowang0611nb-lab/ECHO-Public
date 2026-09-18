@@ -89,7 +89,10 @@ async def list_teaching_strategies(
     strategies = list(
         await session.scalars(
             select(TeachingStrategy)
-            .options(selectinload(TeachingStrategy.target_knowledge_points))
+            .options(
+                selectinload(TeachingStrategy.target_knowledge_points),
+                selectinload(TeachingStrategy.target_students),
+            )
             .where(*filters)
             .order_by(TeachingStrategy.updated_at.desc(), TeachingStrategy.id.desc())
             .offset(offset)

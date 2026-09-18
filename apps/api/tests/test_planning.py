@@ -482,6 +482,74 @@ async def test_weekly_generation_failure_keeps_existing_tasks(
     assert task_list.json()["total"] == 1
 
 
+async def test_planning_lists_do_not_lazy_load_under_async_sqlite(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "planning-list@example.com", "teacher")
+    student = await login(client, "planning-list-student@example.com", "student")
+    course = await create_course_with_students(client, teacher, [student])
+    course_id = UUID(course["id"])
+    _, point_ids = await create_structure(
+        session_factory,
+        course_id,
+        UUID(teacher["id"]),
+    )
+
+    chat_provider.answer = json.dumps(strategy_draft(), ensure_ascii=False)
+    generated = await client.post(
+        f"/api/v1/courses/{course_id}/teaching-strategies/generate",
+        headers=auth_headers(teacher),
+        json=strategy_payload(point_ids, [UUID(student["id"])]),
+    )
+    assert generated.status_code == 201
+    strategy_id = generated.json()["id"]
+    accepted = await client.post(
+        f"/api/v1/teaching-strategies/{strategy_id}/actions",
+        headers=auth_headers(teacher),
+        json={"action": "accept"},
+    )
+    assert accepted.status_code == 200
+
+    strategies = await client.get(
+        f"/api/v1/courses/{course_id}/teaching-strategies",
+        headers=auth_headers(teacher),
+    )
+    assert strategies.status_code == 200
+    assert strategies.json()["items"][0]["target_student_count"] == 1
+
+    start = date.today()
+    created_plan = await client.post(
+        f"/api/v1/courses/{course_id}/execution-plans",
+        headers=auth_headers(teacher),
+        json={
+            "strategy_id": strategy_id,
+            "title": "列表加载回归计划",
+            "description": "验证计划列表不会懒加载。",
+            "start_date": start.isoformat(),
+            "end_date": (start + timedelta(days=7)).isoformat(),
+            "target_scope": "whole_class",
+            "target_student_ids": [],
+            "knowledge_point_ids": [str(point_ids[0])],
+            "actions": ["quick_check"],
+            "resource_ids": [],
+            "plan_parameters": {},
+            "evaluation_metrics": ["mastery_change"],
+            "teacher_note": "回归测试",
+            "publish": False,
+        },
+    )
+    assert created_plan.status_code == 201
+
+    plans = await client.get(
+        f"/api/v1/courses/{course_id}/execution-plans",
+        headers=auth_headers(teacher),
+    )
+    assert plans.status_code == 200
+    assert plans.json()["items"][0]["target_student_count"] == 1
+
+
 def test_planning_openapi_paths() -> None:
     from app.main import app
 
