@@ -144,6 +144,8 @@ def _is_substantive_question(question: str) -> bool:
     if not normalized:
         return False
     compact = re.sub(r"[\s\W_]+", "", normalized)
+    if compact in {"吗", "么", "呢"}:
+        return False
     if any(compact.startswith(pattern) for pattern in TRIVIAL_QUESTION_PATTERNS):
         return False
     if normalized.endswith(("?", "？")):

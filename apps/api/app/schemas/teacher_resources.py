@@ -92,7 +92,7 @@ class QuestionItemUpdate(BaseModel):
     def require_change(self) -> "QuestionItemUpdate":
         if not self.model_fields_set:
             raise ValueError("at least one question item field must be provided")
-        for field in ("type", "title", "content", "metadata_json"):
+        for field in ("type", "difficulty", "title", "content", "metadata_json"):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f"{field} must not be null")
         return self

@@ -3,9 +3,9 @@ from uuid import UUID
 
 from database.models.course import CourseMember
 from database.models.document import Document, DocumentStatus
-from database.models.knowledge import KnowledgeChunk
+from database.models.knowledge import Chapter, KnowledgeChunk
 from database.models.user import UserRole
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -27,8 +27,15 @@ async def embed_document_chunks(
     *,
     batch_size: int,
 ) -> int:
-    document = await session.get(Document, document_id)
-    if document is None or document.status != DocumentStatus.READY:
+    document = await session.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.trashed_at.is_(None),
+        )
+    )
+    if document is None:
+        raise KnowledgeDocumentNotFoundError
+    if document.status != DocumentStatus.READY:
         raise KnowledgeDocumentNotReadyError
 
     chunks = list(
@@ -98,9 +105,15 @@ async def search_course_chunks(
         rows = await session.execute(
             select(KnowledgeChunk, distance)
             .join(Document, Document.id == KnowledgeChunk.document_id)
+            .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
             .where(
                 KnowledgeChunk.course_id == course_id,
                 Document.status == DocumentStatus.READY,
+                Document.trashed_at.is_(None),
+                or_(
+                    KnowledgeChunk.chapter_id.is_(None),
+                    Chapter.trashed_at.is_(None),
+                ),
                 distance_expression <= threshold,
                 KnowledgeChunk.embedding.is_not(None),
             )
@@ -123,9 +136,15 @@ async def search_course_chunks(
         await session.scalars(
             select(KnowledgeChunk)
             .join(Document, Document.id == KnowledgeChunk.document_id)
+            .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
             .where(
                 KnowledgeChunk.course_id == course_id,
                 Document.status == DocumentStatus.READY,
+                Document.trashed_at.is_(None),
+                or_(
+                    KnowledgeChunk.chapter_id.is_(None),
+                    Chapter.trashed_at.is_(None),
+                ),
                 KnowledgeChunk.embedding.is_not(None),
             )
         )

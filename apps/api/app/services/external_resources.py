@@ -33,7 +33,7 @@ def _external_response(resource: ExternalResource) -> ExternalResourceResponse:
         provider=resource.provider,
         description=resource.description,
         knowledge_point_ids=sorted(
-            {point.id for point in resource.knowledge_points},
+            {point.id for point in resource.knowledge_points if point.trashed_at is None},
             key=str,
         ),
         check_status=resource.check_status,

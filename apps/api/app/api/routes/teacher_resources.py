@@ -58,6 +58,7 @@ from app.services.resource_lifecycle import (
     trash_resource,
 )
 from app.services.teacher_access import (
+    TeacherContentConflictError,
     TeacherContentForbiddenError,
     TeacherContentNotFoundError,
 )
@@ -75,6 +76,11 @@ def _translate_error(exc: Exception) -> HTTPException:
         return HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only course teachers can access this resource",
+        )
+    if isinstance(exc, TeacherContentConflictError):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Teacher resource operation conflicts with existing data",
         )
     return HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -442,7 +448,11 @@ async def restore_course_resource(
             resource_id,
             current_user.id,
         )
-    except (TeacherContentNotFoundError, TeacherContentForbiddenError) as exc:
+    except (
+        TeacherContentNotFoundError,
+        TeacherContentForbiddenError,
+        TeacherContentConflictError,
+    ) as exc:
         raise _translate_error(exc) from exc
 
 

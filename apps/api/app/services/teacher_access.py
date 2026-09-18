@@ -3,11 +3,13 @@ import binascii
 from uuid import UUID
 
 from database.models.course import CourseMember
-from database.models.knowledge import KnowledgePoint
+from database.models.document import Document
+from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.user import UserRole
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 from app.services.learning import LearningEventForbiddenError, ensure_course_teacher
 
 
@@ -30,7 +32,9 @@ async def ensure_teacher(
 ) -> None:
     try:
         await ensure_course_teacher(session, course_id, user_id)
-    except LearningEventForbiddenError as exc:
+    except CourseNotFoundError as exc:
+        raise TeacherContentNotFoundError from exc
+    except (CourseMembershipRequiredError, LearningEventForbiddenError) as exc:
         raise TeacherContentForbiddenError from exc
 
 
@@ -56,9 +60,15 @@ async def load_course_knowledge_points(
         return []
     points = list(
         await session.scalars(
-            select(KnowledgePoint).where(
+            select(KnowledgePoint)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
                 KnowledgePoint.course_id == course_id,
                 KnowledgePoint.id.in_(knowledge_point_ids),
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
     )

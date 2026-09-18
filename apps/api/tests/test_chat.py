@@ -16,6 +16,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.services.chat import _course_has_searchable_material
+
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
     response = await client.post(
@@ -79,6 +81,45 @@ async def create_searchable_course(
     assert chunks.status_code == 200
     assert embeddings.status_code == 200
     return course
+
+
+async def test_searchable_material_ignores_trashed_document_and_chapter(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "chat-searchable-trash@example.com", "teacher")
+    course = await create_searchable_course(client, session_factory, teacher)
+    course_id = UUID(course["id"])
+    async with session_factory() as session:
+        document = await session.scalar(select(Document).where(Document.course_id == course_id))
+        assert document is not None
+        chapter = Chapter(
+            course_id=course_id,
+            document_id=document.id,
+            title="Chat Chapter",
+            order_index=0,
+        )
+        session.add(chapter)
+        await session.flush()
+        chunks = list(
+            await session.scalars(
+                select(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id)
+            )
+        )
+        assert chunks
+        for chunk in chunks:
+            chunk.chapter_id = chapter.id
+        await session.commit()
+
+        assert await _course_has_searchable_material(session, course_id) is True
+        chapter.trashed_at = datetime.now(UTC)
+        await session.commit()
+        assert await _course_has_searchable_material(session, course_id) is False
+
+        chapter.trashed_at = None
+        document.trashed_at = datetime.now(UTC)
+        await session.commit()
+        assert await _course_has_searchable_material(session, course_id) is False
 
 
 async def test_conversation_and_sse_message_flow(

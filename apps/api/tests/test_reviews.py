@@ -53,6 +53,7 @@ def test_short_chinese_questions_require_course_basis(question: str) -> None:
     "question",
     [
         "你好",
+        "你好吗？",
         "在吗？",
         "有人吗？",
         "谢谢",

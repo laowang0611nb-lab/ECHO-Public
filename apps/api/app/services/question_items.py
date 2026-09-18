@@ -54,7 +54,7 @@ def _question_response(item: QuestionItem) -> QuestionItemResponse:
         id=item.id,
         course_id=item.course_id,
         knowledge_point_ids=sorted(
-            {point.id for point in item.knowledge_points},
+            {point.id for point in item.knowledge_points if point.trashed_at is None},
             key=str,
         ),
         type=item.type,

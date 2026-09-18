@@ -1,7 +1,8 @@
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from database.models.document import Document, DocumentPage, DocumentStatus
-from database.models.knowledge import KnowledgeChunk
+from database.models.knowledge import Chapter, KnowledgeChunk
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -113,6 +114,83 @@ async def create_chunked_document(
     )
     assert chunk_response.status_code == 200
     return course
+
+
+async def test_search_and_indexing_ignore_trashed_document_or_chapter(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "trash-search@example.com", "teacher")
+    course = await create_chunked_document(client, session_factory, teacher)
+    course_id = UUID(course["id"])
+    async with session_factory() as session:
+        document = await session.scalar(select(Document).where(Document.course_id == course_id))
+        assert document is not None
+        chapter = Chapter(
+            course_id=course_id,
+            document_id=document.id,
+            title="Indexed Chapter",
+            order_index=0,
+        )
+        session.add(chapter)
+        await session.flush()
+        chunks = list(
+            await session.scalars(
+                select(KnowledgeChunk).where(KnowledgeChunk.document_id == document.id)
+            )
+        )
+        for chunk in chunks:
+            chunk.chapter_id = chapter.id
+        await session.commit()
+        document_id = document.id
+        chapter_id = chapter.id
+
+    embedded = await client.post(
+        f"/api/v1/documents/{document_id}/embeddings",
+        headers=auth_headers(teacher),
+    )
+    assert embedded.status_code == 200
+
+    async with session_factory() as session:
+        chapter = await session.get(Chapter, chapter_id)
+        assert chapter is not None
+        chapter.trashed_at = datetime.now(UTC)
+        await session.commit()
+
+    chapter_hidden = await client.post(
+        f"/api/v1/courses/{course['id']}/search",
+        headers=auth_headers(teacher),
+        json={"query": "alpha concept", "limit": 5},
+    )
+    assert chapter_hidden.status_code == 200
+    assert chapter_hidden.json() == []
+
+    async with session_factory() as session:
+        chapter = await session.get(Chapter, chapter_id)
+        document = await session.get(Document, document_id)
+        assert chapter is not None and document is not None
+        chapter.trashed_at = None
+        document.trashed_at = datetime.now(UTC)
+        await session.commit()
+
+    document_hidden = await client.post(
+        f"/api/v1/courses/{course['id']}/search",
+        headers=auth_headers(teacher),
+        json={"query": "alpha concept", "limit": 5},
+    )
+    chunk_response = await client.post(
+        f"/api/v1/documents/{document_id}/chunks",
+        headers=auth_headers(teacher),
+    )
+    embedding_response = await client.post(
+        f"/api/v1/documents/{document_id}/embeddings",
+        headers=auth_headers(teacher),
+    )
+
+    assert document_hidden.status_code == 200
+    assert document_hidden.json() == []
+    assert chunk_response.status_code == 404
+    assert embedding_response.status_code == 404
 
 
 async def test_teacher_embeds_chunks_and_searches_course(

@@ -33,6 +33,11 @@ async def create_document_embeddings(
             batch_size=settings.embedding_batch_size,
         )
         return EmbeddingResponse(document_id=document_id, embedded_chunks=count)
+    except KnowledgeDocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        ) from exc
     except KnowledgeDocumentNotReadyError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

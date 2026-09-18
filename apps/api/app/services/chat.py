@@ -14,11 +14,11 @@ from database.models.chat import (
 )
 from database.models.course import CourseMember
 from database.models.document import Document, DocumentStatus
-from database.models.knowledge import KnowledgeChunk
+from database.models.knowledge import Chapter, KnowledgeChunk
 from database.models.learning import LearningEvent, LearningEventType
 from database.models.review import AIReviewFlag, ReviewStatus
 from database.models.user import User, UserRole
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -44,9 +44,15 @@ async def _course_has_searchable_material(session: AsyncSession, course_id: UUID
         await session.scalar(
             select(KnowledgeChunk.id)
             .join(Document, Document.id == KnowledgeChunk.document_id)
+            .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
             .where(
                 KnowledgeChunk.course_id == course_id,
                 Document.status == DocumentStatus.READY,
+                Document.trashed_at.is_(None),
+                or_(
+                    KnowledgeChunk.chapter_id.is_(None),
+                    Chapter.trashed_at.is_(None),
+                ),
                 KnowledgeChunk.embedding.is_not(None),
             )
             .limit(1)

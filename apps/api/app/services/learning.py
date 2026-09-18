@@ -2,7 +2,8 @@ from uuid import UUID
 
 from database.models.chat import Conversation, Message
 from database.models.course import CourseMember
-from database.models.knowledge import KnowledgePoint
+from database.models.document import Document
+from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.learning import (
     LearningEvent,
     LearningEventType,
@@ -140,9 +141,15 @@ async def _record_learning_event_once(
     knowledge_point_id = payload.knowledge_point_id
     if knowledge_point_id is not None:
         knowledge_point = await session.scalar(
-            select(KnowledgePoint).where(
+            select(KnowledgePoint)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
                 KnowledgePoint.id == knowledge_point_id,
                 KnowledgePoint.course_id == course_id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
         if knowledge_point is None:

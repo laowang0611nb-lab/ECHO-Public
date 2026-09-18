@@ -19,6 +19,7 @@ from app.schemas.teacher_resources import (
     ResourceListPage,
 )
 from app.services.knowledge import (
+    KnowledgeStructureConflictError,
     delete_chapter,
     delete_knowledge_point,
     purge_chapter,
@@ -28,6 +29,7 @@ from app.services.knowledge import (
 )
 from app.services.storage import LocalDocumentStorage
 from app.services.teacher_access import (
+    TeacherContentConflictError,
     TeacherContentNotFoundError,
     decode_cursor,
     encode_cursor,
@@ -52,19 +54,27 @@ async def _course_resource_items(
     )
     chapters = list(
         await session.scalars(
-            select(Chapter).where(
+            select(Chapter)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
                 Chapter.course_id == course_id,
                 Chapter.trashed_at.is_not(None) if trashed else Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
     )
     points = list(
         await session.scalars(
-            select(KnowledgePoint).where(
+            select(KnowledgePoint)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
                 KnowledgePoint.course_id == course_id,
                 KnowledgePoint.trashed_at.is_not(None)
                 if trashed
                 else KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
     )
@@ -248,13 +258,16 @@ async def restore_resource(
 ) -> ResourceListItem:
     await ensure_teacher(session, course_id, requester_id)
     item_type, entity = await _resolve_resource(session, course_id, resource_id)
-    if item_type == "chapter":
-        await restore_chapter(session, resource_id, requester_id)
-    elif item_type == "knowledge_point":
-        await restore_knowledge_point(session, resource_id, requester_id)
-    else:
-        entity.trashed_at = None
-        await session.commit()
+    try:
+        if item_type == "chapter":
+            await restore_chapter(session, resource_id, requester_id)
+        elif item_type == "knowledge_point":
+            await restore_knowledge_point(session, resource_id, requester_id)
+        else:
+            entity.trashed_at = None
+            await session.commit()
+    except KnowledgeStructureConflictError as exc:
+        raise TeacherContentConflictError from exc
     items = await _course_resource_items(session, course_id, trashed=False)
     return next(item for item in items if item.id == resource_id)
 
@@ -308,7 +321,12 @@ async def permanent_delete_resource(
             await session.scalars(select(Chapter.id).where(Chapter.document_id == document.id))
         )
         for chapter_id in chapter_ids:
-            affected += await purge_chapter(session, chapter_id, requester_id)
+            affected += await purge_chapter(
+                session,
+                chapter_id,
+                requester_id,
+                commit=False,
+            )
         await session.execute(
             update(QuestionItem)
             .where(QuestionItem.source_document_id == document.id)

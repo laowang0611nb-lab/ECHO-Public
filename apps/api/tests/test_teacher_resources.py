@@ -2,7 +2,9 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from uuid import UUID, uuid4
 
+import pytest
 from database.models.chat import Conversation, Message, MessageCitation, MessageRole
+from database.models.document import Document, DocumentPage
 from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import (
     LearningEvent,
@@ -12,6 +14,7 @@ from database.models.learning import (
 )
 from httpx import AsyncClient
 from pypdf import PdfWriter
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
@@ -347,9 +350,16 @@ async def test_question_external_resource_crud_graph_and_trash(
         headers=auth_headers(teacher),
         json={"difficulty": "hard", "title": "Updated boundary question"},
     )
+    null_difficulty = await client.patch(
+        f"/api/v1/courses/{course_id}/question-items/{question_id}",
+        headers=auth_headers(teacher),
+        json={"difficulty": None},
+    )
+
     assert question_patch.status_code == 200
     assert question_patch.json()["difficulty"] == "hard"
     assert question_patch.json()["title"] == "Updated boundary question"
+    assert null_difficulty.status_code == 422
 
     external = await client.post(
         f"/api/v1/courses/{course_id}/external-resources",
@@ -377,9 +387,16 @@ async def test_question_external_resource_crud_graph_and_trash(
         f"/api/v1/courses/{course_id}/external-resources?status=invalid",
         headers=auth_headers(teacher),
     )
+    null_check_status = await client.patch(
+        f"/api/v1/courses/{course_id}/external-resources/{external_id}",
+        headers=auth_headers(teacher),
+        json={"check_status": None},
+    )
+
     assert external_patch.status_code == 200
     assert external_patch.json()["check_status"] == "invalid"
     assert invalid_list.json()["total"] == 1
+    assert null_check_status.status_code == 422
 
     graph = await client.get(
         f"/api/v1/courses/{course_id}/knowledge-graph?pointId={point_id}",
@@ -485,6 +502,168 @@ async def test_chapter_and_point_soft_delete_and_restore(
     assert document_trash_again.status_code == 200
     assert document_delete.status_code == 200
     assert document_delete.json()["deleted"] is True
+
+    async with session_factory() as session:
+        assert await session.get(Document, UUID(document["id"])) is None
+        assert await session.get(Chapter, chapter_id) is None
+        assert await session.get(KnowledgePoint, point_id) is None
+        assert (
+            await session.scalar(
+                select(KnowledgeChunk.id).where(KnowledgeChunk.document_id == UUID(document["id"]))
+            )
+            is None
+        )
+        assert (
+            await session.scalar(
+                select(DocumentPage.id).where(DocumentPage.document_id == UUID(document["id"]))
+            )
+            is None
+        )
+
+
+async def test_new_teacher_resource_endpoints_map_course_errors(
+    client: AsyncClient,
+) -> None:
+    teacher = await login(client, "resource-errors@example.com", "teacher")
+    student = await login(client, "resource-errors-student@example.com", "student")
+    course = await create_course_and_student(client, teacher, student)
+    missing_course_id = uuid4()
+
+    missing = await client.get(
+        f"/api/v1/courses/{missing_course_id}/resources",
+        headers=auth_headers(teacher),
+    )
+    forbidden = await client.get(
+        f"/api/v1/courses/{course['id']}/resources",
+        headers=auth_headers(student),
+    )
+    missing_trend = await client.get(
+        f"/api/v1/courses/{missing_course_id}/knowledge-points/{uuid4()}/mastery-trend",
+        headers=auth_headers(teacher),
+    )
+
+    assert missing.status_code == 404
+    assert forbidden.status_code == 403
+    assert missing_trend.status_code == 404
+
+
+async def test_restore_knowledge_point_name_conflict_returns_409(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "resource-restore-conflict@example.com", "teacher")
+    student = await login(client, "resource-restore-student@example.com", "student")
+    course = await create_course_and_student(client, teacher, student)
+    document = await create_ready_document(client, teacher, course)
+    course_id = UUID(course["id"])
+    chapter_id = uuid4()
+    first_id = uuid4()
+    second_id = uuid4()
+    shared_name = "Conflicting Point"
+
+    async with session_factory() as session:
+        session.add(
+            Chapter(
+                id=chapter_id,
+                course_id=course_id,
+                document_id=UUID(document["id"]),
+                title="Restore Chapter",
+                order_index=0,
+            )
+        )
+        session.add_all(
+            [
+                KnowledgePoint(
+                    id=first_id,
+                    course_id=course_id,
+                    chapter_id=chapter_id,
+                    name=shared_name,
+                    order_index=0,
+                ),
+                KnowledgePoint(
+                    id=second_id,
+                    course_id=course_id,
+                    chapter_id=chapter_id,
+                    name="Second Point",
+                    order_index=1,
+                ),
+            ]
+        )
+        await session.commit()
+
+    deleted = await client.delete(
+        f"/api/v1/knowledge-points/{first_id}",
+        headers=auth_headers(teacher),
+    )
+    renamed = await client.patch(
+        f"/api/v1/knowledge-points/{second_id}",
+        headers=auth_headers(teacher),
+        json={"name": shared_name},
+    )
+    restored = await client.post(
+        f"/api/v1/courses/{course_id}/resources/{first_id}/restore",
+        headers=auth_headers(teacher),
+    )
+
+    assert deleted.status_code == 204
+    assert renamed.status_code == 200
+    assert restored.status_code == 409
+
+
+async def test_permanent_document_delete_rolls_back_all_steps(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teacher = await login(client, "resource-atomic-delete@example.com", "teacher")
+    student = await login(client, "resource-atomic-student@example.com", "student")
+    course = await create_course_and_student(client, teacher, student)
+    document = await create_ready_document(client, teacher, course)
+    course_id = UUID(course["id"])
+    document_id = UUID(document["id"])
+    chapter_id = uuid4()
+    point_id = uuid4()
+
+    async with session_factory() as session:
+        session.add(
+            Chapter(
+                id=chapter_id,
+                course_id=course_id,
+                document_id=document_id,
+                title="Atomic Chapter",
+                order_index=0,
+            )
+        )
+        session.add(
+            KnowledgePoint(
+                id=point_id,
+                course_id=course_id,
+                chapter_id=chapter_id,
+                name="Atomic Point",
+                order_index=0,
+            )
+        )
+        await session.commit()
+
+    original_execute = AsyncSession.execute
+
+    async def fail_on_page_delete(self, statement, *args, **kwargs):
+        table = getattr(statement, "table", None)
+        if getattr(table, "name", None) == "document_pages":
+            raise RuntimeError("forced permanent delete failure")
+        return await original_execute(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", fail_on_page_delete)
+    with pytest.raises(RuntimeError, match="forced permanent delete failure"):
+        await client.delete(
+            f"/api/v1/courses/{course_id}/resources/{document_id}?permanent=true",
+            headers=auth_headers(teacher),
+        )
+
+    async with session_factory() as session:
+        assert await session.get(Document, document_id) is not None
+        assert await session.get(Chapter, chapter_id) is not None
+        assert await session.get(KnowledgePoint, point_id) is not None
 
 
 def test_teacher_resource_openapi_paths() -> None:

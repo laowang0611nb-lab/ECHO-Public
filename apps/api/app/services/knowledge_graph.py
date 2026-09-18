@@ -49,18 +49,25 @@ async def get_knowledge_graph(
     chapters = list(
         await session.scalars(
             select(Chapter)
+            .join(Document, Document.id == Chapter.document_id)
             .where(
                 Chapter.course_id == course_id,
                 Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
             .order_by(Chapter.order_index, Chapter.id)
         )
     )
     points = list(
         await session.scalars(
-            select(KnowledgePoint).where(
+            select(KnowledgePoint)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
                 KnowledgePoint.course_id == course_id,
                 KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
     )
@@ -143,6 +150,11 @@ async def get_knowledge_graph(
         point_id: int(count) for point_id, count in event_counts_rows.all() if point_id is not None
     }
     for relation in relations:
+        if (
+            relation.source_knowledge_point_id not in nodes
+            or relation.target_knowledge_point_id not in nodes
+        ):
+            continue
         relation_type = "prerequisite" if relation.relation_type == "prerequisite" else "related"
         edges.append(
             _edge(

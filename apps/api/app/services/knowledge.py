@@ -67,7 +67,9 @@ async def _replace_document_structure(
     existing_chapters = list(
         await session.scalars(
             select(Chapter)
-            .options(selectinload(Chapter.knowledge_points))
+            .options(
+                selectinload(Chapter.knowledge_points.and_(KnowledgePoint.trashed_at.is_(None)))
+            )
             .where(Chapter.document_id == document.id, Chapter.trashed_at.is_(None))
             .order_by(Chapter.order_index, Chapter.id)
         )
@@ -81,7 +83,10 @@ async def _replace_document_structure(
         )
         await session.execute(
             update(KnowledgePoint)
-            .where(KnowledgePoint.chapter_id.in_(existing_chapter_ids))
+            .where(
+                KnowledgePoint.chapter_id.in_(existing_chapter_ids),
+                KnowledgePoint.trashed_at.is_(None),
+            )
             .values(order_index=KnowledgePoint.order_index + REORDER_OFFSET)
         )
 
@@ -178,7 +183,12 @@ async def generate_document_structure(
     document_id: UUID,
     requester_id: UUID,
 ) -> list[Chapter]:
-    document = await session.get(Document, document_id)
+    document = await session.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.trashed_at.is_(None),
+        )
+    )
     if document is None:
         raise KnowledgeDocumentNotFoundError
 
@@ -218,7 +228,7 @@ async def generate_document_structure(
     chapter_ids = [chapter.id for chapter in chapters]
     result = await session.scalars(
         select(Chapter)
-        .options(selectinload(Chapter.knowledge_points))
+        .options(selectinload(Chapter.knowledge_points.and_(KnowledgePoint.trashed_at.is_(None))))
         .where(Chapter.id.in_(chapter_ids))
         .order_by(Chapter.order_index)
     )
@@ -233,8 +243,13 @@ async def list_course_chapters(
     await get_course_for_member(session, course_id, requester_id)
     result = await session.scalars(
         select(Chapter)
-        .options(selectinload(Chapter.knowledge_points))
-        .where(Chapter.course_id == course_id, Chapter.trashed_at.is_(None))
+        .join(Document, Document.id == Chapter.document_id)
+        .options(selectinload(Chapter.knowledge_points.and_(KnowledgePoint.trashed_at.is_(None))))
+        .where(
+            Chapter.course_id == course_id,
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
         .order_by(Chapter.order_index)
     )
     return list(result)
@@ -258,9 +273,14 @@ async def _ensure_course_teacher(
 async def _load_chapter(session: AsyncSession, chapter_id: UUID) -> Chapter | None:
     return await session.scalar(
         select(Chapter)
-        .options(selectinload(Chapter.knowledge_points))
+        .join(Document, Document.id == Chapter.document_id)
+        .options(selectinload(Chapter.knowledge_points.and_(KnowledgePoint.trashed_at.is_(None))))
         .execution_options(populate_existing=True)
-        .where(Chapter.id == chapter_id, Chapter.trashed_at.is_(None))
+        .where(
+            Chapter.id == chapter_id,
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
     )
 
 
@@ -300,7 +320,10 @@ async def _set_chapter_order(
 ) -> None:
     await session.execute(
         update(Chapter)
-        .where(Chapter.document_id == document_id)
+        .where(
+            Chapter.document_id == document_id,
+            Chapter.trashed_at.is_(None),
+        )
         .values(order_index=Chapter.order_index + REORDER_OFFSET)
     )
     for index, chapter_id in enumerate(ordered_ids):
@@ -336,7 +359,12 @@ async def create_chapter(
     payload: ChapterCreate,
 ) -> Chapter:
     document = await session.scalar(
-        select(Document).where(Document.id == document_id).with_for_update()
+        select(Document)
+        .where(
+            Document.id == document_id,
+            Document.trashed_at.is_(None),
+        )
+        .with_for_update()
     )
     if document is None:
         raise KnowledgeDocumentNotFoundError
@@ -345,7 +373,10 @@ async def create_chapter(
     existing_ids = list(
         await session.scalars(
             select(Chapter.id)
-            .where(Chapter.document_id == document_id)
+            .where(
+                Chapter.document_id == document_id,
+                Chapter.trashed_at.is_(None),
+            )
             .order_by(Chapter.order_index, Chapter.id)
         )
     )
@@ -399,7 +430,10 @@ async def update_chapter(
         ordered_ids = list(
             await session.scalars(
                 select(Chapter.id)
-                .where(Chapter.document_id == chapter.document_id)
+                .where(
+                    Chapter.document_id == chapter.document_id,
+                    Chapter.trashed_at.is_(None),
+                )
                 .order_by(Chapter.order_index, Chapter.id)
             )
         )
@@ -422,9 +456,11 @@ async def delete_chapter(
 ) -> None:
     chapter = await session.scalar(
         select(Chapter)
+        .join(Document, Document.id == Chapter.document_id)
         .where(
             Chapter.id == chapter_id,
             Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
         )
         .with_for_update()
     )
@@ -441,7 +477,13 @@ async def restore_chapter(
     requester_id: UUID,
 ) -> Chapter:
     chapter = await session.scalar(
-        select(Chapter).where(Chapter.id == chapter_id).with_for_update()
+        select(Chapter)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            Chapter.id == chapter_id,
+            Document.trashed_at.is_(None),
+        )
+        .with_for_update()
     )
     if chapter is None or chapter.trashed_at is None:
         raise KnowledgeNodeNotFoundError
@@ -471,6 +513,8 @@ async def purge_chapter(
     session: AsyncSession,
     chapter_id: UUID,
     requester_id: UUID,
+    *,
+    commit: bool = True,
 ) -> int:
     chapter = await session.scalar(
         select(Chapter).where(Chapter.id == chapter_id).with_for_update()
@@ -511,7 +555,8 @@ async def purge_chapter(
         )
     )
     await _set_chapter_order(session, chapter.document_id, remaining_ids)
-    await session.commit()
+    if commit:
+        await session.commit()
     return int(affected_references or 0)
 
 
@@ -521,7 +566,16 @@ async def create_knowledge_point(
     requester_id: UUID,
     payload: KnowledgePointCreate,
 ) -> KnowledgePoint:
-    chapter = await session.get(Chapter, chapter_id)
+    chapter = await session.scalar(
+        select(Chapter)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            Chapter.id == chapter_id,
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
+        .with_for_update()
+    )
     if chapter is None:
         raise KnowledgeNodeNotFoundError
     await _ensure_course_teacher(session, chapter.course_id, requester_id)
@@ -565,7 +619,18 @@ async def update_knowledge_point(
     requester_id: UUID,
     payload: KnowledgePointUpdate,
 ) -> KnowledgePoint:
-    point = await session.get(KnowledgePoint, point_id)
+    point = await session.scalar(
+        select(KnowledgePoint)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            KnowledgePoint.id == point_id,
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
+        .with_for_update()
+    )
     if point is None:
         raise KnowledgeNodeNotFoundError
     await _ensure_course_teacher(session, point.course_id, requester_id)
@@ -573,7 +638,16 @@ async def update_knowledge_point(
     source_chapter_id = point.chapter_id
     target_chapter_id = source_chapter_id
     if "chapter_id" in payload.model_fields_set and payload.chapter_id is not None:
-        target_chapter = await session.get(Chapter, payload.chapter_id)
+        target_chapter = await session.scalar(
+            select(Chapter)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
+                Chapter.id == payload.chapter_id,
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
+            )
+            .with_for_update()
+        )
         if target_chapter is None:
             raise KnowledgeNodeNotFoundError
         if target_chapter.course_id != point.course_id:
@@ -601,7 +675,10 @@ async def update_knowledge_point(
             source_ids = list(
                 await session.scalars(
                     select(KnowledgePoint.id)
-                    .where(KnowledgePoint.chapter_id == source_chapter_id)
+                    .where(
+                        KnowledgePoint.chapter_id == source_chapter_id,
+                        KnowledgePoint.trashed_at.is_(None),
+                    )
                     .order_by(KnowledgePoint.order_index, KnowledgePoint.id)
                 )
             )
@@ -610,7 +687,10 @@ async def update_knowledge_point(
             target_ids = list(
                 await session.scalars(
                     select(KnowledgePoint.id)
-                    .where(KnowledgePoint.chapter_id == target_chapter_id)
+                    .where(
+                        KnowledgePoint.chapter_id == target_chapter_id,
+                        KnowledgePoint.trashed_at.is_(None),
+                    )
                     .order_by(KnowledgePoint.order_index, KnowledgePoint.id)
                 )
             )
@@ -626,7 +706,10 @@ async def update_knowledge_point(
             ordered_ids = list(
                 await session.scalars(
                     select(KnowledgePoint.id)
-                    .where(KnowledgePoint.chapter_id == target_chapter_id)
+                    .where(
+                        KnowledgePoint.chapter_id == target_chapter_id,
+                        KnowledgePoint.trashed_at.is_(None),
+                    )
                     .order_by(KnowledgePoint.order_index, KnowledgePoint.id)
                 )
             )
@@ -650,9 +733,13 @@ async def delete_knowledge_point(
 ) -> None:
     point = await session.scalar(
         select(KnowledgePoint)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
         .where(
             KnowledgePoint.id == point_id,
             KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
         )
         .with_for_update()
     )
@@ -669,7 +756,15 @@ async def restore_knowledge_point(
     requester_id: UUID,
 ) -> KnowledgePoint:
     point = await session.scalar(
-        select(KnowledgePoint).where(KnowledgePoint.id == point_id).with_for_update()
+        select(KnowledgePoint)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            KnowledgePoint.id == point_id,
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
+        .with_for_update()
     )
     if point is None or point.trashed_at is None:
         raise KnowledgeNodeNotFoundError
@@ -737,15 +832,32 @@ async def merge_knowledge_points(
     payload: KnowledgePointMergeRequest,
 ) -> KnowledgePoint:
     await _ensure_course_teacher(session, course_id, requester_id)
-    target = await session.get(KnowledgePoint, payload.target_knowledge_point_id)
-    if target is None or target.course_id != course_id:
+    target = await session.scalar(
+        select(KnowledgePoint)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            KnowledgePoint.id == payload.target_knowledge_point_id,
+            KnowledgePoint.course_id == course_id,
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
+    )
+    if target is None:
         raise KnowledgeNodeNotFoundError
 
     sources = list(
         await session.scalars(
-            select(KnowledgePoint).where(
+            select(KnowledgePoint)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
                 KnowledgePoint.id.in_(payload.source_knowledge_point_ids),
                 KnowledgePoint.course_id == course_id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
     )
@@ -879,7 +991,10 @@ async def merge_knowledge_points(
     remaining_ids = list(
         await session.scalars(
             select(KnowledgePoint.id)
-            .where(KnowledgePoint.chapter_id == target.chapter_id)
+            .where(
+                KnowledgePoint.chapter_id == target.chapter_id,
+                KnowledgePoint.trashed_at.is_(None),
+            )
             .order_by(KnowledgePoint.order_index, KnowledgePoint.id)
         )
     )
