@@ -3,11 +3,12 @@
 import type {
   ExecutionPlanCreateRequest,
   ExecutionPlanWeekItem,
+  PlanTaskItem,
   PlanTaskType,
   TeachingStrategyListItem,
   WeeklyPlanGeneration,
 } from "@echo/shared-types";
-import { ArrowLeft, ArrowRight, Check, Save, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Pencil, Save, Sparkles, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -21,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useKnowledgeBaseData } from "@/features/knowledge/queries";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { useTeachingStrategies, useTeachingStrategy } from "@/features/teaching-strategies/queries";
@@ -75,6 +77,10 @@ export function CreateExecutionPlanPage({
   const [planId, setPlanId] = useState<string | null>(null);
   const [generation, setGeneration] = useState<WeeklyPlanGeneration | null>(null);
   const [handledRecommendations, setHandledRecommendations] = useState<string[]>([]);
+  const [editingTask, setEditingTask] = useState<PlanTaskItem | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editDueAt, setEditDueAt] = useState("");
   const [weeks, setWeeks] = useState<ExecutionPlanWeekItem[]>([]);
   const [title, setTitle] = useState("");
   const [strategyId, setStrategyId] = useState(initialStrategyId ?? "");
@@ -261,6 +267,37 @@ export function CreateExecutionPlanPage({
     setWeeks((current) => current.map((week) => week.id === weekId ? { ...week, tasks: week.tasks.filter((task) => task.id !== taskId) } : week));
   }
 
+  function openTaskEditor(task: PlanTaskItem) {
+    setEditingTask(task);
+    setEditTitle(task.title);
+    setEditDescription(task.description);
+    setEditDueAt(task.due_at ? task.due_at.slice(0, 16) : "");
+  }
+
+  async function saveTaskEdit() {
+    if (!planId || !editingTask || !editTitle.trim()) return;
+    setError(null);
+    try {
+      const updated = await taskMutation.mutateAsync({
+        planId,
+        taskId: editingTask.id,
+        payload: {
+          title: editTitle.trim(),
+          description: editDescription.trim(),
+          due_at: editDueAt ? new Date(editDueAt).toISOString() : null,
+        },
+      });
+      setWeeks((current) => current.map((week) => ({
+        ...week,
+        tasks: week.tasks.map((task) => task.id === updated.id ? updated : task),
+      })));
+      setEditingTask(null);
+      setMessage("任务内容与截止时间已保存。");
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "任务更新失败。");
+    }
+  }
+
   return (
     <div className="space-y-5">
       <header className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
@@ -348,7 +385,7 @@ export function CreateExecutionPlanPage({
                     </div>
                   </div>
                 ) : null}
-                {weeks.length ? <div className="space-y-3">{weeks.map((week) => <div className="rounded-xl border-2 border-border p-4" key={week.id}><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold">第 {week.week_number} 周 · {week.start_date} → {week.end_date}</p><StatusBadge tone="info">{`${week.tasks.length} 项任务`}</StatusBadge></div><p className="mt-2 text-sm text-muted-foreground">{week.content}</p><div className="mt-3 space-y-2">{week.tasks.map((task) => <div className="flex items-center gap-3 rounded-lg bg-muted/45 px-3 py-2 text-sm" key={task.id}><span className="min-w-0 flex-1 truncate">{task.title}</span><Button onClick={() => void removeGeneratedTask(week.id, task.id)} size="icon-sm" type="button" variant="ghost"><Trash2 /></Button></div>)}</div></div>)}</div> : <EmptyState description="点击“生成执行计划”，由 AI 生成结构化周计划草案。" title="尚未生成周计划" />}
+                {weeks.length ? <div className="space-y-3">{weeks.map((week) => <div className="rounded-xl border-2 border-border p-4" key={week.id}><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-semibold">第 {week.week_number} 周 · {week.start_date} → {week.end_date}</p><StatusBadge tone="info">{`${week.tasks.length} 项任务`}</StatusBadge></div><p className="mt-2 text-sm text-muted-foreground">{week.content}</p><div className="mt-3 space-y-2">{week.tasks.map((task) => <div className="flex items-center gap-3 rounded-lg bg-muted/45 px-3 py-2 text-sm" key={task.id}><span className="min-w-0 flex-1 truncate">{task.title}</span><div className="flex shrink-0 gap-1"><Button onClick={() => openTaskEditor(task)} size="icon-sm" type="button" variant="ghost"><Pencil /></Button><Button onClick={() => void removeGeneratedTask(week.id, task.id)} size="icon-sm" type="button" variant="ghost"><Trash2 /></Button></div></div>)}</div></div>)}</div> : <EmptyState description="点击“生成执行计划”，由 AI 生成结构化周计划草案。" title="尚未生成周计划" />}
               </div>
             ) : null}
 
@@ -366,6 +403,24 @@ export function CreateExecutionPlanPage({
         <div className="flex gap-2"><Link className={buttonVariants({ variant: "ghost" })} href={strategyId ? `/teaching-strategies/${strategyId}` : "/teaching-strategies"}>取消</Link><Button disabled={!canSaveDraft || createMutation.isPending || updateMutation.isPending} onClick={() => void handleSaveDraft()} type="button" variant="outline">保存草稿</Button></div>
         <div className="flex gap-2">{step > 1 ? <Button onClick={() => setStep((value) => Math.max(1, value - 1) as typeof step)} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />上一步</Button> : null}{step < 5 ? <Button disabled={!canContinue} onClick={() => void nextStep()} type="button">{step === 3 ? "保存并进入 AI 生成" : "下一步"}<ArrowRight data-icon="inline-end" /></Button> : <Button disabled={!planId || actionMutation.isPending || !weeks.length} onClick={() => void handlePublish()} type="button"><Check data-icon="inline-start" />发布执行计划</Button>}</div>
       </footer>
+
+      <Dialog onOpenChange={(open) => { if (!open) setEditingTask(null); }} open={Boolean(editingTask)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>编辑教学任务</DialogTitle>
+            <DialogDescription>修改会通过正式任务接口保存，不改变已完成的历史学习事件。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Field label="任务名称"><Input onChange={(event) => setEditTitle(event.target.value)} value={editTitle} /></Field>
+            <Field label="任务说明"><Textarea onChange={(event) => setEditDescription(event.target.value)} value={editDescription} /></Field>
+            <Field label="截止时间"><Input onChange={(event) => setEditDueAt(event.target.value)} type="datetime-local" value={editDueAt} /></Field>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setEditingTask(null)} type="button" variant="outline">取消</Button>
+            <Button disabled={!editTitle.trim() || taskMutation.isPending} onClick={() => void saveTaskEdit()} type="button">{taskMutation.isPending ? "正在保存..." : "保存任务"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

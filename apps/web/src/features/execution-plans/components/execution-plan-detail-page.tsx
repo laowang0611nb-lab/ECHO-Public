@@ -20,6 +20,7 @@ import {
   CirclePlay,
   FileText,
   ListChecks,
+  Pencil,
   Sparkles,
   Target,
   Users,
@@ -44,6 +45,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -52,6 +55,7 @@ import {
   useExecutionPlanAction,
   usePlanEffect,
   usePlanLearningEvents,
+  useUpdatePlanTask,
 } from "@/features/execution-plans/queries";
 import type { ExecutionPlanTab } from "@/features/execution-plans/types";
 import { executionPlanTabs } from "@/features/execution-plans/types";
@@ -346,12 +350,45 @@ function WeeklyPlanTab({ plan }: { plan: ExecutionPlanDetail }) {
 
 function TasksTab({ plan }: { plan: ExecutionPlanDetail }) {
   const [status, setStatus] = useState<PlanTaskStatus | "all">("all");
+  const taskMutation = useUpdatePlanTask();
+  const [editingTask, setEditingTask] = useState<PlanTaskItem | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editDueAt, setEditDueAt] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
   const tasks = useMemo(
     () => [...plan.tasks]
       .filter((task) => status === "all" || task.status === status)
       .sort((left, right) => left.week_number - right.week_number),
     [plan.tasks, status],
   );
+
+  function openTaskEditor(task: PlanTaskItem) {
+    setEditingTask(task);
+    setEditTitle(task.title);
+    setEditDescription(task.description);
+    setEditDueAt(task.due_at ? task.due_at.slice(0, 16) : "");
+    setEditError(null);
+  }
+
+  async function saveTaskEdit() {
+    if (!editingTask || !editTitle.trim()) return;
+    setEditError(null);
+    try {
+      await taskMutation.mutateAsync({
+        planId: plan.id,
+        taskId: editingTask.id,
+        payload: {
+          title: editTitle.trim(),
+          description: editDescription.trim(),
+          due_at: editDueAt ? new Date(editDueAt).toISOString() : null,
+        },
+      });
+      setEditingTask(null);
+    } catch (requestError) {
+      setEditError(requestError instanceof Error ? requestError.message : "任务更新失败。");
+    }
+  }
 
   return (
     <Card className="gap-4 py-5">
@@ -411,12 +448,35 @@ function TasksTab({ plan }: { plan: ExecutionPlanDetail }) {
                       <Progress value={taskCompletionPercentage(task)} />
                     </div>
                   </TableCell>
-                  <TableCell className="pr-5"><StatusBadge tone={taskStatusTone(task.status)}>{taskStatusLabel(task.status)}</StatusBadge></TableCell>
+                  <TableCell className="pr-5">
+                    <div className="flex items-center justify-end gap-2">
+                      <StatusBadge tone={taskStatusTone(task.status)}>{taskStatusLabel(task.status)}</StatusBadge>
+                      {task.status !== "completed" ? <Button aria-label={`编辑任务 ${task.title}`} onClick={() => openTaskEditor(task)} size="icon-sm" type="button" variant="ghost"><Pencil /></Button> : null}
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         ) : <EmptyState description="当前筛选条件下没有教学任务。" title="暂无任务" />}
+        <Dialog onOpenChange={(open) => { if (!open) setEditingTask(null); }} open={Boolean(editingTask)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>编辑教学任务</DialogTitle>
+              <DialogDescription>只允许调整未完成任务；已经完成的任务与历史学习事件保持只读。</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <label className="block"><span className="mb-1.5 block text-xs font-medium text-muted-foreground">任务名称</span><Input onChange={(event) => setEditTitle(event.target.value)} value={editTitle} /></label>
+              <label className="block"><span className="mb-1.5 block text-xs font-medium text-muted-foreground">任务说明</span><Textarea onChange={(event) => setEditDescription(event.target.value)} value={editDescription} /></label>
+              <label className="block"><span className="mb-1.5 block text-xs font-medium text-muted-foreground">截止时间</span><Input onChange={(event) => setEditDueAt(event.target.value)} type="datetime-local" value={editDueAt} /></label>
+              {editError ? <p className="text-sm text-destructive">{editError}</p> : null}
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setEditingTask(null)} type="button" variant="outline">取消</Button>
+              <Button disabled={!editTitle.trim() || taskMutation.isPending} onClick={() => void saveTaskEdit()} type="button">{taskMutation.isPending ? "正在保存..." : "保存任务"}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
