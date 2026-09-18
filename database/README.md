@@ -1,8 +1,9 @@
 # ECHO Database
 
-This directory is a standalone database package copied from the current backend
-and extended in place. It is intentionally **not yet wired into** `apps/api`;
-backend integration starts only after the backend worktree is frozen.
+This directory is the database package for ECHO. It was copied from the
+current backend and extended in place. Some backend files already contain
+work-in-progress `database.*` imports; final migration-entry unification is
+still pending the backend worktree freeze.
 
 ## Contents
 
@@ -53,7 +54,7 @@ before this package is accepted as the integrated backend database layer.
 
 ## Integration Boundary
 
-Do not change `apps/api` imports or service wiring as part of this package
-work. The backend may temporarily contain work-in-progress imports while other
-threads continue; those changes do not mean this standalone package is already
-approved for integration.
+Do not overwrite the backend work in progress. The backend may temporarily
+contain `database.*` imports while other threads continue; those changes do
+not mean every legacy entry point has been unified. Final integration must
+leave one Alembic entry point and pass the full regression suite.

@@ -1,8 +1,9 @@
-from app.db.base import Base
+from database.db.base import Base
 
 
 def test_core_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
+        "auth_sessions",
         "ai_review_flags",
         "chapters",
         "conversations",
@@ -17,9 +18,12 @@ def test_core_tables_are_registered() -> None:
         "knowledge_chunks",
         "knowledge_relations",
         "student_knowledge_states",
+        "student_profiles",
+        "teacher_profiles",
         "message_citations",
         "messages",
         "teaching_policies",
+        "user_credentials",
         "users",
     }
 
