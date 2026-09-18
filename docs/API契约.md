@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.87`
+> 冻结版本：`v0.0.88`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。

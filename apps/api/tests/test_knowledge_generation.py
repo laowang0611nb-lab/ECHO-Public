@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft
 from app.services.knowledge import _replace_document_structure
+from app.services.llm import LLMProviderTimeoutError
 
 
 def make_pdf(page_count: int = 2) -> bytes:
@@ -85,6 +86,26 @@ async def test_teacher_generates_and_lists_structure(
     assert len(generated.json()[0]["knowledge_points"]) == 2
     assert listed.status_code == 200
     assert listed.json()[0]["knowledge_points"][0]["name"] == "Point 1"
+
+
+async def test_generation_timeout_returns_gateway_timeout(
+    client: AsyncClient,
+    knowledge_provider,
+) -> None:
+    teacher = await login(client, "knowledge-timeout@example.com", "teacher")
+    _, document = await create_ready_document(client, teacher)
+
+    async def fail(_pages: list[str]) -> list[ChapterDraft]:
+        raise LLMProviderTimeoutError("timeout")
+
+    knowledge_provider.generate = fail
+    response = await client.post(
+        f"/api/v1/documents/{document['id']}/generate-structure",
+        headers=auth_headers(teacher),
+    )
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "LLM provider timed out while generating the structure"
 
 
 async def test_regeneration_reuses_point_when_chapter_title_changes(

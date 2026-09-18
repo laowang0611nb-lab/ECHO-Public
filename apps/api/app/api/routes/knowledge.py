@@ -36,6 +36,7 @@ from app.services.llm import (
     LLMConfigurationError,
     LLMContextLimitError,
     LLMProviderError,
+    LLMProviderTimeoutError,
 )
 
 router = APIRouter(tags=["knowledge"])
@@ -92,6 +93,11 @@ async def generate_structure(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Document exceeds the configured LLM context limit",
+        ) from exc
+    except LLMProviderTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="LLM provider timed out while generating the structure",
         ) from exc
     except LLMProviderError as exc:
         raise HTTPException(

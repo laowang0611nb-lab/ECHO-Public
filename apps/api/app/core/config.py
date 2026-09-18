@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.87"
+    app_version: str = "0.0.88"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.8-flash"
-    llm_timeout_seconds: float = 60.0
+    llm_timeout_seconds: float = 180.0
     llm_context_window_tokens: int = 1_000_000
     llm_context_safety_ratio: float = 0.7
     llm_batch_overlap_tokens: int = 2000

@@ -14,7 +14,8 @@ EXTRACTION_PROMPT_PREFIX = (
     'The JSON shape must be {"chapters":[{"title":string,'
     '"summary":string|null,"knowledge_points":[{"name":string,'
     '"description":string|null}]}]}. Keep chapter and knowledge point '
-    "names concise and grounded in the material.\n\n"
+    "names concise and grounded in the material. Return at most 20 chapters "
+    "and at most 8 knowledge points per chapter. Do not include markdown.\n\n"
     "COURSE MATERIAL:\n"
 )
 MERGE_PROMPT_PREFIX = (
@@ -22,7 +23,8 @@ MERGE_PROMPT_PREFIX = (
     "Preserve chapter order, merge equivalent chapters and knowledge points, "
     'and return strict JSON in the shape {"chapters":[{"title":string,'
     '"summary":string|null,"knowledge_points":[{"name":string,'
-    '"description":string|null}]}]}.\n\n'
+    '"description":string|null}]}]}. Return at most 20 chapters and at most '
+    "8 knowledge points per chapter. Do not include markdown.\n\n"
     "PARTIAL DRAFTS:\n"
 )
 CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
@@ -36,6 +38,10 @@ class LLMConfigurationError(Exception):
 
 
 class LLMProviderError(Exception):
+    pass
+
+
+class LLMProviderTimeoutError(LLMProviderError):
     pass
 
 
@@ -319,11 +325,14 @@ class QwenKnowledgeStructureProvider:
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": prompt},
                         ],
-                        "temperature": 0.2,
+                        "temperature": 0.1,
+                        "response_format": {"type": "json_object"},
                         "max_tokens": self.max_output_tokens,
                     },
                 )
                 response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            raise LLMProviderTimeoutError("LLM request timed out") from exc
         except httpx.HTTPError as exc:
             raise LLMProviderError("LLM request failed") from exc
 
