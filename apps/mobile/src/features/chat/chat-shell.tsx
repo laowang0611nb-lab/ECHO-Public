@@ -1,7 +1,7 @@
 import { SymbolView, type AndroidSymbol } from "expo-symbols";
 import { useMemo } from "react";
 import {
-  Image,
+ Image,
   Modal,
   Pressable,
   ScrollView,
@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { studentTheme } from "@/constants/student-theme";
 import type { Conversation, Course } from "@echo/shared-types";
@@ -106,6 +107,7 @@ export function ConversationDrawer({
   onSelect: (conversationId: string) => void;
   onNewConversation: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const grouped = useMemo(
     () => ({
       今天: conversations.filter((item) => conversationGroup(item) === "今天"),
@@ -118,7 +120,7 @@ export function ConversationDrawer({
   return (
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.drawerOverlay}>
-        <View style={styles.drawer}>
+        <View style={[styles.drawer, { paddingTop: insets.top + 8 }]}>
           <View style={styles.drawerHeader}>
             <View style={styles.drawerHeading}>
               <Text style={styles.drawerEyebrow}>学习历史</Text>

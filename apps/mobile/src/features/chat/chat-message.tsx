@@ -1,8 +1,9 @@
 import * as Clipboard from "expo-clipboard";
 import { SymbolView, type AndroidSymbol } from "expo-symbols";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -10,6 +11,14 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, {
+  FadeIn,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 import Markdown from "react-native-markdown-display";
 import type {
   AIMessageBlock,
@@ -31,11 +40,9 @@ function messageStatusLabel(message: Message): string {
   if (message.role === "user") {
     if (message.status === "sending") return "发送中";
     if (message.status === "failed") return "发送失败";
-    if (message.status === "sent") return "已发送";
   }
-  if (message.status === "streaming") return "生成中";
-  if (message.status === "interrupted") return "回答中断";
-  if (message.status === "failed") return "生成失败";
+  if (message.status === "interrupted") return "回答已停止";
+  if (message.status === "failed") return "ECHO 暂时没有回答成功";
   return "";
 }
 
@@ -44,31 +51,141 @@ function blockKey(block: AIMessageBlock, index: number): string {
   return `${block.type}-${index}`;
 }
 
+function StreamingWaiting() {
+  return (
+    <View style={styles.streamingRow}>
+      <ActivityIndicator color={studentTheme.color.primary} size="small" />
+      <Text style={styles.streamingText}>ECHO 正在思考…</Text>
+    </View>
+  );
+}
+
+function StreamingCursor() {
+  const opacity = useSharedValue(0.22);
+
+  useEffect(() => {
+    opacity.value = withRepeat(withTiming(1, { duration: 520 }), -1, true);
+    return () => cancelAnimation(opacity);
+  }, [opacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return <Animated.View style={[styles.streamingCursor, animatedStyle]} />;
+}
+
+function CodeFence({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const code = content.replace(/\n$/, "");
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1400);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  return (
+    <View style={styles.codeFence}>
+      <View style={styles.codeHeader}>
+        <Text style={styles.codeLabel}>代码</Text>
+        <Pressable
+          accessibilityLabel="复制代码"
+          onPress={() => {
+            void Clipboard.setStringAsync(code);
+            setCopied(true);
+          }}
+          style={styles.codeCopyButton}
+        >
+          <SymbolView
+            name={{ android: copied ? "check" : "content_copy", web: copied ? "check" : "content_copy" }}
+            size={15}
+            tintColor={studentTheme.color.primary}
+          />
+          <Text style={styles.codeCopyText}>{copied ? "已复制" : "复制"}</Text>
+        </Pressable>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+      >
+        <Text selectable style={styles.codeText}>
+          {code}
+        </Text>
+      </ScrollView>
+    </View>
+  );
+}
+
 function MarkdownContent({ content }: { content: string }) {
   return (
     <Markdown
+      rules={{
+        fence: (node) => <CodeFence content={node.content} key={node.key} />,
+      }}
       style={{
         body: {
           color: studentTheme.color.text,
-          fontSize: 15,
-          lineHeight: 23,
+          fontSize: studentTheme.type.body.fontSize + 1,
+          lineHeight: 26,
+        },
+        paragraph: {
+          marginBottom: 10,
+          marginTop: 0,
+        },
+        heading1: {
+          color: studentTheme.color.text,
+          fontSize: 19,
+          fontWeight: "800",
+          lineHeight: 27,
+          marginBottom: 8,
+          marginTop: 4,
+        },
+        heading2: {
+          color: studentTheme.color.text,
+          fontSize: 17,
+          fontWeight: "800",
+          lineHeight: 25,
+          marginBottom: 7,
+          marginTop: 4,
+        },
+        heading3: {
+          color: studentTheme.color.text,
+          fontSize: 16,
+          fontWeight: "800",
+          lineHeight: 24,
+          marginBottom: 6,
+          marginTop: 3,
         },
         code_inline: {
-          backgroundColor: "#eef4fb",
           borderRadius: 5,
           color: studentTheme.color.primaryDark,
+          backgroundColor: studentTheme.color.primarySoft,
           paddingHorizontal: 4,
         },
         fence: {
-          backgroundColor: "#f5f8fc",
-          borderColor: studentTheme.color.border,
-          borderRadius: studentTheme.radius.medium,
+          backgroundColor: "#f3f6fa",
+          borderColor: studentTheme.color.divider,
+          borderRadius: studentTheme.radius.card,
           borderWidth: 1,
           color: studentTheme.color.text,
-          padding: 10,
+          fontFamily: "monospace",
+          fontSize: 13,
+          lineHeight: 20,
+          padding: 12,
         },
         bullet_list: { marginVertical: 4 },
         ordered_list: { marginVertical: 4 },
+        list_item: { marginVertical: 3 },
+        blockquote: {
+          backgroundColor: studentTheme.color.surfaceSoft,
+          borderLeftColor: studentTheme.color.primaryBorder,
+          borderLeftWidth: 3,
+          marginVertical: 8,
+          paddingHorizontal: 11,
+          paddingVertical: 7,
+        },
+        link: {
+          color: studentTheme.color.primary,
+        },
       }}
     >
       {content}
@@ -103,15 +220,18 @@ export function HintCard({
 
   return (
     <View style={styles.hintCard}>
-      <View style={styles.blockTitleRow}>
+      <View style={styles.hintHeader}>
         <View style={styles.hintIcon}>
           <SymbolView
             name={{ android: "lightbulb", web: "lightbulb" }}
-            size={17}
-            tintColor={studentTheme.color.orange}
+            size={18}
+            tintColor={studentTheme.color.violet}
           />
         </View>
-        <Text style={styles.blockTitle}>提示 {block.level}</Text>
+        <View style={styles.hintHeading}>
+          <Text style={styles.hintLabel}>提示 {block.level}</Text>
+          <Text style={styles.hintBadge}>引导</Text>
+        </View>
       </View>
       {block.title ? <Text style={styles.hintTitle}>{block.title}</Text> : null}
       <Text style={styles.hintText}>{block.content}</Text>
@@ -120,26 +240,26 @@ export function HintCard({
           disabled={disabled}
           onPress={onThought}
           style={({ pressed }) => [
-            styles.secondaryAction,
+            styles.thoughtAction,
             disabled && styles.disabled,
             pressed && styles.pressed,
           ]}
         >
-          <Text style={styles.secondaryActionText}>我想到了</Text>
+          <Text style={styles.thoughtActionText}>我想到了</Text>
         </Pressable>
         <Pressable
           disabled={disabled || loading || !block.can_request_more}
           onPress={() => void requestMore()}
           style={({ pressed }) => [
-            styles.primarySmallAction,
+            styles.moreHintAction,
             (disabled || loading || !block.can_request_more) && styles.disabled,
             pressed && styles.pressed,
           ]}
         >
           {loading ? (
-            <ActivityIndicator color="#ffffff" size="small" />
+            <ActivityIndicator color={studentTheme.color.violet} size="small" />
           ) : (
-            <Text style={styles.primarySmallActionText}>
+            <Text style={styles.moreHintActionText}>
               {block.can_request_more ? "再给一点提示" : "已到最后一层"}
             </Text>
           )}
@@ -188,15 +308,18 @@ export function QuickCheckCard({
 
   return (
     <View style={styles.quickCard}>
-      <View style={styles.blockTitleRow}>
+      <View style={styles.quickHeader}>
         <View style={styles.quickIcon}>
           <SymbolView
             name={{ android: "quiz", web: "quiz" }}
-            size={17}
+            size={18}
             tintColor={studentTheme.color.primary}
           />
         </View>
-        <Text style={styles.blockTitle}>{block.title || "快速检测"}</Text>
+        <View style={styles.quickHeading}>
+          <Text style={styles.quickTitle}>{block.title || "理解检查"}</Text>
+          <Text style={styles.quickBadge}>快速验证</Text>
+        </View>
         {block.attempts_remaining !== null ? (
           <Text style={styles.attemptCount}>
             还可尝试 {block.attempts_remaining} 次
@@ -211,6 +334,7 @@ export function QuickCheckCard({
           const isWrong = block.correct === false && isSelected;
           return (
             <Pressable
+              accessibilityLabel={`${option.id.toUpperCase()} ${option.label}`}
               key={option.id}
               disabled={!canSelect}
               onPress={() => setSelected(option.id)}
@@ -230,9 +354,31 @@ export function QuickCheckCard({
                   isWrong && styles.optionMarkerWrong,
                 ]}
               >
-                <Text style={styles.optionMarkerText}>{option.id.toUpperCase()}</Text>
+                <Text
+                  style={[
+                    styles.optionMarkerText,
+                    (isSelected || isCorrect || isWrong) && styles.optionMarkerTextActive,
+                  ]}
+                >
+                  {option.id.toUpperCase()}
+                </Text>
               </View>
               <Text style={styles.optionText}>{option.label}</Text>
+              {isCorrect ? (
+                <SymbolView
+                  name={{ android: "check", web: "check" }}
+                  size={17}
+                  tintColor={studentTheme.color.success}
+                />
+              ) : isWrong ? (
+                <SymbolView
+                  name={{ android: "close", web: "close" }}
+                  size={17}
+                  tintColor={studentTheme.color.danger}
+                />
+              ) : (
+                <View style={[styles.optionRadio, isSelected && styles.optionRadioSelected]} />
+              )}
             </Pressable>
           );
         })}
@@ -271,20 +417,34 @@ export function QuickCheckCard({
 export function MasteryUpdateCard({ block }: { block: MasteryUpdateBlock }) {
   return (
     <View style={styles.masteryCard}>
-      <View style={styles.masteryIcon}>
+      <View style={styles.masteryHeader}>
+        <View style={styles.masteryIcon}>
+          <SymbolView
+            name={{ android: "trending_up", web: "trending_up" }}
+            size={19}
+            tintColor={studentTheme.color.success}
+          />
+        </View>
+        <View style={styles.masteryHeading}>
+          <Text style={styles.masteryEyebrow}>学习状态更新</Text>
+          <Text style={styles.masteryKnowledge}>
+            {block.knowledge_point_name || "当前知识点"}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.masteryScoreRow}>
+        <Text style={styles.masteryBefore}>
+          {block.before === null ? "首次记录" : `${Math.round(block.before)}%`}
+        </Text>
         <SymbolView
-          name={{ android: "trending_up", web: "trending_up" }}
-          size={18}
+          name={{ android: "arrow_forward", web: "arrow_forward" }}
+          size={17}
           tintColor={studentTheme.color.success}
         />
+        <Text style={styles.masteryAfter}>{Math.round(block.after)}%</Text>
       </View>
-      <View style={styles.masteryCopy}>
-        <Text style={styles.masteryTitle}>
-          掌握度 {block.before === null ? "已记录" : `${Math.round(block.before)}% → `}
-          {Math.round(block.after)}%
-        </Text>
-        <Text style={styles.masteryReason}>{block.reason}</Text>
-      </View>
+      <Text style={styles.masteryEvidence}>本次快速验证已作为新的学习证据。</Text>
+      <Text style={styles.masteryReason}>{block.reason}</Text>
     </View>
   );
 }
@@ -321,31 +481,90 @@ function QuizResultSheet({
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <View style={styles.sheetOverlay}>
         <View style={styles.resultSheet}>
-          <View style={[styles.resultMark, correct ? styles.resultCorrect : styles.resultWrong]}>
-            <SymbolView
-              name={{
-                android: correct ? "check" : "close",
-                web: correct ? "check" : "close",
-              }}
-              size={24}
-              tintColor="#ffffff"
-            />
-          </View>
-          <Text style={styles.resultTitle}>{correct ? "回答正确" : result.locked ? "再复习一下" : "还差一点"}</Text>
-          <Text style={styles.resultDescription}>
-            {correct
-              ? "这次回答已经形成学习证据，掌握度由服务器自动更新。"
-              : result.hint || result.explanation || "回到课程材料，再比较一次关键词。"}
-          </Text>
-          {result.mastery_update ? (
-            <MasteryUpdateCard block={result.mastery_update} />
-          ) : null}
+          <View style={styles.sheetHandle} />
+          <ScrollView
+            contentContainerStyle={styles.resultContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.resultHeader}>
+              <View style={[styles.resultMark, correct ? styles.resultCorrect : styles.resultWrong]}>
+                <SymbolView
+                  name={{
+                    android: correct ? "check" : "lightbulb",
+                    web: correct ? "check" : "lightbulb",
+                  }}
+                  size={22}
+                  tintColor="#ffffff"
+                />
+              </View>
+              <View style={styles.resultHeading}>
+                <Text style={styles.resultTitle}>
+                  {correct ? "答对了" : result.locked ? "再复习一下" : "还差一点"}
+                </Text>
+                <Text style={styles.resultSubtitle}>
+                  {correct ? "这次理解已经形成学习证据" : "看看针对性提示，再试一次"}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.resultDescription}>
+              {correct
+                ? result.explanation || "你的判断与课程材料一致，ECHO 已记录这次学习证据。"
+                : result.hint || result.explanation || "回到课程材料，再比较一次关键词。"}
+            </Text>
+            {result.mastery_update ? (
+              <MasteryUpdateCard block={result.mastery_update} />
+            ) : null}
+          </ScrollView>
           <Pressable onPress={onClose} style={styles.resultButton}>
-            <Text style={styles.resultButtonText}>完成</Text>
+            <Text style={styles.resultButtonText}>
+              {correct ? "继续学习" : result.locked ? "知道了" : "再试一次"}
+            </Text>
           </Pressable>
         </View>
       </View>
     </Modal>
+  );
+}
+
+function CitationItem({ citation }: { citation: MessageCitation }) {
+  const [expanded, setExpanded] = useState(false);
+  const quote = citation.quote?.trim() ?? "";
+  const pageLabel =
+    citation.page_end !== citation.page_start
+      ? `P.${citation.page_start}-${citation.page_end}`
+      : `P.${citation.page_start}`;
+
+  return (
+    <View style={styles.citationItem}>
+      <View style={styles.citationIndexWrap}>
+        <Text style={styles.citationIndex}>{citation.citation_index}</Text>
+      </View>
+      <View style={styles.citationCopy}>
+        <Text style={styles.citationTitle}>{citation.document_name || "课程资料"}</Text>
+        <View style={styles.citationMetaRow}>
+          {citation.chapter_title ? (
+            <Text numberOfLines={1} style={styles.citationChapter}>
+              {citation.chapter_title}
+            </Text>
+          ) : null}
+          <Text style={styles.citationPage}>{pageLabel}</Text>
+        </View>
+        {quote ? (
+          <>
+            <Text numberOfLines={expanded ? undefined : 4} style={styles.citationQuote}>
+              “{quote}”
+            </Text>
+            {quote.length > 120 ? (
+              <Pressable onPress={() => setExpanded((current) => !current)}>
+                <Text style={styles.citationExpand}>{expanded ? "收起" : "展开"}</Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.citationQuoteUnavailable}>来源片段暂不可用</Text>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -363,9 +582,16 @@ function CitationSheet({
       <View style={styles.sheetOverlay}>
         <View style={styles.citationSheet}>
           <View style={styles.sheetHandle} />
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>课程来源</Text>
-            <Pressable onPress={onClose} style={styles.iconButton}>
+          <View style={styles.citationHeader}>
+            <View>
+              <Text style={styles.sheetTitle}>课程来源</Text>
+              <Text style={styles.sheetSubtitle}>{citations.length} 个可追溯来源</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="关闭课程来源"
+              onPress={onClose}
+              style={styles.iconButton}
+            >
               <SymbolView
                 name={{ android: "close", web: "close" }}
                 size={19}
@@ -373,31 +599,12 @@ function CitationSheet({
               />
             </Pressable>
           </View>
-          <ScrollView contentContainerStyle={styles.citationList}>
+          <ScrollView
+            contentContainerStyle={styles.citationList}
+            showsVerticalScrollIndicator={false}
+          >
             {citations.map((citation) => (
-              <View key={citation.citation_index} style={styles.citationItem}>
-                <Text style={styles.citationIndex}>[{citation.citation_index}]</Text>
-                <View style={styles.citationCopy}>
-                  <Text style={styles.citationTitle}>
-                    {citation.document_name || "课程资料"}
-                  </Text>
-                  {citation.chapter_title ? (
-                    <Text style={styles.citationChapter}>{citation.chapter_title}</Text>
-                  ) : null}
-                  <Text style={styles.citationPage}>
-                    第 {citation.page_start}
-                    {citation.page_end !== citation.page_start
-                      ? `–${citation.page_end}`
-                      : ""}{" "}
-                    页
-                  </Text>
-                  {citation.quote ? (
-                    <Text style={styles.citationQuote}>
-                      {citation.quote.slice(0, 220)}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
+              <CitationItem citation={citation} key={citation.citation_index} />
             ))}
           </ScrollView>
         </View>
@@ -411,11 +618,13 @@ function MessageActionsSheet({
   visible,
   onClose,
   onNotResolved,
+  onViewCitations,
 }: {
   message: Message;
   visible: boolean;
   onClose: () => void;
   onNotResolved: () => Promise<void>;
+  onViewCitations: () => void;
 }) {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackDone, setFeedbackDone] = useState(false);
@@ -423,7 +632,22 @@ function MessageActionsSheet({
     <Modal animationType="fade" onRequestClose={onClose} transparent visible={visible}>
       <Pressable onPress={onClose} style={styles.sheetOverlay}>
         <Pressable onPress={() => undefined} style={styles.actionSheet}>
-          <Text style={styles.sheetTitle}>回答操作</Text>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.actionSheetTitle}>AI 回答</Text>
+          <Text style={styles.actionSheetDescription}>复制内容，或告诉 ECHO 这次回答是否解决了问题。</Text>
+          {message.citations.length > 0 ? (
+            <Pressable
+              onPress={onViewCitations}
+              style={styles.actionItem}
+            >
+              <SymbolView
+                name={{ android: "menu_book", web: "menu_book" }}
+                size={18}
+                tintColor={studentTheme.color.primary}
+              />
+              <Text style={styles.actionText}>查看来源</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => {
               void Clipboard.setStringAsync(message.content);
@@ -500,111 +724,161 @@ export function MessageBubble({
 
   if (isUser) {
     return (
-      <View style={styles.userMessageRow}>
-        <View style={styles.userBubble}>
-          <Text style={styles.userMessageText}>{message.content}</Text>
+      <Animated.View entering={FadeIn.duration(180)} style={styles.userMessageRow}>
+        <View
+          style={[
+            styles.userBubble,
+            message.status === "failed" && styles.userBubbleFailed,
+          ]}
+        >
+          <Text selectable style={styles.userMessageText}>
+            {message.content}
+          </Text>
+        </View>
+        {statusLabel ? (
           <View style={styles.userStatusRow}>
             <Text style={styles.userStatus}>{statusLabel}</Text>
             {message.status === "failed" ? (
-              <Pressable onPress={() => void onRetry()}>
+              <Pressable
+                accessibilityLabel="重新发送这条消息"
+                onPress={() => void onRetry()}
+                style={styles.userRetryButton}
+              >
                 <Text style={styles.userRetryText}>重试</Text>
               </Pressable>
             ) : null}
           </View>
-        </View>
-      </View>
+        ) : null}
+      </Animated.View>
     );
   }
 
   return (
-    <View style={styles.assistantRow}>
+    <Animated.View entering={FadeIn.duration(180)} style={styles.assistantRow}>
       <View style={styles.assistantAvatar}>
-        <Text style={styles.assistantAvatarText}>E</Text>
+        <Image
+          resizeMode="cover"
+          source={require("@/assets/images/student/ai-support.png")}
+          style={styles.assistantAvatarImage}
+        />
       </View>
       <View style={styles.assistantColumn}>
-        <View style={styles.assistantCard}>
-          {blocks.map((block, index) => {
-            if (block.type === "markdown") {
-              return <MarkdownContent content={block.markdown} key={blockKey(block, index)} />;
-            }
-            if (block.type === "text") {
-              return (
-                <Text key={blockKey(block, index)} style={styles.assistantText}>
+        <Text style={styles.assistantName}>ECHO AI</Text>
+        {blocks.map((block, index) => {
+          if (block.type === "markdown") {
+            return (
+              <Pressable
+                delayLongPress={320}
+                key={blockKey(block, index)}
+                onLongPress={() => setActionsVisible(true)}
+                style={styles.assistantBody}
+              >
+                <MarkdownContent content={block.markdown} />
+              </Pressable>
+            );
+          }
+          if (block.type === "text") {
+            return (
+              <Pressable
+                delayLongPress={320}
+                key={blockKey(block, index)}
+                onLongPress={() => setActionsVisible(true)}
+                style={styles.assistantBody}
+              >
+                <Text selectable style={styles.assistantText}>
                   {block.text}
                 </Text>
-              );
-            }
-            if (block.type === "hint") {
-              return (
-                <HintCard
-                  block={block}
-                  disabled={disabled}
-                  key={blockKey(block, index)}
-                  onRequestMore={() => onHint(block)}
-                  onThought={onThought}
-                />
-              );
-            }
-            if (block.type === "quick_check") {
-              return (
-                <QuickCheckCard
-                  block={block}
-                  disabled={disabled}
-                  key={blockKey(block, index)}
-                  onSubmit={(optionId, attemptId) =>
-                    onQuickCheck(block, optionId, attemptId)
-                  }
-                />
-              );
-            }
-            if (block.type === "mastery_update") {
-              return <MasteryUpdateCard block={block} key={blockKey(block, index)} />;
-            }
-            if (block.type === "warning") {
-              return <WarningCard key={blockKey(block, index)} message={block.message} />;
-            }
-            return null;
-          })}
-          {message.status === "streaming" ? (
-            <View style={styles.streamingRow}>
-              <ActivityIndicator color={studentTheme.color.primary} size="small" />
-              <Text style={styles.streamingText}>ECHO 正在组织回答...</Text>
-            </View>
-          ) : null}
-          {statusLabel ? <Text style={styles.assistantStatus}>{statusLabel}</Text> : null}
-        </View>
-
+              </Pressable>
+            );
+          }
+          if (block.type === "hint") {
+            return (
+              <HintCard
+                block={block}
+                disabled={disabled}
+                key={blockKey(block, index)}
+                onRequestMore={() => onHint(block)}
+                onThought={onThought}
+              />
+            );
+          }
+          if (block.type === "quick_check") {
+            return (
+              <QuickCheckCard
+                block={block}
+                disabled={disabled}
+                key={blockKey(block, index)}
+                onSubmit={(optionId, attemptId) =>
+                  onQuickCheck(block, optionId, attemptId)
+                }
+              />
+            );
+          }
+          if (block.type === "mastery_update") {
+            return <MasteryUpdateCard block={block} key={blockKey(block, index)} />;
+          }
+          if (block.type === "warning") {
+            return <WarningCard key={blockKey(block, index)} message={block.message} />;
+          }
+          return null;
+        })}
+        {message.status === "streaming" && blocks.length === 0 ? (
+          <View style={styles.assistantBody}>
+            <StreamingWaiting />
+          </View>
+        ) : null}
+        {message.status === "streaming" && blocks.length > 0 ? (
+          <View style={styles.streamingInlineRow}>
+            <StreamingCursor />
+            <Text style={styles.streamingInlineText}>正在生成</Text>
+          </View>
+        ) : null}
+        {statusLabel ? <Text style={styles.assistantStatus}>{statusLabel}</Text> : null}
         <View style={styles.messageActions}>
           {message.citations.length > 0 ? (
             <Pressable
+              accessibilityLabel={`查看 ${message.citations.length} 个课程来源`}
               onPress={() => setCitationsVisible(true)}
-              style={styles.messageActionButton}
+              style={styles.sourceChip}
             >
               <SymbolView
                 name={{ android: "menu_book", web: "menu_book" }}
-                size={16}
+                size={15}
                 tintColor={studentTheme.color.primary}
               />
-              <Text style={styles.messageActionText}>
-                查看来源 {message.citations.length}
-              </Text>
+              <Text style={styles.sourceChipText}>来源 · {message.citations.length}</Text>
             </Pressable>
           ) : null}
           {message.status === "interrupted" ? (
-            <Pressable
-              disabled={disabled}
-              onPress={() => void onContinue()}
-              style={styles.messageActionButton}
-            >
-              <SymbolView
-                name={{ android: "play_arrow", web: "play_arrow" }}
-                size={16}
-                tintColor={studentTheme.color.primary}
-              />
-              <Text style={styles.messageActionText}>继续生成</Text>
-            </Pressable>
+            <>
+              <Pressable
+                disabled={disabled}
+                onPress={() => void onContinue()}
+                style={styles.messageActionButton}
+              >
+                <SymbolView
+                  name={{ android: "play_arrow", web: "play_arrow" }}
+                  size={16}
+                  tintColor={studentTheme.color.primary}
+                />
+                <Text style={styles.messageActionText}>继续生成</Text>
+              </Pressable>
+              <Pressable
+                disabled={disabled}
+                onPress={() => void onRetry()}
+                style={styles.messageActionButton}
+              >
+                <SymbolView
+                  name={{ android: "refresh", web: "refresh" }}
+                  size={15}
+                  tintColor={studentTheme.color.textMuted}
+                />
+                <Text style={styles.messageActionText}>重新提问</Text>
+              </Pressable>
+            </>
           ) : null}
           <Pressable
+            accessibilityLabel="AI 回答操作"
             onPress={() => setActionsVisible(true)}
             style={styles.messageActionButton}
           >
@@ -625,10 +899,14 @@ export function MessageBubble({
           message={message}
           onClose={() => setActionsVisible(false)}
           onNotResolved={onNotResolved}
+          onViewCitations={() => {
+            setActionsVisible(false);
+            setCitationsVisible(true);
+          }}
           visible={actionsVisible}
         />
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -655,60 +933,133 @@ export function ActionIconButton({
 const styles = StyleSheet.create({
   userMessageRow: {
     alignItems: "flex-end",
-    paddingLeft: 42,
+    gap: 6,
+    paddingLeft: 48,
   },
   userBubble: {
-    backgroundColor: studentTheme.color.primary,
-    borderRadius: 18,
-    borderBottomRightRadius: 5,
-    maxWidth: "100%",
+    backgroundColor: "#dcecff",
+    borderColor: studentTheme.color.primaryBorder,
+    borderRadius: studentTheme.radius.card,
+    borderBottomRightRadius: 6,
+    borderWidth: 1,
+    maxWidth: "84%",
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
+  userBubbleFailed: {
+    borderColor: studentTheme.color.dangerBorder,
+  },
   userMessageText: {
-    color: "#ffffff",
+    color: studentTheme.color.text,
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 23,
   },
   userStatusRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
     justifyContent: "flex-end",
-    marginTop: 5,
   },
   userStatus: {
-    color: "rgba(255,255,255,0.72)",
+    color: studentTheme.color.textMuted,
     fontSize: 10,
   },
+  userRetryButton: {
+    backgroundColor: studentTheme.color.dangerSoft,
+    borderRadius: studentTheme.radius.pill,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
   userRetryText: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "900",
-    textDecorationLine: "underline",
+    color: studentTheme.color.danger,
+    fontSize: 10,
+    fontWeight: "800",
   },
   assistantRow: {
     alignItems: "flex-start",
     flexDirection: "row",
-    gap: 9,
-    paddingRight: 18,
+    gap: 10,
+    paddingRight: 12,
   },
   assistantAvatar: {
     alignItems: "center",
-    backgroundColor: studentTheme.color.surfaceBlue,
-    borderRadius: 16,
-    height: 32,
+    borderRadius: 17,
+    height: 34,
     justifyContent: "center",
-    marginTop: 2,
-    width: 32,
+    overflow: "hidden",
+    width: 34,
   },
   assistantAvatarText: {
     color: studentTheme.color.primary,
     fontSize: 15,
     fontWeight: "900",
   },
+  assistantAvatarImage: {
+    height: "100%",
+    width: "100%",
+  },
+  assistantName: {
+    color: studentTheme.color.text,
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: -1,
+  },
+  assistantBody: {
+    backgroundColor: studentTheme.color.surface,
+    borderColor: studentTheme.color.divider,
+    borderRadius: studentTheme.radius.card,
+    borderTopLeftRadius: 6,
+    borderWidth: 1,
+    padding: 14,
+    shadowColor: "#17345c",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.035,
+    shadowRadius: 12,
+  },
+  codeFence: {
+    backgroundColor: "#f3f6fa",
+    borderColor: studentTheme.color.divider,
+    borderRadius: studentTheme.radius.medium,
+    borderWidth: 1,
+    marginVertical: 8,
+    overflow: "hidden",
+  },
+  codeHeader: {
+    alignItems: "center",
+    borderBottomColor: studentTheme.color.divider,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 36,
+    paddingHorizontal: 10,
+  },
+  codeLabel: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  codeCopyButton: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+    minHeight: 30,
+    paddingHorizontal: 4,
+  },
+  codeCopyText: {
+    color: studentTheme.color.primary,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  codeText: {
+    color: studentTheme.color.text,
+    fontFamily: "monospace",
+    fontSize: 13,
+    lineHeight: 20,
+    padding: 12,
+  },
   assistantColumn: {
     flex: 1,
+    gap: 10,
     minWidth: 0,
   },
   assistantCard: {
@@ -726,13 +1077,18 @@ const styles = StyleSheet.create({
   },
   assistantText: {
     color: studentTheme.color.text,
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 16,
+    lineHeight: 26,
   },
   assistantStatus: {
+    alignSelf: "flex-start",
+    backgroundColor: studentTheme.color.surfaceSoft,
+    borderRadius: studentTheme.radius.pill,
     color: studentTheme.color.textMuted,
     fontSize: 10,
-    marginTop: -4,
+    overflow: "hidden",
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   streamingRow: {
     alignItems: "center",
@@ -743,12 +1099,28 @@ const styles = StyleSheet.create({
     color: studentTheme.color.textMuted,
     fontSize: 12,
   },
+  streamingInlineRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  streamingInlineText: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  streamingCursor: {
+    backgroundColor: studentTheme.color.primary,
+    borderRadius: 2,
+    height: 14,
+    width: 3,
+  },
   messageActions: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
-    marginTop: 7,
     paddingHorizontal: 4,
   },
   messageActionButton: {
@@ -756,6 +1128,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 4,
     minHeight: 30,
+  },
+  sourceChip: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: studentTheme.color.primaryBorder,
+    borderRadius: studentTheme.radius.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    minHeight: 30,
+    paddingHorizontal: 10,
+  },
+  sourceChipText: {
+    color: studentTheme.color.primary,
+    fontSize: 11,
+    fontWeight: "800",
   },
   messageActionText: {
     color: studentTheme.color.textMuted,
@@ -774,20 +1162,46 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   hintCard: {
-    backgroundColor: "#fffaf0",
-    borderColor: "#fde2af",
-    borderRadius: studentTheme.radius.medium,
+    backgroundColor: studentTheme.color.hintSoft,
+    borderColor: studentTheme.color.hintBorder,
+    borderRadius: studentTheme.radius.card,
     borderWidth: 1,
     gap: 9,
-    padding: 12,
+    padding: 14,
+  },
+  hintHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 9,
+  },
+  hintHeading: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
+  },
+  hintLabel: {
+    color: studentTheme.color.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  hintBadge: {
+    backgroundColor: "#ffffff",
+    borderRadius: studentTheme.radius.pill,
+    color: studentTheme.color.violet,
+    fontSize: 10,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   hintIcon: {
     alignItems: "center",
-    backgroundColor: "#fff1d4",
-    borderRadius: 9,
-    height: 28,
+    backgroundColor: studentTheme.color.hintIcon,
+    borderRadius: 10,
+    height: 32,
     justifyContent: "center",
-    width: 28,
+    width: 32,
   },
   hintTitle: {
     color: studentTheme.color.text,
@@ -795,14 +1209,42 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   hintText: {
-    color: "#704f20",
+    color: "#514a70",
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 21,
   },
   actionRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  thoughtAction: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderColor: studentTheme.color.hintBorder,
+    borderRadius: studentTheme.radius.medium,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  thoughtActionText: {
+    color: studentTheme.color.violet,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  moreHintAction: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.violet,
+    borderRadius: studentTheme.radius.medium,
+    justifyContent: "center",
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  moreHintActionText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "800",
   },
   primarySmallAction: {
     alignItems: "center",
@@ -832,20 +1274,46 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   quickCard: {
-    backgroundColor: studentTheme.color.surfaceBlue,
-    borderColor: "#c7dcf8",
-    borderRadius: studentTheme.radius.medium,
+    backgroundColor: studentTheme.color.learningSoft,
+    borderColor: studentTheme.color.learningBorder,
+    borderRadius: studentTheme.radius.card,
     borderWidth: 1,
     gap: 11,
-    padding: 13,
+    padding: 14,
+  },
+  quickHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 9,
+  },
+  quickHeading: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 7,
+  },
+  quickTitle: {
+    color: studentTheme.color.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  quickBadge: {
+    backgroundColor: "#ffffff",
+    borderRadius: studentTheme.radius.pill,
+    color: studentTheme.color.primary,
+    fontSize: 10,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   quickIcon: {
     alignItems: "center",
-    backgroundColor: "#d9eaff",
-    borderRadius: 9,
-    height: 28,
+    backgroundColor: "#ffffff",
+    borderRadius: 10,
+    height: 32,
     justifyContent: "center",
-    width: 28,
+    width: 32,
   },
   attemptCount: {
     color: studentTheme.color.textMuted,
@@ -854,9 +1322,9 @@ const styles = StyleSheet.create({
   },
   quickPrompt: {
     color: studentTheme.color.text,
-    fontSize: 14,
-    fontWeight: "800",
-    lineHeight: 21,
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 23,
   },
   optionList: {
     gap: 8,
@@ -864,12 +1332,12 @@ const styles = StyleSheet.create({
   option: {
     alignItems: "center",
     backgroundColor: "#ffffff",
-    borderColor: "#cddff4",
+    borderColor: studentTheme.color.divider,
     borderRadius: studentTheme.radius.medium,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: 11,
     paddingVertical: 9,
   },
@@ -907,11 +1375,26 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
   },
+  optionMarkerTextActive: {
+    color: "#ffffff",
+  },
+  optionRadio: {
+    borderColor: studentTheme.color.textSubtle,
+    borderRadius: studentTheme.radius.pill,
+    borderWidth: 1,
+    height: 16,
+    width: 16,
+  },
+  optionRadioSelected: {
+    backgroundColor: studentTheme.color.primary,
+    borderColor: studentTheme.color.primary,
+    borderWidth: 4,
+  },
   optionText: {
     color: studentTheme.color.text,
     flex: 1,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: 21,
   },
   quickHint: {
     color: "#8a5a00",
@@ -936,14 +1419,52 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   masteryCard: {
-    alignItems: "center",
-    backgroundColor: "#effbf5",
-    borderColor: "#b8e6ce",
-    borderRadius: studentTheme.radius.medium,
+    backgroundColor: studentTheme.color.successSoft,
+    borderColor: studentTheme.color.successBorder,
+    borderRadius: studentTheme.radius.card,
     borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  masteryHeader: {
+    alignItems: "center",
     flexDirection: "row",
     gap: 10,
-    padding: 12,
+  },
+  masteryHeading: {
+    flex: 1,
+  },
+  masteryEyebrow: {
+    color: "#287455",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  masteryKnowledge: {
+    color: studentTheme.color.text,
+    fontSize: 14,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+  masteryScoreRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 2,
+  },
+  masteryBefore: {
+    color: "#527565",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  masteryAfter: {
+    color: studentTheme.color.success,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  masteryEvidence: {
+    color: "#2f6d52",
+    fontSize: 12,
+    lineHeight: 18,
   },
   masteryIcon: {
     alignItems: "center",
@@ -988,19 +1509,33 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   resultSheet: {
-    alignItems: "center",
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 22,
-    paddingBottom: 30,
+    borderTopLeftRadius: studentTheme.radius.sheet,
+    borderTopRightRadius: studentTheme.radius.sheet,
+    maxHeight: "84%",
+    overflow: "hidden",
+    paddingBottom: 18,
+    paddingTop: 10,
+  },
+  resultContent: {
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  resultHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  resultHeading: {
+    flex: 1,
   },
   resultMark: {
     alignItems: "center",
-    borderRadius: 25,
-    height: 50,
+    borderRadius: 22,
+    height: 44,
     justifyContent: "center",
-    width: 50,
+    width: 44,
   },
   resultCorrect: {
     backgroundColor: studentTheme.color.success,
@@ -1011,25 +1546,25 @@ const styles = StyleSheet.create({
   resultTitle: {
     color: studentTheme.color.text,
     fontSize: 20,
-    fontWeight: "900",
-    marginTop: 12,
+    fontWeight: "800",
+  },
+  resultSubtitle: {
+    color: studentTheme.color.textMuted,
+    fontSize: 12,
+    marginTop: 3,
   },
   resultDescription: {
     color: studentTheme.color.textMuted,
-    flexShrink: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 8,
-    textAlign: "center",
-    width: "100%",
+    fontSize: 14,
+    lineHeight: 22,
   },
   resultButton: {
     alignItems: "center",
-    alignSelf: "stretch",
     backgroundColor: studentTheme.color.primary,
     borderRadius: studentTheme.radius.medium,
     justifyContent: "center",
-    marginTop: 18,
+    marginHorizontal: 20,
+    marginTop: 14,
     minHeight: 46,
   },
   resultButtonText: {
@@ -1039,11 +1574,12 @@ const styles = StyleSheet.create({
   },
   citationSheet: {
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: "72%",
-    padding: 18,
-    paddingBottom: 28,
+    borderTopLeftRadius: studentTheme.radius.sheet,
+    borderTopRightRadius: studentTheme.radius.sheet,
+    maxHeight: "78%",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 24,
   },
   sheetHandle: {
     alignSelf: "center",
@@ -1058,6 +1594,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 12,
   },
+  citationHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 14,
+  },
+  sheetSubtitle: {
+    color: studentTheme.color.textMuted,
+    fontSize: 11,
+    marginTop: 3,
+  },
   sheetTitle: {
     color: studentTheme.color.text,
     fontSize: 18,
@@ -1070,17 +1617,26 @@ const styles = StyleSheet.create({
     width: 34,
   },
   citationList: {
-    gap: 12,
-    paddingTop: 14,
+    gap: 10,
+    paddingBottom: 10,
+    paddingTop: 16,
   },
   citationItem: {
-    backgroundColor: "#f7faff",
-    borderColor: studentTheme.color.border,
-    borderRadius: studentTheme.radius.medium,
+    backgroundColor: studentTheme.color.surfaceSoft,
+    borderColor: studentTheme.color.divider,
+    borderRadius: studentTheme.radius.card,
     borderWidth: 1,
     flexDirection: "row",
     gap: 10,
-    padding: 12,
+    padding: 13,
+  },
+  citationIndexWrap: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.primarySoft,
+    borderRadius: 10,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
   },
   citationIndex: {
     color: studentTheme.color.primary,
@@ -1092,36 +1648,67 @@ const styles = StyleSheet.create({
   },
   citationTitle: {
     color: studentTheme.color.text,
-    fontSize: 13,
-    fontWeight: "900",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  citationMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 5,
   },
   citationChapter: {
     color: studentTheme.color.textMuted,
+    flex: 1,
     fontSize: 11,
-    marginTop: 3,
   },
   citationPage: {
     color: studentTheme.color.primary,
     fontSize: 11,
     fontWeight: "800",
-    marginTop: 5,
   },
   citationQuote: {
     color: studentTheme.color.textMuted,
     fontSize: 12,
     lineHeight: 19,
+    marginTop: 9,
+  },
+  citationExpand: {
+    color: studentTheme.color.primary,
+    fontSize: 11,
+    fontWeight: "800",
     marginTop: 7,
+  },
+  citationQuoteUnavailable: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 12,
+    marginTop: 9,
   },
   actionSheet: {
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: studentTheme.radius.sheet,
+    borderTopRightRadius: studentTheme.radius.sheet,
     gap: 4,
-    padding: 18,
-    paddingBottom: 30,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 28,
+  },
+  actionSheetTitle: {
+    color: studentTheme.color.text,
+    fontSize: 18,
+    fontWeight: "800",
+    marginTop: 14,
+  },
+  actionSheetDescription: {
+    color: studentTheme.color.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 8,
+    marginTop: 4,
   },
   actionItem: {
     alignItems: "center",
+    backgroundColor: studentTheme.color.surfaceSoft,
     borderRadius: studentTheme.radius.medium,
     flexDirection: "row",
     gap: 12,

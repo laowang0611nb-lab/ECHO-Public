@@ -267,6 +267,11 @@ export function useChatController({
           if (userIdForMessage && serverUserId && userIdForMessage !== serverUserId) {
             renameMessage(userIdForMessage, serverUserId);
           }
+          if (serverUserId) {
+            patchMessage(serverUserId, { status: "sent" });
+          } else if (userIdForMessage) {
+            patchMessage(userIdForMessage, { status: "sent" });
+          }
           if (assistantId && serverAssistantId && assistantId !== serverAssistantId) {
             renameMessage(assistantId, serverAssistantId);
           }
@@ -516,11 +521,23 @@ export function useChatController({
           item.created_at <= message.created_at &&
           item.client_request_id,
       );
-      const content = previousUser?.content ?? message.content;
-      const requestId = previousUser?.client_request_id ?? failedRequest?.clientRequestId;
+      const optimisticUser = optimisticMessages.find(
+        (item) =>
+          item.role === "user" &&
+          item.created_at <= message.created_at &&
+          item.client_request_id,
+      );
+      const sourceUser = previousUser ?? optimisticUser;
+      const content = sourceUser?.content ?? message.content;
+      const requestId = sourceUser?.client_request_id ?? failedRequest?.clientRequestId;
       await sendMessage(content, requestId ?? undefined);
     },
-    [failedRequest?.clientRequestId, messagesQuery.data, sendMessage],
+    [
+      failedRequest?.clientRequestId,
+      messagesQuery.data,
+      optimisticMessages,
+      sendMessage,
+    ],
   );
 
   const stopStream = useCallback(() => {

@@ -8,19 +8,20 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ErrorState, LoadingState, OfflineBanner } from "@/components/states/page-state";
+import { ErrorState, LoadingState } from "@/components/states/page-state";
 import { studentTheme } from "@/constants/student-theme";
 import { MessageBubble } from "@/features/chat/chat-message";
 import {
   ChatComposer,
+  ChatEmptyState,
   ChatHeader,
+  ChatReconnectBanner,
   ContextBanner,
   ConversationDrawer,
   NewContentButton,
@@ -192,7 +193,7 @@ function ChatWorkspace({
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
         <ChatHeader
@@ -203,31 +204,24 @@ function ChatWorkspace({
         />
         {knowledgePointName ? <ContextBanner label={knowledgePointName} /> : null}
         {chat.offline ? (
-          <View style={styles.offlineWrap}>
-            <OfflineBanner
-              description="历史消息仍可阅读，恢复连接后请手动发送。"
-              onRetry={chat.retryConnection}
-            />
-          </View>
+          <ChatReconnectBanner onRetry={chat.retryConnection} />
         ) : null}
         {chat.messagesLoading && chat.messages.length === 0 ? (
-          <LoadingState message="正在加载对话..." />
+          <ChatHistorySkeleton />
         ) : chat.conversationError && chat.messages.length === 0 ? (
           <ErrorState
-            description="对话暂时无法加载，请稍后重试。"
+            description="暂时无法加载课程对话，请重新连接后重试。"
             onAction={chat.retryConnection}
-            title="对话加载失败"
+            title="暂时无法加载对话"
           />
         ) : (
           <View style={styles.listWrap}>
             <FlatList
               ListEmptyComponent={
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyTitle}>从课程问题开始</Text>
-                  <Text style={styles.emptyDescription}>
-                    ECHO 会结合课程资料和教师规则回答，并在需要时给出提示和快速检测。
-                  </Text>
-                </View>
+                <ChatEmptyState
+                  courseName={selectedCourse?.name ?? "当前课程"}
+                  onSelectSuggestion={chat.setDraft}
+                />
               }
               contentContainerStyle={[
                 styles.listContent,
@@ -284,6 +278,23 @@ function ChatWorkspace({
   );
 }
 
+function ChatHistorySkeleton() {
+  return (
+    <View style={styles.skeletonList}>
+      {[0, 1, 2].map((item) => (
+        <View key={item} style={styles.skeletonMessage}>
+          <View style={styles.skeletonAvatar} />
+          <View style={styles.skeletonMessageBody}>
+            <View style={styles.skeletonMessageTitle} />
+            <View style={styles.skeletonMessageLine} />
+            <View style={styles.skeletonMessageLineShort} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: {
     backgroundColor: studentTheme.color.background,
@@ -300,14 +311,58 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    gap: 17,
-    paddingBottom: 20,
-    paddingHorizontal: 13,
+    gap: 22,
+    paddingBottom: 24,
+    paddingHorizontal: 14,
     paddingTop: 16,
   },
   emptyListContent: {
     flexGrow: 1,
     justifyContent: "center",
+  },
+  skeletonList: {
+    gap: 22,
+    paddingBottom: 24,
+    paddingHorizontal: 14,
+    paddingTop: 18,
+  },
+  skeletonMessage: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: 10,
+  },
+  skeletonAvatar: {
+    backgroundColor: studentTheme.color.surfaceBlue,
+    borderRadius: 17,
+    height: 34,
+    width: 34,
+  },
+  skeletonMessageBody: {
+    backgroundColor: studentTheme.color.surface,
+    borderColor: studentTheme.color.divider,
+    borderRadius: studentTheme.radius.card,
+    borderWidth: 1,
+    flex: 1,
+    gap: 9,
+    padding: 14,
+  },
+  skeletonMessageTitle: {
+    backgroundColor: studentTheme.color.primarySoft,
+    borderRadius: 4,
+    height: 11,
+    width: "32%",
+  },
+  skeletonMessageLine: {
+    backgroundColor: studentTheme.color.divider,
+    borderRadius: 4,
+    height: 12,
+    width: "92%",
+  },
+  skeletonMessageLineShort: {
+    backgroundColor: studentTheme.color.surfaceSoft,
+    borderRadius: 4,
+    height: 12,
+    width: "64%",
   },
   emptyCard: {
     alignItems: "center",
