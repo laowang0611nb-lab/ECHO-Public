@@ -328,6 +328,8 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
         userId,
       ),
     listCourses: (userId: string) => request<Course[]>("/api/v1/courses", undefined, userId),
+    getCourse: (userId: string, courseId: string) =>
+      request<Course>(`/api/v1/courses/${courseId}`, undefined, userId),
     joinCourse: (userId: string, code: string) =>
       request<Course>(
         "/api/v1/courses/join",
