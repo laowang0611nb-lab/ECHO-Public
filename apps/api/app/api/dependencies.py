@@ -7,6 +7,7 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.services.aliyun_pnvs import AliyunPnvsProvider
 from app.services.chat_provider import QwenChatProvider
 from app.services.embedding import QwenEmbeddingProvider
 from app.services.llm import QwenKnowledgeStructureProvider
@@ -27,6 +28,25 @@ def get_avatar_storage() -> LocalDocumentStorage:
 
 
 AvatarStorageDep = Annotated[LocalDocumentStorage, Depends(get_avatar_storage)]
+
+
+def get_aliyun_pnvs_provider() -> AliyunPnvsProvider:
+    return AliyunPnvsProvider(
+        access_key_id=settings.alibaba_cloud_access_key_id,
+        access_key_secret=settings.alibaba_cloud_access_key_secret,
+        sign_name=settings.aliyun_pnvs_sign_name,
+        template_code=settings.aliyun_pnvs_template_code,
+        country_code=settings.aliyun_pnvs_country_code,
+        valid_time=settings.aliyun_pnvs_valid_time,
+        interval=settings.aliyun_pnvs_interval,
+        timeout_seconds=settings.aliyun_pnvs_timeout_seconds,
+    )
+
+
+AliyunPnvsProviderDep = Annotated[
+    AliyunPnvsProvider,
+    Depends(get_aliyun_pnvs_provider),
+]
 
 
 def get_knowledge_structure_provider() -> QwenKnowledgeStructureProvider:

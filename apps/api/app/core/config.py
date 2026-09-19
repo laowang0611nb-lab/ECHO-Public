@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_ROOT = Path(__file__).resolve().parents[2]
@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.94"
+    app_version: str = "0.0.102"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -23,6 +23,64 @@ class Settings(BaseSettings):
     retrieval_max_distance: float = 0.65
     max_upload_bytes: int = 20 * 1024 * 1024
     avatar_max_upload_bytes: int = 2 * 1024 * 1024
+    alibaba_cloud_access_key_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ALIBABA_CLOUD_ACCESS_KEY_ID",
+            "ECHO_ALIBABA_CLOUD_ACCESS_KEY_ID",
+            "ECHO_ALIYUN_ACCESS_KEY_ID",
+        ),
+    )
+    alibaba_cloud_access_key_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+            "ECHO_ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+            "ECHO_ALIYUN_ACCESS_KEY_SECRET",
+        ),
+    )
+    aliyun_pnvs_sign_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "ALIYUN_PNVS_SIGN_NAME",
+            "ECHO_ALIYUN_PNVS_SIGN_NAME",
+        ),
+    )
+    aliyun_pnvs_template_code: str = Field(
+        default="100001",
+        validation_alias=AliasChoices(
+            "ALIYUN_PNVS_TEMPLATE_CODE",
+            "ECHO_ALIYUN_PNVS_TEMPLATE_CODE",
+        ),
+    )
+    aliyun_pnvs_country_code: str = Field(
+        default="86",
+        validation_alias=AliasChoices(
+            "ALIYUN_PNVS_COUNTRY_CODE",
+            "ECHO_ALIYUN_PNVS_COUNTRY_CODE",
+        ),
+    )
+    aliyun_pnvs_valid_time: int = Field(
+        default=300,
+        validation_alias=AliasChoices(
+            "ALIYUN_PNVS_VALID_TIME",
+            "ECHO_ALIYUN_PNVS_VALID_TIME",
+        ),
+    )
+    aliyun_pnvs_interval: int = Field(
+        default=60,
+        validation_alias=AliasChoices(
+            "ALIYUN_PNVS_INTERVAL",
+            "ECHO_ALIYUN_PNVS_INTERVAL",
+        ),
+    )
+    aliyun_pnvs_timeout_seconds: int = Field(
+        default=10,
+        validation_alias=AliasChoices(
+            "ALIYUN_PNVS_TIMEOUT_SECONDS",
+            "ECHO_ALIYUN_PNVS_TIMEOUT_SECONDS",
+        ),
+    )
     llm_api_key: str | None = None
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.8-flash"
@@ -51,8 +109,38 @@ class Settings(BaseSettings):
         env_file=API_ROOT / ".env",
         env_prefix="ECHO_",
         case_sensitive=False,
+        populate_by_name=True,
         extra="ignore",
     )
+
+    @field_validator("aliyun_pnvs_country_code")
+    @classmethod
+    def require_mainland_china_country_code(cls, value: str) -> str:
+        normalized = value.strip()
+        if normalized != "86":
+            raise ValueError("aliyun_pnvs_country_code must remain 86")
+        return normalized
+
+    @field_validator("aliyun_pnvs_valid_time")
+    @classmethod
+    def require_positive_valid_time(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("aliyun_pnvs_valid_time must be positive")
+        return value
+
+    @field_validator("aliyun_pnvs_interval")
+    @classmethod
+    def require_positive_interval(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("aliyun_pnvs_interval must be positive")
+        return value
+
+    @field_validator("aliyun_pnvs_timeout_seconds")
+    @classmethod
+    def require_positive_pnvs_timeout(cls, value: int) -> int:
+        if value <= 0 or value > 60:
+            raise ValueError("aliyun_pnvs_timeout_seconds must be between 1 and 60")
+        return value
 
     @field_validator("document_storage_root", "avatar_storage_root")
     @classmethod
@@ -101,6 +189,17 @@ class Settings(BaseSettings):
         if self.environment == "production" and self.development_auth_enabled:
             raise ValueError("development authentication must be disabled in production")
         return self
+
+    @property
+    def aliyun_pnvs_configured(self) -> bool:
+        return all(
+            (
+                self.alibaba_cloud_access_key_id,
+                self.alibaba_cloud_access_key_secret,
+                self.aliyun_pnvs_sign_name,
+                self.aliyun_pnvs_template_code,
+            )
+        )
 
     @property
     def llm_max_input_tokens(self) -> int:

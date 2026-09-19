@@ -1,6 +1,7 @@
 # ECHO API 契约
 
 > 冻结版本：`v0.0.91`
+> 冻结版本：`v0.0.102`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
@@ -11,6 +12,7 @@
 - UUID 均以字符串传输。
 - 时间使用 ISO 8601 字符串。
 - 错误响应统一为 `{"detail": "..."}`。
+- 普通错误响应为 `{"detail": "..."}`；短信验证码接口使用 `{"detail": {"code": "...", "message": "..."}}` 提供机器可读错误码。
 - 未登录或开发身份无效返回 `401`。
 - 角色或课程权限不足返回 `403`。
 - 资源不存在返回 `404`。
@@ -34,6 +36,8 @@
 | DELETE | `/auth/me/avatar` | 已登录 | 删除当前用户头像，幂等 |
 | GET | `/users/{user_id}/avatar` | 公开图片 | 稳定头像地址，返回图片流和缓存头 |
 | POST | `/auth/change-password` | 已登录 | 验证当前密码、更新 Argon2id Hash 并撤销旧 Refresh Session |
+| POST | `/auth/sms/send` | 公开 | 调用阿里云 PNVS 发送手机验证码，不返回验证码或内部 BizId |
+| POST | `/auth/sms/verify` | 公开 | 校验 PNVS 验证码，成功后返回 5 分钟手机验证票据 |
 | POST | `/courses` | 教师 | 创建课程并自动成为教师成员 |
 | GET | `/courses` | 已登录 | 当前用户加入的课程 |
 | GET | `/courses/{course_id}` | 课程成员 | 课程详情 |
@@ -572,6 +576,15 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 资源元数据字段包括 `display_name`（兼容请求别名 `title`）、`summary`、`keywords`、`author`、`publisher` 和 `copyright`。PATCH 只更新元数据，不改变原文件、`storage_key`、页面、Chunk、Embedding、Citation 或解析状态。
 
 ### 10.4 保留的 P2
+### 10.4 手机号验证码
+
+`POST /auth/sms/send` 接受中国大陆手机号 `phone`，调用阿里云号码认证服务 `Dypnsapi` 的 `SendSmsVerifyCode`；`POST /auth/sms/verify` 接受 `phone` 和 `code`，调用 `CheckSmsVerifyCode`。只有 `VerifyResult == PASS` 才视为验证成功，`Success == true` 和 `Code == OK` 本身不代表验证码正确。
+
+验证成功后返回 `verification_token`，有效期 5 分钟，包含手机号、用途、jti 和过期时间。注册或手机号登录接口后续必须消费该票据，不得信任客户端自行提交的 `verified: true`。验证码由阿里云生成和管理，ECHO 不保存验证码明文。
+
+短信错误码包括 `SMS_TOO_FREQUENT`、`SMS_CODE_INVALID_OR_EXPIRED`、`SMS_PROVIDER_NOT_CONFIGURED`、`SMS_AUTH_FAILED`、`SMS_BILLING_UNAVAILABLE`、`SMS_SEND_FAILED`、`SMS_TIMEOUT` 和 `SMS_SERVICE_UNAVAILABLE`。响应不得包含 AccessKey、完整手机号、验证码、BizId 或 SDK traceback。
+
+### 10.5 保留的 P2
 
 - 资源文件替换、课程 Deep Copy、教学日历、服务器 CPU/RAM/Disk/Network/日志监控。
 - 独立计划任务 POST 与拖拽排序；现有任务编辑仍使用 `PATCH /plan-tasks/{task_id}`。

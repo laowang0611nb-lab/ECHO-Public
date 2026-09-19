@@ -1,4 +1,6 @@
+import re
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from database.models.user import UserRole
@@ -113,3 +115,63 @@ class UserResponse(BaseModel):
 
 class AvatarResponse(BaseModel):
     avatar_url: str
+
+
+class SmsSendRequest(BaseModel):
+    phone: str = Field(min_length=11, max_length=11, pattern=r"^1[3-9]\d{9}$")
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = re.sub(r"[\s-]", "", value.strip())
+        if normalized.startswith("+86"):
+            normalized = normalized[3:]
+        elif normalized.startswith("86") and len(normalized) == 13:
+            normalized = normalized[2:]
+        return normalized
+
+
+class SmsSendResponse(BaseModel):
+    success: Literal[True] = True
+    message: str = "Verification code sent"
+    cooldown_seconds: int = Field(ge=1)
+
+
+class SmsVerifyRequest(BaseModel):
+    phone: str = Field(min_length=11, max_length=11, pattern=r"^1[3-9]\d{9}$")
+    code: str = Field(min_length=4, max_length=8, pattern=r"^[A-Za-z0-9]+$")
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = re.sub(r"[\s-]", "", value.strip())
+        if normalized.startswith("+86"):
+            normalized = normalized[3:]
+        elif normalized.startswith("86") and len(normalized) == 13:
+            normalized = normalized[2:]
+        return normalized
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        return value.strip()
+
+
+class SmsVerifyResponse(BaseModel):
+    success: Literal[True] = True
+    verified: Literal[True] = True
+    verification_token: str
+    expires_in_seconds: int = Field(default=300, ge=1)
+
+
+class SmsErrorDetail(BaseModel):
+    code: str
+    message: str
+
+
+class SmsErrorResponse(BaseModel):
+    detail: SmsErrorDetail

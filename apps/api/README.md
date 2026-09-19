@@ -52,6 +52,47 @@ Replace this mechanism before any deployed or production use.
 Set `ECHO_ENVIRONMENT=production` and `ECHO_DEVELOPMENT_AUTH_ENABLED=false`.
 The application refuses production startup while development auth remains on.
 
+## Aliyun PNVS SMS verification
+
+The backend exposes two public SMS verification endpoints. They use the
+Aliyun PNVS `Dypnsapi` API version `2017-05-25`.
+
+```text
+POST /api/v1/auth/sms/send
+POST /api/v1/auth/sms/verify
+```
+
+The send endpoint validates a mainland China phone number and asks Aliyun to
+generate and manage the verification code. The code is never returned to the
+client or stored in the ECHO database. A successful verify response includes a
+five-minute signed `verification_token` that a later registration or phone-login
+endpoint can consume.
+
+Required environment variables:
+
+```env
+ALIBABA_CLOUD_ACCESS_KEY_ID=
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=
+ALIYUN_PNVS_SIGN_NAME=
+ALIYUN_PNVS_TEMPLATE_CODE=100001
+ALIYUN_PNVS_COUNTRY_CODE=86
+ALIYUN_PNVS_VALID_TIME=300
+ALIYUN_PNVS_INTERVAL=60
+ALIYUN_PNVS_TIMEOUT_SECONDS=10
+```
+
+Manual smoke test:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/api/v1/auth/sms/send `
+  -H "Content-Type: application/json" `
+  -d '{"phone":"13800138000"}'
+
+curl.exe -X POST http://127.0.0.1:8000/api/v1/auth/sms/verify `
+  -H "Content-Type: application/json" `
+  -d '{"phone":"13800138000","code":"8043"}'
+```
+
 ## Course management
 
 ```text

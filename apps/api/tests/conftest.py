@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 from app.api.dependencies import (
+    get_aliyun_pnvs_provider,
     get_chat_provider,
     get_document_storage,
     get_embedding_provider,
@@ -58,6 +59,26 @@ async def document_storage(tmp_path: Path) -> AsyncIterator[LocalDocumentStorage
         yield storage
     finally:
         app.dependency_overrides.pop(get_document_storage, None)
+
+
+class FakeAliyunPnvsProvider:
+    def __init__(self) -> None:
+        self.sent_phones: list[str] = []
+        self.verify_calls: list[tuple[str, str]] = []
+        self.verify_result = True
+        self.send_error: Exception | None = None
+        self.verify_error: Exception | None = None
+
+    async def send_verify_code(self, phone: str) -> None:
+        self.sent_phones.append(phone)
+        if self.send_error is not None:
+            raise self.send_error
+
+    async def check_verify_code(self, phone: str, code: str) -> bool:
+        self.verify_calls.append((phone, code))
+        if self.verify_error is not None:
+            raise self.verify_error
+        return self.verify_result
 
 
 class FakeChatProvider:
@@ -154,8 +175,19 @@ async def chat_provider() -> AsyncIterator[FakeChatProvider]:
 
 
 @pytest_asyncio.fixture
+async def pnvs_provider() -> AsyncIterator[FakeAliyunPnvsProvider]:
+    provider = FakeAliyunPnvsProvider()
+    app.dependency_overrides[get_aliyun_pnvs_provider] = lambda: provider
+    try:
+        yield provider
+    finally:
+        app.dependency_overrides.pop(get_aliyun_pnvs_provider, None)
+
+
+@pytest_asyncio.fixture
 async def client(
     session_factory: async_sessionmaker[AsyncSession],
+    pnvs_provider: FakeAliyunPnvsProvider,
     document_storage: LocalDocumentStorage,
     chat_provider: FakeChatProvider,
     embedding_provider: FakeEmbeddingProvider,
