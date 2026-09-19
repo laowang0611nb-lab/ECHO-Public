@@ -1,4 +1,4 @@
-import type { ChapterAnalytics, Course, CourseDashboard } from "@echo/shared-types";
+import type { ChapterAnalytics, Course, CourseDashboard, ExecutionPlanListItem } from "@echo/shared-types";
 import { useQueries } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
@@ -8,12 +8,14 @@ import { useTeacherSession } from "@/providers/teacher-session-provider";
 export const courseQueryKeys = {
   dashboard: (userId: string, courseId: string) => ["teacher", "course", courseId, "dashboard", userId] as const,
   chapters: (userId: string, courseId: string) => ["teacher", "course", courseId, "chapters", userId] as const,
+  plans: (userId: string, courseId: string) => ["teacher", "course", courseId, "plans", userId] as const,
 };
 
 export interface CourseManagementItem {
   course: Course;
   dashboard: CourseDashboard | null;
   chapters: ChapterAnalytics[];
+  plans: ExecutionPlanListItem[];
   health: "draft" | "unknown" | "risk" | "attention" | "healthy";
   masteryValue: number | null;
   currentChapter: ChapterAnalytics | null;
@@ -43,9 +45,19 @@ export function useCourseManagementData() {
     })),
   });
 
+  const planQueries = useQueries({
+    queries: workspace.courses.map((course) => ({
+      queryKey: courseQueryKeys.plans(userId ?? "anonymous", course.id),
+      queryFn: () => apiClient.listExecutionPlans(userId!, course.id, { limit: 20 }),
+      enabled: Boolean(userId),
+      staleTime: 30_000,
+    })),
+  });
+
   const items: CourseManagementItem[] = workspace.courses.map((course, index) => {
     const dashboard = dashboardQueries[index]?.data ?? null;
     const chapters = chapterQueries[index]?.data ?? [];
+    const plans = planQueries[index]?.data?.items ?? [];
     const masteryValue = dashboard?.average_mastery ?? null;
     const health: CourseManagementItem["health"] =
       course.status === "draft"
@@ -60,7 +72,16 @@ export function useCourseManagementData() {
     const currentChapter =
       chapters.find((chapter) => (chapter.average_mastery ?? 100) < 60) ?? chapters.at(-1) ?? null;
 
-    return { course, dashboard, chapters, health, masteryValue, currentChapter, isProgressFallback: true };
+    return {
+      course,
+      dashboard,
+      chapters,
+      plans,
+      health,
+      masteryValue,
+      currentChapter,
+      isProgressFallback: true,
+    };
   });
 
   const queryPending =
@@ -68,7 +89,9 @@ export function useCourseManagementData() {
     dashboardQueries.some((query) => query.isPending) ||
     chapterQueries.some((query) => query.isPending);
   const queryError =
-    workspace.isError || dashboardQueries.some((query) => query.isError) || chapterQueries.some((query) => query.isError);
+    workspace.isError ||
+    dashboardQueries.some((query) => query.isError) ||
+    chapterQueries.some((query) => query.isError);
 
   return {
     ...workspace,
@@ -79,6 +102,7 @@ export function useCourseManagementData() {
       workspace.refetch();
       dashboardQueries.forEach((query) => void query.refetch());
       chapterQueries.forEach((query) => void query.refetch());
+      planQueries.forEach((query) => void query.refetch());
     },
   };
 }

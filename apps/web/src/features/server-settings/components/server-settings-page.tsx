@@ -1,7 +1,7 @@
 "use client";
 
 import type { ServiceState, SystemStatusResponse } from "@echo/shared-types";
-import { CheckCircle2, Copy, Database, Globe2, HardDrive, RefreshCw, Server, ShieldCheck, Sparkles, Wifi } from "lucide-react";
+import { Activity, CheckCircle2, Copy, Database, Globe2, HardDrive, RefreshCw, Server, ShieldCheck, Sparkles, Wifi } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 
@@ -140,9 +140,20 @@ function ServicesTab({ system, healthLatency }: { system: SystemStatusResponse; 
             <CheckLine label="局域网地址" state={system.lan.student_api_base_url ? "healthy" : "warning"} />
           </CardContent>
         </Card>
-        <Card className="gap-3 py-5">
-          <CardHeader className="px-5"><CardTitle>系统资源</CardTitle></CardHeader>
-          <CardContent className="px-5 text-sm text-muted-foreground">后端尚未提供 CPU、内存和磁盘监控接口，本页不伪造资源曲线。</CardContent>
+        <Card className="gap-4 py-5">
+          <CardHeader className="px-5">
+            <CardTitle className="flex items-center gap-2"><Activity className="size-4 text-primary" />部署运行探针</CardTitle>
+            <p className="text-xs text-muted-foreground">展示当前接口能够真实读取的运行指标；不伪造 CPU、内存或网络曲线。</p>
+          </CardHeader>
+          <CardContent className="space-y-3 px-5 text-sm">
+            <CheckLine label="API 请求延迟" state="healthy" />
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">本次 API 延迟</span><span className="font-medium tabular-nums">{healthLatency ?? "-"} ms</span></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">数据库延迟</span><span className="font-medium tabular-nums">{system.database.latency_ms} ms</span></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">向量状态</span><StatusBadge tone={serviceStateTone(system.vector.status)}>{serviceStateLabel(system.vector.status)}</StatusBadge></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">文件目录</span><span className="font-medium">{system.storage.writable ? "可写" : "需要检查"}</span></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">局域网候选地址</span><span className="font-medium tabular-nums">{system.lan.candidate_lan_ips.length} 个</span></div>
+            <p className="rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5">CPU、内存、磁盘容量和日志流仍需要独立监控 Contract；当前页面不提供旋钮或假图表。</p>
+          </CardContent>
         </Card>
       </div>
     </div>

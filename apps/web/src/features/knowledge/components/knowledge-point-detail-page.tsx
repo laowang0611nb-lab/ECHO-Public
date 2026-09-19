@@ -314,17 +314,46 @@ function StudentMasteryCard({ context }: { context: NonNullable<ReturnType<typeo
             <span className="mt-1 text-xs text-muted-foreground">总体掌握度</span>
           </div>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <InfoLine label="受影响学生" value={`${analytics?.affected_students ?? 0} 人`} />
           <InfoLine label="已有学生证据" value={`${analytics?.students.length ?? 0} 人`} />
           <Progress value={mastery ?? 0} />
-          <p className="text-xs leading-5 text-muted-foreground">后端没有已掌握/基本掌握/部分掌握/未掌握四档分类接口，因此不创建虚假分布。</p>
+          <MasteryDistribution students={analytics?.students ?? []} />
         </div>
       </CardContent>
     </Card>
   );
 }
 
+
+function MasteryDistribution({ students }: { students: Array<{ score: number }> }) {
+  const buckets = [
+    { label: "掌握良好", min: 80, max: 101, tone: "bg-primary" },
+    { label: "基本掌握", min: 65, max: 80, tone: "bg-emerald-500" },
+    { label: "需要加强", min: 50, max: 65, tone: "bg-orange-400" },
+    { label: "重点关注", min: 0, max: 50, tone: "bg-rose-300" },
+  ].map((bucket) => ({
+    ...bucket,
+    count: students.filter((student) => student.score >= bucket.min && student.score < bucket.max).length,
+  }));
+  const total = students.length;
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-muted/20 px-3 py-3">
+      <p className="text-xs leading-5 text-muted-foreground">按真实学生掌握分数分为四档，阈值与全局学生学情保持一致；没有学生证据时不生成虚假分布。</p>
+      {total ? buckets.map((bucket) => (
+        <div className="space-y-1.5" key={bucket.label}>
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span>{bucket.label}</span>
+            <span className="font-medium tabular-nums">{bucket.count} 人</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className={bucket.tone} style={{ width: `${(bucket.count / total) * 100}%`, height: "100%" }} />
+          </div>
+        </div>
+      )) : <p className="py-3 text-center text-xs text-muted-foreground">暂无学生证据，无法形成分布。</p>}
+    </div>
+  );
+}
 function RelatedPointsCard({ context }: { context: NonNullable<ReturnType<typeof useKnowledgePointData>["context"]> }) {
   return (
     <Card className="gap-3 py-5">

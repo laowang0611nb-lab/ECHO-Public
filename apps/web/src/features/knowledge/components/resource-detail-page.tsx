@@ -7,6 +7,7 @@ import {
   Box,
   Download,
   ExternalLink,
+  FileUp,
   Layers3,
   Pencil,
   ScanText,
@@ -15,7 +16,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { useQueryClient } from "@tanstack/react-query";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -37,6 +40,8 @@ import { useDocumentCitations, useDocumentFileBlob, useDocumentIndexStatus, useD
 import type { ResourceDetailTab } from "@/features/knowledge/types";
 import { buildPointHref, buildSourceHref, resourcePageCount } from "@/features/knowledge/view-model";
 import { formatBytes, formatDate } from "@/features/courses/detail/utils";
+import { apiClient } from "@/lib/api";
+import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 const tabs = [
   { value: "parse", label: "解析状态" },
@@ -181,7 +186,10 @@ function ResourceHeader({
                 <StatusBadge tone={resource.statusTone}>{resource.statusLabel}</StatusBadge>
                 <StatusBadge tone="info">{resource.kind}</StatusBadge>
               </div>
-              <ResourceMetadataDialog document={resource.document} onChanged={onMetadataChanged} />
+              <div className="flex flex-wrap gap-2">
+                <ResourceVersionDialog document={resource.document} onChanged={onMetadataChanged} />
+                <ResourceMetadataDialog document={resource.document} onChanged={onMetadataChanged} />
+              </div>
             </div>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight">{resourceDisplayName(resource.document)}</h2>
             {resource.document.display_name && resource.document.display_name !== resource.document.original_name ? <p className="mt-1 text-xs text-muted-foreground">原始文件：{resource.document.original_name}</p> : null}
@@ -235,6 +243,109 @@ function metadataForm(document: CourseDocument): ResourceMetadataForm {
   };
 }
 
+
+function ResourceVersionDialog({ document, onChanged }: { document: CourseDocument; onChanged: () => void }) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [pending, setPending] = useState(false);
+  const [step, setStep] = useState("");
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function reset() {
+    setFile(null);
+    setPending(false);
+    setStep("");
+    setCreatedId(null);
+    setError(null);
+  }
+
+  async function uploadNewVersion() {
+    if (!file || !user) return;
+    setPending(true);
+    setError(null);
+    setCreatedId(null);
+    try {
+      setStep("上传新资源");
+      const created = await apiClient.uploadCourseDocument(
+        user.id,
+        document.course_id,
+        file,
+        file.name,
+        document.resource_type,
+      );
+      setCreatedId(created.id);
+      setStep("解析文档");
+      await apiClient.parseCourseDocument(user.id, created.id);
+      setStep("生成知识结构");
+      await apiClient.generateKnowledgeStructure(user.id, created.id);
+      setStep("建立文本块");
+      await apiClient.createDocumentChunks(user.id, created.id);
+      setStep("生成向量索引");
+      await apiClient.createDocumentEmbeddings(user.id, created.id);
+      await queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge"] });
+      onChanged();
+      router.push(`/knowledge/resources/${created.id}?from=resource&courseId=${document.course_id}&tab=parse`);
+      setOpen(false);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "新版本处理失败。");
+    } finally {
+      setPending(false);
+      setStep("");
+    }
+  }
+
+  return (
+    <>
+      <Button onClick={() => { reset(); setOpen(true); }} type="button" variant="outline">
+        <FileUp data-icon="inline-start" />
+        上传新版本
+      </Button>
+      <Dialog onOpenChange={(nextOpen) => { setOpen(nextOpen); if (!nextOpen && !pending) reset(); }} open={open}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>上传资源新版本</DialogTitle>
+            <DialogDescription>
+              系统会先创建新资源并重新解析、生成结构、切块和向量化。旧资源不会被自动删除，已有 Citation 和学习证据继续保留。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <label className="block">
+              <span className="mb-1.5 block text-xs text-muted-foreground">新文件（PDF）</span>
+              <Input
+                accept="application/pdf,.pdf"
+                onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(null); }}
+                ref={inputRef}
+                type="file"
+              />
+            </label>
+            <div className="rounded-lg border border-blue-200 bg-blue-50/45 px-3 py-3 text-xs leading-5 text-blue-900">
+              处理流程：上传 → 文档解析 → 章节与知识点 → 文本块 → 向量索引。处理失败时新资源仍会保留，可进入资源详情继续重试。
+            </div>
+            {step ? <p className="text-sm text-muted-foreground">当前步骤：{step}...</p> : null}
+            {error ? (
+              <div className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <p>{error}</p>
+                {createdId ? <Button className="mt-2" onClick={() => router.push(`/knowledge/resources/${createdId}?from=resource&courseId=${document.course_id}&tab=parse`)} size="sm" type="button" variant="outline">打开已上传资源</Button> : null}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button disabled={pending} onClick={() => setOpen(false)} type="button" variant="outline">取消</Button>
+            <Button disabled={pending || !file} onClick={() => void uploadNewVersion()} type="button">
+              <FileUp data-icon="inline-start" />
+              {pending ? "正在处理..." : "上传并处理"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 function ResourceMetadataDialog({ document, onChanged }: { document: CourseDocument; onChanged: () => void }) {
   const mutation = useUpdateDocumentMetadata(document.course_id, document.id);
   const [open, setOpen] = useState(false);
@@ -532,7 +643,7 @@ function ResourceAside({
       <Card className="gap-4 py-5">
         <CardHeader className="px-5"><CardTitle>能力边界</CardTitle></CardHeader>
         <CardContent className="space-y-2 px-5 text-sm leading-6 text-muted-foreground">
-          <p>元数据编辑已接入，不会触发重新解析。替换已解析文件仍保留为后续能力，当前请上传新资源。</p>
+          <p>元数据编辑不会触发重新解析。文件更新采用“上传新版本”流程，旧资源、旧 Citation 和历史学习证据会保留，由教师确认后再回收旧版本。</p>
           <p>相关资源推荐尚未提供独立相似度接口，因此不生成无依据的关联。</p>
         </CardContent>
       </Card>

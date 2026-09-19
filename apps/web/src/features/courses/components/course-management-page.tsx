@@ -1,5 +1,6 @@
 "use client";
 
+import type { Course, ExecutionPlanStatus } from "@echo/shared-types";
 import { BookOpen, CalendarDays, ClipboardList, Plus, Search, Settings, Upload } from "lucide-react";
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -9,6 +10,7 @@ import { useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { StatCard } from "@/components/common/stat-card";
+import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +59,22 @@ export function CourseManagementPage() {
     },
   });
 
+  const duplicateMutation = useMutation({
+    mutationFn: ({ source, name }: { source: Course; name: string }) =>
+      apiClient.createCourse(user!.id, {
+        name,
+        description: source.description ?? undefined,
+        term: source.term ?? undefined,
+        course_type: source.course_type ?? undefined,
+        target_audience: source.target_audience ?? undefined,
+        expected_student_count: source.expected_student_count ?? undefined,
+      }),
+    onSuccess: (course) => {
+      setSelectedCourseId(course.id);
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+    },
+  });
+
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     return items.filter((item) => {
@@ -69,6 +87,16 @@ export function CourseManagementPage() {
       return matchesFilter && matchesSearch;
     });
   }, [filter, items, search]);
+
+  const upcomingPlans = useMemo(
+    () =>
+      items
+        .flatMap((item) => item.plans.map((plan) => ({ plan, course: item.course })))
+        .filter(({ plan }) => plan.status !== "completed" && plan.status !== "cancelled")
+        .sort((left, right) => left.plan.start_date.localeCompare(right.plan.start_date))
+        .slice(0, 5),
+    [items],
+  );
 
   const summary = summarizeCourses(items);
   const hasMasteryEvidence = items.some((item) => item.masteryValue !== null);
@@ -101,7 +129,7 @@ export function CourseManagementPage() {
               新建课程
             </Link>
           }
-          description="查看课程状态、教学进度与近期安排，并快速进入课程工作区。"
+          description="查看课程状态、学习证据与执行计划安排，并快速进入课程工作区。"
           title="课程管理"
         />
       </motion.div>
@@ -169,11 +197,17 @@ export function CourseManagementPage() {
                 <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                   {filteredItems.map((item) => (
                     <CourseCard
+                      duplicating={duplicateMutation.isPending && duplicateMutation.variables?.source.id === item.course.id}
                       item={item}
                       key={item.course.id}
+                      onDuplicate={async (courseId, name) => {
+                        const source = items.find((candidate) => candidate.course.id === courseId)?.course;
+                        if (!source) throw new Error("课程不存在或已从当前列表移除。");
+                        return duplicateMutation.mutateAsync({ source, name });
+                      }}
                       onPublish={(courseId) => publishMutation.mutate(courseId)}
-                      publishing={publishMutation.isPending}
                       onRestore={(courseId) => restoreMutation.mutate(courseId)}
+                      publishing={publishMutation.isPending}
                       restoring={restoreMutation.isPending}
                     />
                   ))}
@@ -190,11 +224,27 @@ export function CourseManagementPage() {
                     <CalendarDays className="size-4 text-primary" />
                     近期教学安排
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground">来自当前课程真实执行计划，不生成虚构日历事件。</p>
                 </CardHeader>
-                <CardContent className="px-5">
-                  <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                    当前后端未提供教学日历接口。
-                  </div>
+                <CardContent className="space-y-2 px-5">
+                  {upcomingPlans.length ? upcomingPlans.map(({ plan, course }) => (
+                    <Link
+                      className="block rounded-lg border-2 border-border px-3 py-3 transition-colors hover:border-primary/35 hover:bg-muted/35"
+                      href={`/execution-plans/${plan.id}`}
+                      key={plan.id}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-xs text-muted-foreground">{course.name}</span>
+                        <StatusBadge tone={planStatusTone(plan.status)}>{planStatusLabel(plan.status)}</StatusBadge>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-sm font-medium">{plan.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{plan.start_date} → {plan.end_date} · {plan.task_count} 项任务</p>
+                    </Link>
+                  )) : (
+                    <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                      暂无近期执行计划。
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -223,4 +273,22 @@ export function CourseManagementPage() {
       )}
     </motion.div>
   );
+}
+
+function planStatusLabel(status: ExecutionPlanStatus) {
+  return {
+    draft: "草稿",
+    ready: "待发布",
+    active: "执行中",
+    paused: "已暂停",
+    completed: "已完成",
+    cancelled: "已取消",
+  }[status] ?? status;
+}
+
+function planStatusTone(status: ExecutionPlanStatus) {
+  if (status === "active" || status === "completed") return "success" as const;
+  if (status === "paused" || status === "draft") return "warning" as const;
+  if (status === "ready") return "info" as const;
+  return "neutral" as const;
 }

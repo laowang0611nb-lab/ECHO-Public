@@ -54,7 +54,7 @@ interface LocalPreferences {
 }
 
 const PREFERENCE_KEY = "echo.teacher.preferences";
-const TEACHER_WEB_VERSION = "0.0.96";
+const TEACHER_WEB_VERSION = "0.0.103";
 const defaultPreferences: LocalPreferences = {
   notifications: {
     highRiskReview: true,
@@ -538,7 +538,7 @@ function AboutTab({ apiVersion, demoActive }: { apiVersion?: string; demoActive:
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg border-2 border-border px-3 py-3 text-sm">
             <span>开源许可</span>
-            <span className="text-xs text-muted-foreground">发布包生成时提供清单</span>
+            <ThirdPartyLicenseDialog />
           </div>
         </CardContent>
       </Card>
@@ -546,6 +546,49 @@ function AboutTab({ apiVersion, demoActive }: { apiVersion?: string; demoActive:
   );
 }
 
+
+const runtimeLicenses = [
+  { name: "Next.js", version: "16.3.5", license: "MIT", url: "https://github.com/vercel/next.js" },
+  { name: "React / React DOM", version: "19.2.8", license: "MIT", url: "https://react.dev" },
+  { name: "@tanstack/react-query", version: "5.102.8", license: "MIT", url: "https://tanstack.com/query" },
+  { name: "@base-ui/react", version: "1.8.0", license: "MIT", url: "https://base-ui.com" },
+  { name: "Apache ECharts", version: "6.1.0", license: "Apache-2.0", url: "https://echarts.apache.org" },
+  { name: "Motion", version: "13.3.0", license: "MIT", url: "https://motion.dev" },
+  { name: "Zustand", version: "5.0.15", license: "MIT", url: "https://zustand.docs.pmnd.rs" },
+  { name: "Zod", version: "4.6.5", license: "MIT", url: "https://zod.dev" },
+  { name: "Lucide React", version: "1.46.0", license: "ISC", url: "https://lucide.dev" },
+  { name: "qrcode.react", version: "4.2.0", license: "ISC", url: "https://github.com/zpao/qrcode.react" },
+  { name: "class-variance-authority", version: "0.7.1", license: "Apache-2.0", url: "https://cva.style" },
+  { name: "tailwind-merge", version: "3.7.0", license: "MIT", url: "https://github.com/dcastil/tailwind-merge" },
+] as const;
+
+function ThirdPartyLicenseDialog() {
+  return (
+    <Dialog>
+      <button className="text-xs font-medium text-primary hover:underline" type="button">查看许可</button>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>第三方开源许可</DialogTitle>
+          <DialogDescription>
+            以下列出教师端 Web 的关键运行时依赖及其许可证。完整传递依赖清单将在发布包中继续附带。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="max-h-[65vh] divide-y divide-border overflow-y-auto rounded-lg border-2 border-border">
+          {runtimeLicenses.map((item) => (
+            <div className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_100px_auto] sm:items-center" key={item.name}>
+              <div className="min-w-0"><p className="truncate text-sm font-medium">{item.name}</p><p className="mt-0.5 text-xs text-muted-foreground">v{item.version}</p></div>
+              <span className="text-xs text-muted-foreground">{item.license}</span>
+              <a className="text-xs font-medium text-primary hover:underline" href={item.url} rel="noreferrer" target="_blank">项目主页</a>
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <p className="text-xs text-muted-foreground">许可证名称来自各依赖发布包；使用和再分发时以对应项目的正式许可证文本为准。</p>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 function ProfileRow({ icon: Icon, label, value }: { icon: typeof User; label: string; value: string }) {
   return <div className="flex items-center gap-3 px-5 py-3.5"><Icon className="size-4 shrink-0 text-muted-foreground" /><span className="w-24 text-sm text-muted-foreground">{label}</span><span className="min-w-0 flex-1 truncate text-right text-sm font-medium">{value}</span></div>;
 }

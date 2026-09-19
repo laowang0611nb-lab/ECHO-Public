@@ -36,7 +36,7 @@ export function CourseProgressTab({
     <div className="space-y-4">
       <div className="flex items-start gap-3 rounded-lg border border-orange-200 bg-orange-50/60 px-4 py-3 text-sm text-orange-800">
         <CircleAlert className="mt-0.5 size-4 shrink-0" />
-        <p>后端暂未提供章节完成状态与手动流转接口，当前页面按真实章节活跃度和掌握度只读展示。</p>
+        <p>章节状态由真实活跃学生数和平均掌握度自动计算，作为教学进度辅助；当前版本不提供手工改状态，避免与学习证据冲突。</p>
       </div>
 
       <Card className="gap-0 overflow-hidden py-0">
@@ -93,10 +93,10 @@ export function CourseProgressTab({
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Summary label="进行中章节" value={chapters.filter((chapter) => chapter.active_learner_count > 0).length} />
-        <Summary label="需要关注章节" value={chapters.filter((chapter) => chapter.average_mastery !== null && chapter.average_mastery < 60).length} />
-        <Summary label="整体掌握度" value={chapters.filter((chapter) => masteryTone(chapter.average_mastery) === "success").length} suffix=" 章良好" />
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Summary label="已有学习活动" value={chapters.filter((chapter) => chapter.active_learner_count > 0).length} suffix=" 章" />
+        <Summary label="需要关注章节" value={chapters.filter((chapter) => chapter.average_mastery !== null && chapter.average_mastery < 60).length} suffix=" 章" />
+        <Summary label="稳定掌握章节" value={chapters.filter((chapter) => chapter.average_mastery !== null && chapter.average_mastery >= 80 && chapter.active_learner_count > 0).length} suffix=" 章" />\n        <Summary label="掌握度良好" value={chapters.filter((chapter) => masteryTone(chapter.average_mastery) === "success").length} suffix=" 章" />
       </div>
     </div>
   );

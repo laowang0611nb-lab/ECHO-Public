@@ -99,6 +99,14 @@ export function CreateExecutionPlanPage({
   const [teacherNote, setTeacherNote] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const suggestionStorageKey = planId && generation ? `echo.plan.suggestions:${planId}:${generation.generation_id}` : null;
+
+
+  function persistHandledRecommendations(ids: string[]) {
+    if (suggestionStorageKey) {
+      window.localStorage.setItem(suggestionStorageKey, JSON.stringify(ids));
+    }
+  }
 
   const strategiesQuery = useTeachingStrategies(courseId);
   const strategyDetailQuery = useTeachingStrategy(strategyId || null);
@@ -208,6 +216,7 @@ export function CreateExecutionPlanPage({
       });
       setGeneration(result);
       setWeeks(result.weeks);
+      setHandledRecommendations(readHandledRecommendationIds(planId, result));
       setMessage(`已生成 ${result.weeks.length} 周计划草案，请教师确认后再发布。`);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "AI 计划生成失败。");
@@ -245,7 +254,11 @@ export function CreateExecutionPlanPage({
     try {
       await updateMutation.mutateAsync({ planId, payload: { teacher_note: nextNote } });
       setTeacherNote(nextNote);
-      setHandledRecommendations((current) => [...current, recommendationId]);
+      setHandledRecommendations((current) => {
+        const next = [...current, recommendationId];
+        persistHandledRecommendations(next);
+        return next;
+      });
       setMessage("AI 建议已写入教师备注并保存为计划草稿。");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "采纳建议失败。");
@@ -253,8 +266,12 @@ export function CreateExecutionPlanPage({
   }
 
   function ignoreRecommendation(recommendationId: string) {
-    setHandledRecommendations((current) => [...current, recommendationId]);
-    setMessage("已忽略该条 AI 建议。后端没有独立建议状态接口，本操作仅影响当前向导展示。");
+    setHandledRecommendations((current) => {
+      const next = [...current, recommendationId];
+      persistHandledRecommendations(next);
+      return next;
+    });
+    setMessage("已在本机记住该条 AI 建议的忽略状态；同一设备重新打开时不会再次显示，不修改服务端计划内容。");
   }
 
   function toggleValue<T>(value: T, values: T[], setValues: (next: T[]) => void) {
@@ -370,7 +387,7 @@ export function CreateExecutionPlanPage({
                 {generation?.recommendations.length ? (
                   <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50/45 px-4 py-4">
                     <p className="text-sm font-medium text-blue-950">ECHO 建议</p>
-                    <p className="text-xs text-blue-800">建议需要教师处理；采纳后会写入计划教师备注，忽略仅影响当前向导展示。</p>
+                    <p className="text-xs text-blue-800">建议需要教师处理；采纳后会写入计划教师备注，忽略状态仅保存在当前设备。</p>
                     <div className="space-y-2">
                       {generation.recommendations.filter((recommendation) => !handledRecommendations.includes(recommendation.id)).map((recommendation) => (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-background px-3 py-3" key={recommendation.id}>
@@ -425,6 +442,20 @@ export function CreateExecutionPlanPage({
   );
 }
 
+
+function readHandledRecommendationIds(planId: string | null, generation: WeeklyPlanGeneration) {
+  if (!planId) return [];
+  const key = `echo.plan.suggestions:${planId}:${generation.generation_id}`;
+  try {
+    const stored = window.localStorage.getItem(key);
+    const ids = stored ? (JSON.parse(stored) as unknown[]) : [];
+    const availableIds = new Set(generation.recommendations.map((recommendation) => recommendation.id));
+    return ids.filter((id): id is string => typeof id === "string" && availableIds.has(id));
+  } catch {
+    window.localStorage.removeItem(key);
+    return [];
+  }
+}
 function PlanStepper({ step }: { step: number }) {
   return <ol className="grid gap-2 md:grid-cols-5">{steps.map((item) => <li className={`rounded-lg border-2 px-3 py-3 ${step === item.value ? "border-primary bg-primary text-primary-foreground" : step > item.value ? "border-emerald-200 bg-emerald-50" : "border-border bg-card"}`} key={item.value}><div className="flex items-center gap-2"><span className={`flex size-6 items-center justify-center rounded-full text-xs font-semibold ${step === item.value ? "bg-white/20" : "bg-muted"}`}>{step > item.value ? <Check className="size-3.5" /> : item.value}</span><span className="text-sm font-medium">{item.label}</span></div></li>)}</ol>;
 }

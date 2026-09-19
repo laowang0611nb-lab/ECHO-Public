@@ -55,6 +55,7 @@ export function StudentConversationPage({
   const [statusFilter, setStatusFilter] = useState<ConversationStatusFilter>(initialQuery.status);
   const [reasonFilter, setReasonFilter] = useState<ConversationReasonFilter>(initialQuery.reason);
   const [severityFilter, setSeverityFilter] = useState<ConversationSeverityFilter>(initialQuery.severity);
+  const [eventScope, setEventScope] = useState<"all" | "related">("all");
   const conversations = data.conversations;
   const query = useMemo<ConversationEvidenceQuery>(
     () => ({ search, status: statusFilter, reason: reasonFilter, severity: severityFilter }),
@@ -82,6 +83,14 @@ export function StudentConversationPage({
   const visibleCitationCount = useMemo(
     () => visibleMessages.reduce((total, message) => total + message.citations.length, 0),
     [visibleMessages],
+  );
+  const relatedKnowledgePointIds = useMemo(
+    () => new Set(visibleMessages.flatMap((message) => message.knowledgePointIds)),
+    [visibleMessages],
+  );
+  const relatedEvents = useMemo(
+    () => data.recentEvidence.filter((event) => event.knowledge_point_id && relatedKnowledgePointIds.has(event.knowledge_point_id)),
+    [data.recentEvidence, relatedKnowledgePointIds],
   );
 
   function replaceQuery(patch: Partial<ConversationEvidenceQuery>) {
@@ -304,15 +313,23 @@ export function StudentConversationPage({
           </Card>
 
           <Card className="gap-3 py-5">
-            <CardHeader className="px-5"><CardTitle>最近学习事件</CardTitle><p className="text-xs text-muted-foreground">学生级最近事件；当前接口未提供会话级过滤，不表示由当前对话产生。</p></CardHeader>
+            <CardHeader className="px-5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div><CardTitle>最近学习事件</CardTitle><p className="mt-1 text-xs text-muted-foreground">可按当前对话关联知识点过滤；只覆盖学生最近事件窗口，不代表完整会话事件接口。</p></div>
+                <div className="flex gap-1">
+                  <Button disabled={!relatedKnowledgePointIds.size} onClick={() => setEventScope("related")} size="sm" type="button" variant={eventScope === "related" ? "default" : "outline"}>当前对话知识点</Button>
+                  <Button onClick={() => setEventScope("all")} size="sm" type="button" variant={eventScope === "all" ? "default" : "outline"}>全部最近事件</Button>
+                </div>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-3 px-5">
-              {data.recentEvidence.slice(0, 5).map((event) => (
+              {(eventScope === "related" ? relatedEvents : data.recentEvidence).slice(0, 5).map((event) => (
                 <div className="flex items-start gap-3" key={event.event_id}>
                   <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
                   <div className="min-w-0"><p className="text-sm font-medium">{eventLabel(event.event_type)}</p><p className="mt-1 text-xs text-muted-foreground">{event.knowledge_point_name || event.evidence || "课程学习事件"}</p><p className="mt-1 text-[11px] text-muted-foreground">{event.created_at.slice(0, 16).replace("T", " ")}</p></div>
                 </div>
               ))}
-              {!data.recentEvidence.length ? <p className="py-6 text-center text-sm text-muted-foreground">暂无 LearningEvent。</p> : null}
+              {!(eventScope === "related" ? relatedEvents : data.recentEvidence).length ? <p className="py-6 text-center text-sm text-muted-foreground">{eventScope === "related" ? "最近事件窗口中没有当前对话知识点的直接事件。" : "暂无 LearningEvent。"}</p> : null}
             </CardContent>
           </Card>
 
