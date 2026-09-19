@@ -27,6 +27,7 @@ import { useServerHealth, useSystemStatus } from "@/features/server-settings/que
 import { serviceStateLabel } from "@/features/server-settings/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
+import { TEACHER_WEB_VERSION } from "@/lib/version";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 const tabs = [
@@ -54,7 +55,6 @@ interface LocalPreferences {
 }
 
 const PREFERENCE_KEY = "echo.teacher.preferences";
-const TEACHER_WEB_VERSION = "0.0.103";
 const defaultPreferences: LocalPreferences = {
   notifications: {
     highRiskReview: true,
@@ -459,7 +459,7 @@ function SystemSettingsTab({
         <CardContent className="space-y-3 px-5 text-sm">
           <SettingLine label="当前状态" value={demoActive ? "运行中" : "未开启"} />
           <SettingLine label="Demo 数据集" value={demoSeeded ? "已就绪" : "尚未生成"} />
-          <SettingLine label="AI 模式" value={demoMode === "stable" ? "稳定模式" : "实时模式"} />
+          <SettingLine label="演示路径" value={demoMode === "stable" ? "稳定路径" : "实时操作"} />
           <Link className={buttonVariants()} href="/settings/demo">进入 Demo 模式</Link>
         </CardContent>
       </Card>

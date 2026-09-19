@@ -38,7 +38,7 @@ export function GuidedDemoBar() {
       </div>
       <div className="mt-3 flex items-center justify-between gap-2">
         <Button disabled={index === 0} onClick={() => move(-1)} size="sm" type="button" variant="outline"><ChevronLeft data-icon="inline-start" />上一步</Button>
-        <span className="text-xs text-muted-foreground">{demo.mode === "stable" ? "Demo Stable Mode" : "Live Mode"}</span>
+        <span className="text-xs text-muted-foreground">{demo.mode === "stable" ? "稳定演示路径" : "实时操作路径"}</span>
         <Button disabled={index >= scenarios.length - 1} onClick={() => move(1)} size="sm" type="button" variant="outline">下一步<ChevronRight data-icon="inline-end" /></Button>
       </div>
     </div>

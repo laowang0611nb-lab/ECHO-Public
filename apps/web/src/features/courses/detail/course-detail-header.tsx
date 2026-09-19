@@ -89,12 +89,12 @@ export function CourseDetailHeader({
           <div className="mt-4 flex items-center gap-4">
             <Dialog>
               <DialogTrigger render={<button aria-label="放大课程二维码" className="rounded-lg bg-white p-2 ring-1 ring-border transition hover:ring-primary/45" type="button" />}>
-                <QRCodeSVG size={88} value={`echo://join?code=${course.code}`} />
+                <QRCodeSVG size={88} value={`echo://join-course?code=${course.code}`} />
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader><DialogTitle>扫描加入课程</DialogTitle></DialogHeader>
                 <div className="flex flex-col items-center gap-4 py-4">
-                  <div className="rounded-xl bg-white p-4 ring-1 ring-border"><QRCodeSVG size={256} value={`echo://join?code=${course.code}`} /></div>
+                  <div className="rounded-xl bg-white p-4 ring-1 ring-border"><QRCodeSVG size={256} value={`echo://join-course?code=${course.code}`} /></div>
                   <p className="text-2xl font-semibold tracking-[0.12em]">{course.code}</p>
                   <p className="text-sm text-muted-foreground">学生扫码或输入课程码加入当前课程。</p>
                 </div>

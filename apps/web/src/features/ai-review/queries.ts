@@ -12,7 +12,7 @@ import type {
   ReviewStatus,
 } from "@echo/shared-types";
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiClient } from "@/lib/api";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
@@ -71,6 +71,36 @@ export function useReviewQuery(
   });
 }
 
+export function useReviewInfiniteQuery(
+  courseId: string | null,
+  options?: {
+    status?: ReviewStatus;
+    severity?: ReviewSeverity;
+    reason?: ReviewReason;
+    studentId?: string;
+    knowledgePointId?: string;
+    q?: string;
+    sort?: "newest" | "oldest" | "priority" | "severity";
+    limit?: number;
+  },
+) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  const filterKey = JSON.stringify(options ?? {});
+  return useInfiniteQuery<ReviewFlagQuery>({
+    queryKey: aiReviewQueryKeys.query(userId ?? "anonymous", courseId ?? "none", filterKey),
+    queryFn: ({ pageParam }) =>
+      apiClient.queryReviewFlags(userId!, courseId!, {
+        ...options,
+        cursor: typeof pageParam === "string" ? pageParam : undefined,
+        limit: options?.limit ?? 50,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: Boolean(userId && courseId),
+    staleTime: 10_000,
+  });
+}
 export function useReviewSummary(courseId: string | null) {
   const { user } = useTeacherSession();
   const userId = user?.id;

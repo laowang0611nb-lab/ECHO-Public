@@ -133,10 +133,10 @@ export function DemoModePage() {
             <CardHeader className="px-5"><CardTitle>演示控制</CardTitle></CardHeader>
             <CardContent className="space-y-4 px-5">
               <div className="flex items-center justify-between gap-4">
-                <div><p className="text-sm font-medium">稳定 AI 模式</p><p className="mt-1 text-xs text-muted-foreground">Demo 核心路径优先使用预置策略与执行计划。</p></div>
+                <div><p className="text-sm font-medium">稳定演示路径</p><p className="mt-1 text-xs text-muted-foreground">优先使用预置策略与执行计划；该开关不直接修改后端模型配置。</p></div>
                 <Switch checked={demo.mode === "stable"} onCheckedChange={(checked) => demo.setMode(checked ? "stable" : "live")} />
               </div>
-              <StatusBadge tone={demo.mode === "stable" ? "info" : "success"}>{demo.mode === "stable" ? "Demo Stable Mode" : "Live Mode · 真实 Qwen"}</StatusBadge>
+              <StatusBadge tone={demo.mode === "stable" ? "info" : "success"}>{demo.mode === "stable" ? "稳定演示路径" : "实时操作路径"}</StatusBadge>
               <Button className="w-full" disabled={resetDemo.isPending} onClick={() => void simulateQuickCheck()} type="button" variant="outline"><CheckCircle2 data-icon="inline-start" />模拟一次 Quick Check</Button>
               <Button className="w-full" onClick={() => router.push("/settings/server?tab=network")} type="button" variant="outline"><Users data-icon="inline-start" />查看学生端连接地址</Button>
               <Button className="w-full" onClick={() => setResetOpen(true)} type="button" variant="outline"><RotateCcw data-icon="inline-start" />重置演示数据</Button>
@@ -149,7 +149,7 @@ export function DemoModePage() {
             <CardContent className="space-y-3 px-5">
               <EnvironmentLine label="Local Server" value={system.data ? system.data.status : "检测中"} />
               <EnvironmentLine label="Demo 数据" value={demoStatus.data?.seeded ? "已就绪" : "等待初始化"} />
-              <EnvironmentLine label="AI 模式" value={demo.mode === "stable" ? "稳定模式" : "实时模式"} />
+              <EnvironmentLine label="演示路径" value={demo.mode === "stable" ? "稳定路径" : "实时操作"} />
               <EnvironmentLine label="学生端连接" value={system.data?.lan.student_api_base_url ?? "未检测到"} />
               <Link className={buttonVariants({ variant: "outline" })} href={demoStatus.data?.plan_id ? `/execution-plans/${demoStatus.data.plan_id}?tab=effect&demo=1` : "/settings/server"}>查看效果入口<ArrowRight data-icon="inline-end" /></Link>
             </CardContent>

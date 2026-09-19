@@ -61,12 +61,20 @@ export function KnowledgePointDetailPage({
   from,
   courseId: requestedCourseId,
   resourceId: requestedResourceId,
+  reviewId,
+  conversationId,
+  messageId,
+  studentId,
 }: {
   pointId: string;
   initialTab: KnowledgePointTab;
   from: string;
   courseId?: string;
   resourceId?: string;
+  reviewId?: string;
+  conversationId?: string;
+  messageId?: string;
+  studentId?: string;
 }) {
   const router = useRouter();
   const data = useKnowledgePointData(pointId);
@@ -91,6 +99,10 @@ export function KnowledgePointDetailPage({
     params.set("from", from);
     if (courseId) params.set("courseId", courseId);
     if (resourceId) params.set("resourceId", resourceId);
+    if (reviewId) params.set("reviewId", reviewId);
+    if (conversationId) params.set("conversationId", conversationId);
+    if (messageId) params.set("messageId", messageId);
+    if (studentId) params.set("studentId", studentId);
     params.set("tab", next);
     router.replace(`/knowledge/points/${pointId}?${params.toString()}`, { scroll: false });
   }
@@ -107,7 +119,7 @@ export function KnowledgePointDetailPage({
     );
   }
 
-  const breadcrumbs = knowledgePointBreadcrumbs(from, context.course.name, context.chapter.title);
+  const breadcrumbs = knowledgePointBreadcrumbs({ from, courseId, courseName: context.course.name, chapterTitle: context.chapter.title, conversationId, messageId, reviewId, studentId });
   const mastery = context.analytics?.average_mastery ?? null;
   const affectedStudents = context.analytics?.affected_students ?? 0;
 
@@ -142,9 +154,12 @@ export function KnowledgePointDetailPage({
                 <KnowledgeDescription context={context} />
                 <TextbookLocation
                   context={context}
+                  conversationId={conversationId}
                   evidence={evidence.evidence}
                   evidenceLoading={evidence.isLoading}
                   evidenceError={evidence.isError}
+                  messageId={messageId}
+                  reviewId={reviewId}
                 />
                 <StudentMasteryCard context={context} />
                 <MasteryTrendCard query={masteryTrendQuery} />
@@ -167,12 +182,12 @@ export function KnowledgePointDetailPage({
 
       <nav className="flex items-center justify-between gap-3 border-t border-border pt-5">
         {context.previousPoint ? (
-          <Link className={buttonVariants({ variant: "outline" })} href={buildPointHref(context.previousPoint.id, { from, courseId, resourceId })}>
+          <Link className={buttonVariants({ variant: "outline" })} href={buildPointHref(context.previousPoint.id, { from, courseId, resourceId, reviewId, conversationId, messageId, studentId })}>
             <ArrowLeft data-icon="inline-start" />上一个知识点
           </Link>
         ) : <span />}
         {context.nextPoint ? (
-          <Link className={buttonVariants({ variant: "outline" })} href={buildPointHref(context.nextPoint.id, { from, courseId, resourceId })}>
+          <Link className={buttonVariants({ variant: "outline" })} href={buildPointHref(context.nextPoint.id, { from, courseId, resourceId, reviewId, conversationId, messageId, studentId })}>
             下一个知识点<ArrowRight data-icon="inline-end" />
           </Link>
         ) : null}
@@ -235,11 +250,17 @@ function TextbookLocation({
   evidence,
   evidenceLoading,
   evidenceError,
+  reviewId,
+  conversationId,
+  messageId,
 }: {
   context: NonNullable<ReturnType<typeof useKnowledgePointData>["context"]>;
   evidence: { page_start: number; page_end: number; content: string; chunk_id: string } | null;
   evidenceLoading: boolean;
   evidenceError: boolean;
+  reviewId?: string;
+  conversationId?: string;
+  messageId?: string;
 }) {
   const page = evidence?.page_start;
   const sourceHref = context.sourceDocument
@@ -249,6 +270,9 @@ function TextbookLocation({
         knowledgePointId: context.point.id,
         page,
         chunkId: evidence?.chunk_id,
+        reviewId,
+        conversationId,
+        messageId,
       })
     : null;
 
@@ -647,7 +671,7 @@ function EditKnowledgePointDialog({
 function UnavailableCard({ title, description, icon: Icon }: { title: string; description: string; icon: typeof AlertTriangle }) {
   return (
     <Card className="gap-3 border-dashed bg-muted/20 py-5">
-      <CardHeader className="flex flex-row items-center justify-between gap-3 px-5"><CardTitle className="flex items-center gap-2"><Icon className="size-4 text-muted-foreground" />{title}</CardTitle><StatusBadge tone="info">接口待接入</StatusBadge></CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-3 px-5"><CardTitle className="flex items-center gap-2"><Icon className="size-4 text-muted-foreground" />{title}</CardTitle><StatusBadge tone="neutral">暂无证据</StatusBadge></CardHeader>
       <CardContent className="px-5 text-sm leading-6 text-muted-foreground">{description}</CardContent>
     </Card>
   );
@@ -683,11 +707,37 @@ function questionDifficultyLabel(difficulty: string) {
   return labels[difficulty] ?? difficulty;
 }
 
-function knowledgePointBreadcrumbs(from: string, courseName: string, chapterTitle: string) {
+function knowledgePointBreadcrumbs({
+  from,
+  courseId,
+  courseName,
+  chapterTitle,
+  conversationId,
+  messageId,
+  reviewId,
+  studentId,
+}: {
+  from: string;
+  courseId: string;
+  courseName: string;
+  chapterTitle: string;
+  conversationId?: string;
+  messageId?: string;
+  reviewId?: string;
+  studentId?: string;
+}) {
   if (from === "course") return [{ label: "课程管理", href: "/courses" }, { label: courseName }, { label: chapterTitle }];
   if (from === "dashboard") return [{ label: "总览 Dashboard", href: "/dashboard" }, { label: "知识点详情" }];
   if (from === "student") return [{ label: "学生学情", href: "/students" }, { label: "学生详情" }, { label: "知识点详情" }];
   if (from === "source") return [{ label: "知识库", href: "/knowledge" }, { label: "来源查看" }, { label: "知识点详情" }];
+  if (from === "review" || from === "ai-review") {
+    const reviewHref = reviewId ? `/ai-review/pending?reviewId=${reviewId}&courseId=${courseId}` : "/ai-review";
+    return [{ label: "AI 回答审核", href: "/ai-review" }, { label: "审核工作台", href: reviewHref }, { label: "知识点详情" }];
+  }
+  if (from === "conversation" && studentId && conversationId) {
+    const conversationHref = `/students/${studentId}/conversations/${conversationId}?from=conversation&courseId=${courseId}${messageId ? `&messageId=${messageId}` : ""}`;
+    return [{ label: "学生学情", href: "/students" }, { label: "完整对话", href: conversationHref }, { label: "知识点详情" }];
+  }
   return [{ label: "知识库", href: "/knowledge" }, { label: "知识点详情" }];
 }
 

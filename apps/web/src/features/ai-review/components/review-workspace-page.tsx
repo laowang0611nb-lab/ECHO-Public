@@ -37,7 +37,7 @@ import {
   useReviewContext,
   useReviewDecision,
   useReviewFlag,
-  useReviewQuery,
+  useReviewInfiniteQuery,
   useReviewRegeneration,
   useReviewRegenerationStatus,
 } from "@/features/ai-review/queries";
@@ -69,7 +69,7 @@ export function ReviewWorkspacePage({
     ? initialCourseId
     : selectedCourseId;
   const deferredSearch = useDeferredValue(filters.search);
-  const queueQuery = useReviewQuery(courseId, {
+  const queueQuery = useReviewInfiniteQuery(courseId, {
     status: filters.status === "all" ? undefined : filters.status,
     severity: filters.severity === "all" ? undefined : filters.severity,
     reason: filters.reason === "all" ? undefined : filters.reason,
@@ -77,7 +77,7 @@ export function ReviewWorkspacePage({
     sort: filters.sort,
     limit: 100,
   });
-  const visibleFlags = queueQuery.data?.items ?? [];
+  const visibleFlags = queueQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const requestedId = reviewId ?? visibleFlags[0]?.id ?? null;
   const flagQuery = useReviewFlag(courseId, requestedId);
   const flag = flagQuery.data ?? null;
@@ -185,13 +185,20 @@ export function ReviewWorkspacePage({
       </section>
 
       <div className="grid gap-4 xl:grid-cols-[248px_minmax(0,1fr)_340px] xl:items-start">
-        <ReviewQueueList
-          courseId={courseId}
-          currentId={flag.id}
-          filters={filters}
-          flags={visibleFlags}
-          onFiltersChange={updateFilters}
-        />
+        <div className="space-y-2">
+          <ReviewQueueList
+            courseId={courseId}
+            currentId={flag.id}
+            filters={filters}
+            flags={visibleFlags}
+            onFiltersChange={updateFilters}
+          />
+          {queueQuery.hasNextPage ? (
+            <Button disabled={queueQuery.isFetchingNextPage} onClick={() => void queueQuery.fetchNextPage()} type="button" variant="outline">
+              {queueQuery.isFetchingNextPage ? "正在加载..." : "加载更多审核记录"}
+            </Button>
+          ) : null}
+        </div>
 
         <div className="flex min-w-0 flex-col gap-4">
           <ReviewContentCard
@@ -496,8 +503,12 @@ function ReviewDecisionPanel({
       note: note.trim() || undefined,
       corrected_answer: decision === "mark_incorrect" ? correctedAnswer.trim() || undefined : undefined,
     };
-    await decisionMutation.mutateAsync({ flagId: flag.id, payload });
-    onCompleted(flag.id);
+    try {
+      await decisionMutation.mutateAsync({ flagId: flag.id, payload });
+      onCompleted(flag.id);
+    } catch {
+      // Mutation state renders the backend error.
+    }
   }
 
 
@@ -608,11 +619,15 @@ function ReviewRegenerationPanel({
   async function handleRegeneration() {
     const normalized = instruction.trim();
     if (!normalized) return;
-    await regenerationMutation.mutateAsync({
-      flagId: flag.id,
-      payload: { instruction: normalized, base_version: flag.current_version },
-    });
-    onChanged();
+    try {
+      await regenerationMutation.mutateAsync({
+        flagId: flag.id,
+        payload: { instruction: normalized, base_version: flag.current_version },
+      });
+      onChanged();
+    } catch {
+      // Mutation or polling state renders the backend error.
+    }
   }
 
   return (

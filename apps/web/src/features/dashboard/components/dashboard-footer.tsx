@@ -1,7 +1,10 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+
 import { LegalLinks } from "@/features/dashboard/components/legal-links";
 import { apiClient } from "@/lib/api";
+import { TEACHER_WEB_VERSION } from "@/lib/version";
 
 export function DashboardFooter() {
   const health = useQuery({
@@ -14,9 +17,10 @@ export function DashboardFooter() {
       <p>ECHO 让 AI 与教育产生真正的回响。</p>
       <div className="flex items-center gap-2">
         <LegalLinks />
-        <span>v{health.data?.version ?? "—"}</span>
+        <span>Web v{TEACHER_WEB_VERSION}</span>
+        <span>·</span>
+        <span>API v{health.data?.version ?? "—"}</span>
       </div>
     </footer>
   );
 }
-import { useQuery } from "@tanstack/react-query";

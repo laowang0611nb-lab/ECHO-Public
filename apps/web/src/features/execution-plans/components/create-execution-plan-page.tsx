@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useKnowledgeBaseData } from "@/features/knowledge/queries";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { useTeachingStrategies, useTeachingStrategy } from "@/features/teaching-strategies/queries";
+import { canCreateExecutionPlan, teachingStrategyStatusLabel } from "@/features/teaching-strategies/view-model";
 import {
   useCreateExecutionPlan,
   useExecutionPlanAction,
@@ -57,10 +58,12 @@ const metricOptions = ["quick_check_accuracy", "mastery_change", "repeated_error
 export function CreateExecutionPlanPage({
   initialCourseId,
   initialStrategyId,
+  initialKnowledgePointId,
   initialStep,
 }: {
   initialCourseId?: string;
   initialStrategyId?: string;
+  initialKnowledgePointId?: string;
   initialStep?: number;
 }) {
   const router = useRouter();
@@ -89,7 +92,7 @@ export function CreateExecutionPlanPage({
   const [endDate, setEndDate] = useState("");
   const [targetScope, setTargetScope] = useState<"whole_class" | "student_group" | "custom_students">("whole_class");
   const [targetStudentIds, setTargetStudentIds] = useState<string[]>([]);
-  const [knowledgePointIds, setKnowledgePointIds] = useState<string[]>([]);
+  const [knowledgePointIds, setKnowledgePointIds] = useState<string[]>(initialKnowledgePointId ? [initialKnowledgePointId] : []);
   const [actions, setActions] = useState<PlanTaskType[]>(["supplementary_practice"]);
   const [resourceIds, setResourceIds] = useState<string[]>([]);
   const [weeklySessions, setWeeklySessions] = useState(2);
@@ -126,8 +129,14 @@ export function CreateExecutionPlanPage({
     expected_effect: detailStrategy.expected_effect,
     updated_at: detailStrategy.updated_at,
   } satisfies TeachingStrategyListItem : null);
-  const strategyOptions = strategies.some((strategy) => strategy.id === selectedStrategy?.id) ? strategies : selectedStrategy ? [selectedStrategy] : [];
+  const eligibleStrategies = strategies.filter((strategy) => canCreateExecutionPlan(strategy.status));
+  const strategyOptions = eligibleStrategies.some((strategy) => strategy.id === selectedStrategy?.id) ? eligibleStrategies : selectedStrategy && canCreateExecutionPlan(selectedStrategy.status) ? [selectedStrategy] : [];
+  const selectedStrategyEligible = Boolean(selectedStrategy && canCreateExecutionPlan(selectedStrategy.status));
   const allKnowledgePoints = useMemo(() => knowledgeQuery.chapters.flatMap((chapter) => chapter.knowledge_points), [knowledgeQuery.chapters]);
+  const validKnowledgePointIds = useMemo(
+    () => knowledgePointIds.filter((id) => allKnowledgePoints.some((point) => point.id === id)),
+    [allKnowledgePoints, knowledgePointIds],
+  );
   const students = studentsQuery.students;
 
   if (!courseId) return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程。" title="尚未选择课程" />;
@@ -138,11 +147,11 @@ export function CreateExecutionPlanPage({
   const canContinue = step === 1
     ? Boolean(title.trim() && startDate && endDate && startDate <= endDate && targetReady)
     : step === 2
-      ? Boolean(strategyId)
+      ? Boolean(strategyId && selectedStrategyEligible)
       : step === 3
-        ? Boolean(knowledgePointIds.length && actions.length && evaluationMetrics.length)
+        ? Boolean(validKnowledgePointIds.length && actions.length && evaluationMetrics.length)
         : true;
-  const canSaveDraft = Boolean(title.trim() && strategyId && startDate && endDate && startDate <= endDate && targetReady);
+  const canSaveDraft = Boolean(title.trim() && strategyId && selectedStrategyEligible && startDate && endDate && startDate <= endDate && targetReady);
 
   async function ensureDraft() {
     const payload: ExecutionPlanCreateRequest = {
@@ -153,7 +162,7 @@ export function CreateExecutionPlanPage({
       end_date: endDate,
       target_scope: targetScope,
       target_student_ids: targetStudentIds,
-      knowledge_point_ids: knowledgePointIds,
+      knowledge_point_ids: validKnowledgePointIds,
       actions,
       resource_ids: resourceIds,
       plan_parameters: { weekly_sessions: weeklySessions, exercise_count: exerciseCount, difficulty },
@@ -224,7 +233,7 @@ export function CreateExecutionPlanPage({
   }
 
   async function handlePublish() {
-    if (!planId || !weeks.length || !knowledgePointIds.length || !actions.length) {
+    if (!planId || !weeks.length || !validKnowledgePointIds.length || !actions.length) {
       setError("发布前请确认计划已保存、至少包含 1 个知识点、1 个教学行动和 1 周周计划。");
       return;
     }
@@ -280,8 +289,13 @@ export function CreateExecutionPlanPage({
 
   async function removeGeneratedTask(weekId: string, taskId: string) {
     if (!planId) return;
-    await taskMutation.mutateAsync({ planId, taskId, payload: { status: "cancelled" } });
-    setWeeks((current) => current.map((week) => week.id === weekId ? { ...week, tasks: week.tasks.filter((task) => task.id !== taskId) } : week));
+    setError(null);
+    try {
+      await taskMutation.mutateAsync({ planId, taskId, payload: { status: "cancelled" } });
+      setWeeks((current) => current.map((week) => week.id === weekId ? { ...week, tasks: week.tasks.filter((task) => task.id !== taskId) } : week));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "任务取消失败。");
+    }
   }
 
   function openTaskEditor(task: PlanTaskItem) {
@@ -328,6 +342,7 @@ export function CreateExecutionPlanPage({
 
       <PlanStepper step={step} />
       {strategiesQuery.isError && detailStrategy ? <p className="rounded-lg border border-orange-200 bg-orange-50/55 px-4 py-3 text-sm text-orange-900">策略列表暂时不可用，已从策略详情恢复当前策略，可继续完成本计划的创建。</p> : null}
+      {step === 2 && selectedStrategy && !selectedStrategyEligible ? <p className="rounded-lg border-2 border-orange-200 bg-orange-50/60 px-4 py-3 text-sm text-orange-900">当前策略状态为“{teachingStrategyStatusLabel(selectedStrategy.status)}”。请先在策略详情中采纳策略，再继续创建执行计划。</p> : null}
       {message ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</p> : null}
       {error ? <p className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error}</p> : null}
 

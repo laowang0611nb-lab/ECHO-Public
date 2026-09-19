@@ -12,7 +12,7 @@ import { LoadingState } from "@/components/common/loading-state";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,7 +25,7 @@ import {
   reviewStatusLabel,
   reviewStatusTone,
 } from "@/features/ai-review/view-model";
-import { useReviewQuery, useReviewSummary } from "@/features/ai-review/queries";
+import { useReviewInfiniteQuery, useReviewSummary } from "@/features/ai-review/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +43,7 @@ export function ReviewOverviewPage({
     ? initialCourseId
     : selectedCourseId;
   const deferredSearch = useDeferredValue(filters.search);
-  const queueQuery = useReviewQuery(courseId, {
+  const queueQuery = useReviewInfiniteQuery(courseId, {
     status: filters.status === "all" ? undefined : filters.status,
     severity: filters.severity === "all" ? undefined : filters.severity,
     reason: filters.reason === "all" ? undefined : filters.reason,
@@ -52,8 +52,8 @@ export function ReviewOverviewPage({
     limit: 100,
   });
   const summaryQuery = useReviewSummary(courseId);
-  const visibleFlags = queueQuery.data?.items ?? [];
-  const summary = summaryQuery.data ?? queueQuery.data?.summary ?? null;
+  const visibleFlags = queueQuery.data?.pages.flatMap((page) => page.items) ?? [];
+  const summary = summaryQuery.data ?? queueQuery.data?.pages[0]?.summary ?? null;
   const summaryData: ReviewFlagSummary = summary ?? {
     pending: 0,
     high_risk: 0,
@@ -87,8 +87,8 @@ export function ReviewOverviewPage({
   if (!courseId) {
     return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，AI 回答审核会基于当前课程真实数据展示。" title="尚未选择课程" />;
   }
-  if (queueQuery.isLoading || (summaryQuery.isLoading && !queueQuery.data?.summary)) return <LoadingState label="正在加载 AI 回答审核队列..." />;
-  if (queueQuery.isError || (summaryQuery.isError && !queueQuery.data?.summary)) {
+  if (queueQuery.isLoading || (summaryQuery.isLoading && !queueQuery.data?.pages[0]?.summary)) return <LoadingState label="正在加载 AI 回答审核队列..." />;
+  if (queueQuery.isError || (summaryQuery.isError && !queueQuery.data?.pages[0]?.summary)) {
     return <ErrorState description="审核队列加载失败，请确认后端服务后重试。" onRetry={() => { void queueQuery.refetch(); void summaryQuery.refetch(); }} />;
   }
 
@@ -212,7 +212,7 @@ export function ReviewOverviewPage({
               />
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>显示 {visibleFlags.length} / {queueQuery.data?.total ?? 0} 条</span>
+              <span>显示 {visibleFlags.length} / {queueQuery.data?.pages[0]?.total ?? 0} 条</span>
               <span>·</span>
               <span>待审核 {summaryData.pending}</span>
               <span>·</span>
@@ -247,6 +247,13 @@ export function ReviewOverviewPage({
             </Link>
           )) : <EmptyState description="调整筛选条件，或等待新的风险回答进入队列。" title="当前筛选下没有审核记录" />}
         </CardContent>
+        {queueQuery.hasNextPage ? (
+          <div className="border-t border-border px-5 py-4 text-center">
+            <Button onClick={() => void queueQuery.fetchNextPage()} type="button" variant="outline">
+              {queueQuery.isFetchingNextPage ? "正在加载..." : "加载更多审核记录"}
+            </Button>
+          </div>
+        ) : null}
       </Card>
     </div>
   );

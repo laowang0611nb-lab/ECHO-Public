@@ -42,10 +42,12 @@ const tabs = [
 export function StudentLearningPage({
   initialCourseId,
   initialListQuery,
+  initialKnowledgePointId,
   initialTab,
 }: {
   initialCourseId?: string;
   initialListQuery: StudentListQuery;
+  initialKnowledgePointId?: string;
   initialTab: StudentAnalyticsTab;
 }) {
   const router = useRouter();
@@ -56,6 +58,7 @@ export function StudentLearningPage({
   const [activityFilter, setActivityFilter] = useState<StudentListActivityFilter>(initialListQuery.activity);
   const [riskFilter, setRiskFilter] = useState<StudentListRiskFilter>(initialListQuery.risk);
   const [sort, setSort] = useState<StudentListSort>(initialListQuery.sort);
+  const [knowledgePointId, setKnowledgePointId] = useState<string | null>(initialKnowledgePointId ?? null);
   const courseId = initialCourseId && courses.some((course) => course.id === initialCourseId)
     ? initialCourseId
     : selectedCourseId;
@@ -71,11 +74,13 @@ export function StudentLearningPage({
       const matchesActivity = activityFilter === "all"
         || (activityFilter === "recent" ? item.activeRecently : !item.activeRecently);
       const needsAttention = item.status === "attention" || item.status === "risk" || Boolean(item.riskReason);
+      const matchesKnowledgePoint = !knowledgePointId
+        || Boolean(item.detail?.mastery_states.some((state) => state.knowledge_point_id === knowledgePointId));
       const matchesRisk = riskFilter === "all"
         || (riskFilter === "needs_attention" && needsAttention)
         || (riskFilter === "high" && item.status === "risk")
         || (riskFilter === "none" && !needsAttention);
-      return matchesSearch && matchesStatus && matchesActivity && matchesRisk;
+      return matchesSearch && matchesStatus && matchesActivity && matchesRisk && matchesKnowledgePoint;
     });
 
     return [...items].sort((a, b) => {
@@ -86,7 +91,7 @@ export function StudentLearningPage({
       const right = b.latestEvidence ? new Date(b.latestEvidence.created_at).getTime() : 0;
       return right - left || a.member.display_name.localeCompare(b.member.display_name, "zh-Hans-CN");
     });
-  }, [activityFilter, data.items, riskFilter, search, sort, statusFilter]);
+  }, [activityFilter, data.items, knowledgePointId, riskFilter, search, sort, statusFilter]);
 
   function replaceQuery(patch: Partial<StudentListQuery> & { courseId?: string | null; tab?: StudentAnalyticsTab }) {
     const next = {
@@ -95,12 +100,15 @@ export function StudentLearningPage({
       activity: patch.activity ?? activityFilter,
       risk: patch.risk ?? riskFilter,
       sort: patch.sort ?? sort,
+      knowledgePointId: patch.courseId ? null : (patch.knowledgePointId === undefined ? knowledgePointId : patch.knowledgePointId),
     };
     if (patch.search !== undefined) setSearch(patch.search);
     if (patch.status !== undefined) setStatusFilter(patch.status);
     if (patch.activity !== undefined) setActivityFilter(patch.activity);
     if (patch.risk !== undefined) setRiskFilter(patch.risk);
     if (patch.sort !== undefined) setSort(patch.sort);
+    if (patch.courseId) setKnowledgePointId(null);
+    if (patch.knowledgePointId !== undefined) setKnowledgePointId(patch.knowledgePointId);
 
     const nextCourseId = patch.courseId === undefined ? courseId : patch.courseId;
     const params = new URLSearchParams();
@@ -111,6 +119,7 @@ export function StudentLearningPage({
     if (next.activity !== "all") params.set("activity", next.activity);
     if (next.risk !== "all") params.set("risk", next.risk);
     if (next.sort !== "recent") params.set("sort", next.sort);
+    if (next.knowledgePointId) params.set("knowledgePointId", next.knowledgePointId);
     router.replace(`/students?${params.toString()}`, { scroll: false });
   }
 
@@ -166,9 +175,10 @@ export function StudentLearningPage({
                   </div>
                   <div className="flex items-center justify-between gap-3 lg:justify-end">
                     <span className="text-xs text-muted-foreground">显示 {filteredItems.length} / {data.items.length} 名学生</span>
+                    {knowledgePointId ? <button className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs text-blue-800" onClick={() => replaceQuery({ knowledgePointId: null })} type="button">已按知识点筛选 <X className="size-3" /></button> : null}
                     <Button
-                      disabled={!search && statusFilter === "all" && activityFilter === "all" && riskFilter === "all" && sort === "recent"}
-                      onClick={() => replaceQuery({ search: "", status: "all", activity: "all", risk: "all", sort: "recent" })}
+                      disabled={!search && statusFilter === "all" && activityFilter === "all" && riskFilter === "all" && sort === "recent" && !knowledgePointId}
+                      onClick={() => replaceQuery({ search: "", status: "all", activity: "all", risk: "all", sort: "recent", knowledgePointId: null })}
                       size="sm"
                       type="button"
                       variant="ghost"

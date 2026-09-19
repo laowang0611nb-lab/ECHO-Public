@@ -134,6 +134,11 @@ export function CourseManagementPage() {
         />
       </motion.div>
 
+      {publishMutation.isError || restoreMutation.isError ? (
+        <p className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {(publishMutation.error ?? restoreMutation.error) instanceof Error ? (publishMutation.error ?? restoreMutation.error)?.message : "课程状态更新失败。"}
+        </p>
+      ) : null}
       {!items.length ? (
         <motion.div variants={itemVariants}>
           <EmptyState

@@ -110,8 +110,12 @@ export function ExecutionPlanDetailPage({
 
   async function confirmAction() {
     if (!pendingAction) return;
-    await actionMutation.mutateAsync({ planId, action: pendingAction });
-    setPendingAction(null);
+    try {
+      await actionMutation.mutateAsync({ planId, action: pendingAction });
+      setPendingAction(null);
+    } catch {
+      // Mutation state renders the backend error.
+    }
   }
 
   function handleTabChange(value: string) {

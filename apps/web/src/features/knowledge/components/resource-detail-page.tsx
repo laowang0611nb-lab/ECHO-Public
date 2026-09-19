@@ -518,7 +518,7 @@ function OverviewTab({ resource }: { resource: NonNullable<ReturnType<typeof use
           </div>
           <p>{resource.document.summary || "当前资源尚未填写摘要。"}</p>
           {resource.document.keywords.length ? <div className="flex flex-wrap gap-2">{resource.document.keywords.map((keyword) => <span className="inline-flex items-center gap-1 rounded-full border-2 border-blue-100 bg-blue-50 px-2.5 py-1 text-xs text-blue-900" key={keyword}><Tag className="size-3" />{keyword}</span>)}</div> : <p>当前资源尚未填写关键词。</p>}
-          <p>当前版本暂不支持替换已解析文件。如需更新教材，请上传一份新资源，避免覆盖已有章节、引用和学习证据。</p>
+          <p>文件更新采用“上传新版本”流程：新资源解析完成后由教师确认，旧资源和历史引用继续保留。</p>
           <p>已有解析结果包含 {resource.chapters.length} 个章节、{resource.knowledgePointCount} 个知识点，最后章节为“{lastChapter?.title ?? "暂无"}”。</p>
         </CardContent>
       </Card>
@@ -593,8 +593,13 @@ function ResourceFileButton({ courseId, documentId, fileName }: { courseId: stri
   useEffect(() => () => {
     if (url) URL.revokeObjectURL(url);
   }, [url]);
-  if (fileQuery.isError) return <span className={buttonVariants({ variant: "outline" })}><Download data-icon="inline-start" />文件不可用</span>;
-  return <a className={buttonVariants({ variant: "outline" })} download={fileName} href={url ?? undefined}><Download data-icon="inline-start" />{fileQuery.isLoading ? "加载文件..." : "打开 PDF"}</a>;
+  if (fileQuery.isError) {
+    return <Button disabled type="button" variant="outline"><Download data-icon="inline-start" />文件读取失败</Button>;
+  }
+  if (!url) {
+    return <Button disabled type="button" variant="outline"><Download data-icon="inline-start" />正在加载文件...</Button>;
+  }
+  return <a className={buttonVariants({ variant: "outline" })} download={fileName} href={url}><Download data-icon="inline-start" />打开 PDF</a>;
 }
 
 function RelatedResources({ course }: { course: { id: string; name: string } }) {

@@ -22,6 +22,10 @@ export default async function KnowledgePointPage({
     courseId?: string | string[];
     resourceId?: string | string[];
     tab?: string | string[];
+    reviewId?: string | string[];
+    conversationId?: string | string[];
+    messageId?: string | string[];
+    studentId?: string | string[];
   }>;
 }) {
   const { knowledgePointId } = await params;
@@ -29,6 +33,10 @@ export default async function KnowledgePointPage({
   return (
     <KnowledgePointDetailPage
       courseId={first(query.courseId)}
+      conversationId={first(query.conversationId)}
+      messageId={first(query.messageId)}
+      reviewId={first(query.reviewId)}
+      studentId={first(query.studentId)}
       from={first(query.from) ?? "knowledge"}
       initialTab={normalizeTab(query.tab)}
       pointId={knowledgePointId}

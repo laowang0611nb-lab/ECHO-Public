@@ -1,4 +1,4 @@
-import type { Chapter } from "@echo/shared-types";
+import type { Chapter, KnowledgeGraph } from "@echo/shared-types";
 import { BookOpen, GitBranch, Layers3, Network, Sparkles } from "lucide-react";
 import Link from "next/link";
 
@@ -19,13 +19,13 @@ export function KnowledgeGraphPreview({
   courseName,
   chapters,
   compact = false,
-  relationCount,
+  graph,
 }: {
   courseId: string;
   courseName: string;
   chapters: Chapter[];
   compact?: boolean;
-  relationCount?: number;
+  graph?: KnowledgeGraph;
 }) {
   const visibleChapters = compact ? chapters.slice(0, 3) : chapters.slice(0, 9);
   const totalPoints = chapters.reduce((total, chapter) => total + chapter.knowledge_points.length, 0);
@@ -48,7 +48,7 @@ export function KnowledgeGraphPreview({
         <div className="grid grid-cols-3 gap-3">
           <GraphMetric icon={Network} label="章节" value={0} />
           <GraphMetric icon={Layers3} label="知识点" value={0} />
-          <GraphMetric icon={GitBranch} label="知识关联" value="待接口" />
+          <GraphMetric icon={GitBranch} label="知识关联" value={graph?.edges.length ?? 0} />
         </div>
       </div>
     );
@@ -113,17 +113,31 @@ export function KnowledgeGraphPreview({
         </div>
       </div>
 
+      {graph?.edges.length ? (
+        <div className="rounded-lg border-2 border-border bg-card px-4 py-4">
+          <p className="text-xs font-semibold text-muted-foreground">知识关系</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {graph.edges.slice(0, 6).map((edge) => {
+              const source = graph.nodes.find((node) => node.id === edge.source)?.label ?? edge.source.slice(0, 8);
+              const target = graph.nodes.find((node) => node.id === edge.target)?.label ?? edge.target.slice(0, 8);
+              const relation = edge.type === "prerequisite" ? "前置" : edge.type === "related" ? "相关" : edge.type === "assessed_by" ? "评估" : edge.type === "sourced_from" ? "来源" : "包含";
+              return <p className="truncate rounded-md bg-muted/45 px-3 py-2 text-xs" key={edge.id}>{source} → {target} · {relation}</p>;
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-3 gap-3">
         <GraphMetric icon={Network} label="章节" value={chapters.length} />
         <GraphMetric icon={Layers3} label="知识点" value={totalPoints} />
-        <GraphMetric icon={GitBranch} label="知识关联" value={relationCount ?? "待接口"} />
+        <GraphMetric icon={GitBranch} label="知识关联" value={graph?.edges.length ?? 0} />
       </div>
 
       {!compact ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <BookOpen className="size-4 text-primary" />
-            当前展示真实章节、知识点和 {relationCount ?? 0} 条后端知识关系。
+            当前展示真实章节、知识点和 {graph?.edges.length ?? 0} 条后端知识关系。
           </p>
           <Link className={buttonVariants({ variant: "outline", size: "sm" })} href={`/knowledge?courseId=${courseId}&tab=resources`}>
             返回资源管理

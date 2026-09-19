@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTeachingStrategies, useGenerateTeachingStrategy, useTeachingStrategyAction } from "@/features/teaching-strategies/queries";
 import { useExecutionPlans } from "@/features/execution-plans/queries";
+import { canCreateExecutionPlan } from "@/features/teaching-strategies/view-model";
 import { useTeacherDashboardOverview } from "@/features/dashboard/queries";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
@@ -59,7 +60,7 @@ export function TeachingStrategiesPage({
     type: type === "all" ? undefined : type,
     limit: 100,
   });
-  const plansQuery = useExecutionPlans(courseId, { limit: 3 });
+  const plansQuery = useExecutionPlans(courseId, { limit: 100 });
   const dashboardQuery = useTeacherDashboardOverview(user?.id, courseId);
   const studentsQuery = useStudentAnalytics(courseId);
   const generateMutation = useGenerateTeachingStrategy(courseId);
@@ -68,6 +69,8 @@ export function TeachingStrategiesPage({
   const plans = plansQuery.data?.items ?? [];
   const focusAreas = dashboardQuery.data?.learning_difficulties ?? [];
   const activeStudents = studentsQuery.items.filter((item) => item.activeRecently);
+  const plannableStrategies = strategies.filter((strategy) => canCreateExecutionPlan(strategy.status));
+  const planSource = plannableStrategies[0] ?? null;
 
   const stats = {
     total: strategiesQuery.data?.total ?? strategies.length,
@@ -79,30 +82,38 @@ export function TeachingStrategiesPage({
   if (!courseId) {
     return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，再生成教学策略。" title="尚未选择课程" />;
   }
-  if (strategiesQuery.isLoading || plansQuery.isLoading || dashboardQuery.isLoading) {
+  if (strategiesQuery.isLoading || plansQuery.isLoading || dashboardQuery.isLoading || studentsQuery.isLoading) {
     return <LoadingState label="正在加载教学策略..." />;
   }
-  if (strategiesQuery.isError || plansQuery.isError || dashboardQuery.isError) {
-    return <ErrorState description="教学策略加载失败，请确认后端服务后重试。" onRetry={() => { void strategiesQuery.refetch(); void plansQuery.refetch(); void dashboardQuery.refetch(); }} />;
+  if (strategiesQuery.isError || plansQuery.isError || dashboardQuery.isError || studentsQuery.isError) {
+    return <ErrorState description="教学策略加载失败，请确认后端服务后重试。" onRetry={() => { void strategiesQuery.refetch(); void plansQuery.refetch(); void dashboardQuery.refetch(); studentsQuery.refetch(); }} />;
   }
 
   async function handleGenerate() {
-    const knowledgePointIds = [...new Set([
-      ...(initialKnowledgePointId ? [initialKnowledgePointId] : []),
-      ...focusAreas.map((item) => item.knowledge_point_id),
-    ])].slice(0, 5);
-    const studentIds = activeStudents.slice(0, 20).map((item) => item.member.user_id);
-    const generated = await generateMutation.mutateAsync({
-      knowledgePointIds,
-      studentIds,
-      insightIds: initialSuggestionId ? [initialSuggestionId] : [],
-      timeRangeDays: 28,
-    });
-    router.push(`/teaching-strategies/${generated.id}`);
+    try {
+      const knowledgePointIds = [...new Set([
+        ...(initialKnowledgePointId ? [initialKnowledgePointId] : []),
+        ...focusAreas.map((item) => item.knowledge_point_id),
+      ])].slice(0, 5);
+      const studentIds = activeStudents.slice(0, 20).map((item) => item.member.user_id);
+      const generated = await generateMutation.mutateAsync({
+        knowledgePointIds,
+        studentIds,
+        insightIds: initialSuggestionId ? [initialSuggestionId] : [],
+        timeRangeDays: 28,
+      });
+      router.push(`/teaching-strategies/${generated.id}`);
+    } catch {
+      // Mutation state renders the backend error.
+    }
   }
 
   async function handleAccept(strategy: TeachingStrategyListItem) {
-    await actionMutation.mutateAsync({ strategyId: strategy.id, action: "accept" });
+    try {
+      await actionMutation.mutateAsync({ strategyId: strategy.id, action: "accept" });
+    } catch {
+      // Mutation state renders the backend error.
+    }
   }
 
   return (
@@ -144,6 +155,7 @@ export function TeachingStrategiesPage({
         </div>
       ) : null}
       {generateMutation.isError ? <p className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{generateMutation.error instanceof Error ? generateMutation.error.message : "策略生成失败。"}</p> : null}
+      {actionMutation.isError ? <p className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{actionMutation.error instanceof Error ? actionMutation.error.message : "策略状态更新失败。"}</p> : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Target} label="策略建议总数" supporting="当前筛选范围内" value={stats.total} />
@@ -239,13 +251,17 @@ export function TeachingStrategiesPage({
         <CardHeader className="px-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><CardTitle>教学策略执行计划</CardTitle><p className="mt-1 text-xs text-muted-foreground">把已采纳策略转成具体教学行动。</p></div>
-            <Link className={buttonVariants()} href={strategies[0] ? `/execution-plans/new?strategyId=${strategies[0].id}&courseId=${courseId}` : "/teaching-strategies"}>
-              <Plus data-icon="inline-start" />创建执行计划
-            </Link>
+            {planSource ? (
+              <Link className={buttonVariants()} href={`/execution-plans/new?strategyId=${planSource.id}&courseId=${courseId}`}>
+                <Plus data-icon="inline-start" />创建执行计划
+              </Link>
+            ) : (
+              <Button disabled type="button" variant="outline"><Plus data-icon="inline-start" />先采纳策略</Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="grid gap-3 px-5 md:grid-cols-3">
-          {plans.length ? plans.map((plan) => (
+          {plans.length ? plans.slice(0, 3).map((plan) => (
             <Link className="rounded-xl border-2 border-border px-4 py-4 transition-colors hover:border-primary/35" href={`/execution-plans/${plan.id}`} key={plan.id}>
               <div className="flex items-center justify-between gap-3"><p className="truncate text-sm font-semibold">{plan.title}</p><StatusBadge tone={plan.status === "active" ? "success" : plan.status === "draft" ? "neutral" : "info"}>{planStatusLabel(plan.status)}</StatusBadge></div>
               <p className="mt-2 text-xs text-muted-foreground">{plan.start_date} → {plan.end_date}</p>

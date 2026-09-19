@@ -83,9 +83,19 @@ export function SourceViewerPage({
           <>
             <Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>
             <Link className={buttonVariants({ variant: "outline" })} href={buildResourceHref(resourceId, { from: "source", courseId: data.course.id })}>资源详情</Link>
-            <a className={buttonVariants({ variant: "outline" })} download={resource.document.original_name} href={fileUrl ?? undefined}>
-              <Download data-icon="inline-start" />打开 PDF
-            </a>
+            {fileBlobQuery.isError ? (
+              <Button onClick={() => void fileBlobQuery.refetch()} type="button" variant="outline">
+                <Download data-icon="inline-start" />重试读取 PDF
+              </Button>
+            ) : fileUrl ? (
+              <a className={buttonVariants({ variant: "outline" })} download={resource.document.original_name} href={fileUrl}>
+                <Download data-icon="inline-start" />打开 PDF
+              </a>
+            ) : (
+              <Button disabled type="button" variant="outline">
+                <Download data-icon="inline-start" />正在加载 PDF...
+              </Button>
+            )}
           </>
         }
         breadcrumbs={breadcrumbs}

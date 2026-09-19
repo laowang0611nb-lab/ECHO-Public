@@ -239,7 +239,7 @@ export function CourseSettingsTab({ course }: { course: Course }) {
             <p>归档后课程状态变为“已归档”，可从课程管理的“已归档”列表恢复为草稿。</p>
           </div>
           <Dialog onOpenChange={setArchiveOpen} open={archiveOpen}>
-            <DialogTrigger render={<Button type="button" variant="destructive" />}>
+            <DialogTrigger render={<Button disabled={course.status === "archived"} type="button" variant="destructive" />}>
               <Archive data-icon="inline-start" />
               归档课程
             </DialogTrigger>

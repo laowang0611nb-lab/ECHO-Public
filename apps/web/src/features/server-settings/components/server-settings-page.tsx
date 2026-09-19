@@ -224,7 +224,7 @@ function AITab({ system }: { system: SystemStatusResponse }) {
       <Card className="gap-4 py-5">
         <CardHeader className="px-5"><CardTitle>比赛稳定性</CardTitle></CardHeader>
         <CardContent className="space-y-3 px-5 text-sm leading-6 text-muted-foreground">
-          <p>实时模式直接调用真实 Qwen；稳定模式使用 Demo 预置数据，并在页面中明确标记“演示数据”。</p>
+          <p>Demo 场景优先使用隔离的预置数据；页面上的 AI 生成动作仍按当前服务配置调用 Qwen，模式选择只组织演示路径。</p>
           <p>API Key 只保留在后端环境变量中，教师 Web 与学生端都不会保存明文密钥。</p>
         </CardContent>
       </Card>

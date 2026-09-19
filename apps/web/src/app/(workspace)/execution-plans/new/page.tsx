@@ -15,6 +15,7 @@ export default async function NewExecutionPlanRoute({
   searchParams: Promise<{
     courseId?: string | string[];
     strategyId?: string | string[];
+    knowledgePointId?: string | string[];
     step?: string | string[];
   }>;
 }) {
@@ -23,6 +24,7 @@ export default async function NewExecutionPlanRoute({
   return (
     <CreateExecutionPlanPage
       initialCourseId={first(query.courseId)}
+      initialKnowledgePointId={first(query.knowledgePointId)}
       initialStep={normalizeStep(query.step)}
       initialStrategyId={first(query.strategyId)}
     />

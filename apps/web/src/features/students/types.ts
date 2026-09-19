@@ -46,6 +46,7 @@ export interface StudentListQuery {
   activity: StudentListActivityFilter;
   risk: StudentListRiskFilter;
   sort: StudentListSort;
+  knowledgePointId?: string | null;
 }
 
 export interface StudentAnalyticsItem {

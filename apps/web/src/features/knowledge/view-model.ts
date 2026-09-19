@@ -3,6 +3,17 @@ import type { Chapter, Course, CourseDocument } from "@echo/shared-types";
 import type { KnowledgeResourceView } from "@/features/knowledge/types";
 
 export function inferResourceKind(document: CourseDocument) {
+  const labels: Record<CourseDocument["resource_type"], string> = {
+    textbook: "教材文档",
+    outline: "教学大纲",
+    question_bank: "题库",
+    code_example: "代码示例",
+    lab: "实验资料",
+    external_link: "外部链接",
+  };
+  if (document.resource_type && document.resource_type in labels) {
+    return labels[document.resource_type];
+  }
   const name = document.original_name.toLowerCase();
   if (name.includes("大纲")) return "教学大纲";
   if (name.includes("题") || name.includes("exam") || name.includes("quiz")) return "题库";
@@ -62,7 +73,7 @@ export function resourcePageCount(document: CourseDocument) {
 
 export function buildPointHref(
   pointId: string,
-  options: { from?: string; courseId?: string; resourceId?: string; tab?: string; studentId?: string } = {},
+  options: { from?: string; courseId?: string; resourceId?: string; tab?: string; studentId?: string; reviewId?: string; conversationId?: string; messageId?: string } = {},
 ) {
   const params = new URLSearchParams();
   params.set("from", options.from || "knowledge");
@@ -70,6 +81,9 @@ export function buildPointHref(
   if (options.resourceId) params.set("resourceId", options.resourceId);
   if (options.tab) params.set("tab", options.tab);
   if (options.studentId) params.set("studentId", options.studentId);
+  if (options.reviewId) params.set("reviewId", options.reviewId);
+  if (options.conversationId) params.set("conversationId", options.conversationId);
+  if (options.messageId) params.set("messageId", options.messageId);
   return `/knowledge/points/${pointId}?${params.toString()}`;
 }
 

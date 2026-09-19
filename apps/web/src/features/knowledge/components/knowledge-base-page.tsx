@@ -1,11 +1,11 @@
 "use client";
+import type { ResourceType } from "@echo/shared-types";
 import type { KnowledgeBaseTab, KnowledgeResourceView } from "@/features/knowledge/types";
 import {
   BookOpen,
   FileCheck2,
   FileClock,
   FileText,
-  ExternalLink,
   Layers3,
   Plus,
   RotateCcw,
@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KnowledgeGraphPreview } from "@/features/knowledge/components/knowledge-graph-preview";
+import { ExternalResourcesTab, QuestionItemsTab } from "@/features/knowledge/components/resource-management-tabs";
 import { ResourceKindIcon } from "@/features/knowledge/components/resource-kind-icon";
 import { knowledgeQueryKeys, useExternalResources, useKnowledgeBaseData, useKnowledgeGraph, useQuestionItems, useTrashedResources } from "@/features/knowledge/queries";
 import { buildResourceHref, summarizeKnowledgeBase } from "@/features/knowledge/view-model";
@@ -39,6 +40,13 @@ import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 import { cn } from "@/lib/utils";
 
+const resourceTypeOptions: Array<{ value: ResourceType; label: string }> = [
+  { value: "textbook", label: "教材文档" },
+  { value: "outline", label: "教学大纲" },
+  { value: "question_bank", label: "题库" },
+  { value: "code_example", label: "代码示例" },
+  { value: "lab", label: "实验资料" },
+];
 const tabs = [
   { value: "resources", label: "资源管理" },
   { value: "graph", label: "知识图谱" },
@@ -62,6 +70,7 @@ export function KnowledgeBasePage({
   const [activeTab, setActiveTab] = useState<KnowledgeBaseTab>(initialTab);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "ready" | "failed">("all");
+  const [uploadResourceType, setUploadResourceType] = useState<ResourceType>("textbook");
   const fileRef = useRef<HTMLInputElement>(null);
   const courseId = initialCourseId && courses.some((course) => course.id === initialCourseId)
     ? initialCourseId
@@ -80,7 +89,7 @@ export function KnowledgeBasePage({
   }, [courseId, selectedCourseId, setSelectedCourseId]);
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => apiClient.uploadCourseDocument(user!.id, courseId!, file, file.name),
+    mutationFn: (file: File) => apiClient.uploadCourseDocument(user!.id, courseId!, file, file.name, uploadResourceType),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.resources(user!.id, courseId!) });
       void queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.chapters(user!.id, courseId!) });
@@ -150,6 +159,14 @@ export function KnowledgeBasePage({
               ref={fileRef}
               type="file"
             />
+            <Select
+              items={resourceTypeOptions}
+              onValueChange={(value) => value && setUploadResourceType(value as ResourceType)}
+              value={uploadResourceType}
+            >
+              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectGroup>{resourceTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
+            </Select>
             <Button disabled={uploadMutation.isPending} onClick={() => fileRef.current?.click()} type="button">
               <Plus data-icon="inline-start" />
               {uploadMutation.isPending ? "正在上传..." : "上传资源"}
@@ -240,7 +257,7 @@ export function KnowledgeBasePage({
                       <p className="text-xs text-muted-foreground">当前由真实章节和知识点生成。</p>
                     </CardHeader>
                     <CardContent className="px-5">
-                      <KnowledgeGraphPreview chapters={data.chapters} compact courseId={courseId} courseName={course?.name ?? "课程"} relationCount={graphQuery.data?.edges.length} />
+                      <KnowledgeGraphPreview chapters={data.chapters} compact courseId={courseId} courseName={course?.name ?? "课程"} graph={graphQuery.data} />
                     </CardContent>
                   </Card>
                   <RecentUploads courseId={courseId} resources={data.resources} />
@@ -253,10 +270,10 @@ export function KnowledgeBasePage({
             <Card className="gap-5 py-5">
               <CardHeader className="px-5">
                 <CardTitle>课程知识图谱预览</CardTitle>
-                <p className="text-sm text-muted-foreground">跨知识点关系接口需求已登记，当前展示真实章节结构和知识点数量。</p>
+                <p className="text-sm text-muted-foreground">来自真实知识关系接口，当前同时展示章节层级、知识点和已存在的关系数量。</p>
               </CardHeader>
               <CardContent className="px-5">
-                <KnowledgeGraphPreview chapters={data.chapters} courseId={courseId} courseName={course?.name ?? "课程"} relationCount={graphQuery.data?.edges.length} />
+                <KnowledgeGraphPreview chapters={data.chapters} courseId={courseId} courseName={course?.name ?? "课程"} graph={graphQuery.data} />
               </CardContent>
             </Card>
           ) : null}
@@ -266,38 +283,22 @@ export function KnowledgeBasePage({
               <Card className="gap-0 overflow-hidden py-0">
                 <CardHeader className="border-b px-5 py-4">
                   <CardTitle>教材与大纲</CardTitle>
-                  <p className="text-xs text-muted-foreground">当前后端只支持 PDF 资源；类型来自文件名识别。</p>
+                  <p className="text-xs text-muted-foreground">当前后端支持 PDF；资源类型优先使用正式 resource_type，旧数据再按文件名回退。</p>
                 </CardHeader>
                 <CardContent className="divide-y divide-border px-0">
-                  {data.resources.map((resource) => <ResourceRow courseId={courseId} key={resource.document.id} resource={resource} />)}
+                  {data.resources.filter((resource) => resource.document.resource_type === "textbook" || resource.document.resource_type === "outline").map((resource) => <ResourceRow courseId={courseId} key={resource.document.id} resource={resource} />)}
                 </CardContent>
               </Card>
             ) : <EmptyState description="上传教材或教学大纲后，这里会显示正式知识来源。" title="暂无教材与大纲" />
           ) : null}
 
-          {activeTab === "examples" ? <QuestionItemsTab query={questionItemsQuery} /> : null}
-          {activeTab === "external" ? <ExternalResourcesTab query={externalResourcesQuery} /> : null}
+          {activeTab === "examples" ? <QuestionItemsTab chapters={data.chapters} courseId={courseId} query={questionItemsQuery} /> : null}
+          {activeTab === "external" ? <ExternalResourcesTab chapters={data.chapters} courseId={courseId} query={externalResourcesQuery} /> : null}
           {activeTab === "recycle" ? <ResourceTrashTab query={trashedResourcesQuery} courseId={courseId} onChanged={data.refetch} /> : null}
         </TabsContent>
       </Tabs>
     </motion.div>
   );
-}
-
-function QuestionItemsTab({ query }: { query: ReturnType<typeof useQuestionItems> }) {
-  if (query.isLoading) return <LoadingState label="正在加载示例与习题..." />;
-  if (query.isError) return <ErrorState description="示例与习题加载失败。" onRetry={() => void query.refetch()} />;
-  const items = query.data?.items ?? [];
-  if (!items.length) return <EmptyState description="当前课程还没有题库、代码示例或实验题目。" title="暂无示例与习题数据" />;
-  return <div className="grid gap-3 xl:grid-cols-2">{items.map((item) => <Card className="gap-3 py-5" key={item.id}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle>{item.title}</CardTitle><div className="flex gap-2"><StatusBadge tone="info">{questionTypeLabel(item.type)}</StatusBadge><StatusBadge tone={item.difficulty === "hard" ? "danger" : item.difficulty === "medium" ? "warning" : "success"}>{questionDifficultyLabel(item.difficulty)}</StatusBadge></div></div></CardHeader><CardContent className="space-y-2 px-5 text-sm leading-6"><p className="line-clamp-4 whitespace-pre-wrap">{item.content}</p><p className="text-xs text-muted-foreground">关联知识点 {item.knowledge_point_ids.length} 个{item.source_page ? ` · 来源第 ${item.source_page} 页` : ""}</p></CardContent></Card>)}</div>;
-}
-
-function ExternalResourcesTab({ query }: { query: ReturnType<typeof useExternalResources> }) {
-  if (query.isLoading) return <LoadingState label="正在加载外部资源..." />;
-  if (query.isError) return <ErrorState description="外部资源加载失败。" onRetry={() => void query.refetch()} />;
-  const items = query.data?.items ?? [];
-  if (!items.length) return <EmptyState description="当前课程还没有登记外部链接或平台资源。" title="暂无外部资源" />;
-  return <div className="grid gap-3">{items.map((item) => <Card className="gap-3 py-5" key={item.id}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><CardTitle className="truncate">{item.title}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{item.provider || "外部来源"} · {item.last_verified_at ? `校验于 ${item.last_verified_at.slice(0, 10)}` : "尚未校验"}</p></div><StatusBadge tone={externalStatusTone(item.check_status)}>{externalStatusLabel(item.check_status)}</StatusBadge></div></CardHeader><CardContent className="flex flex-wrap items-center justify-between gap-3 px-5 text-sm"><p className="min-w-0 flex-1 text-muted-foreground">{item.description || "暂无描述"}</p><a className={buttonVariants({ size: "sm", variant: "outline" })} href={item.url} rel="noreferrer" target="_blank"><ExternalLink data-icon="inline-start" />打开链接</a></CardContent></Card>)}</div>;
 }
 
 function ResourceTrashTab({ query, courseId, onChanged }: { query: ReturnType<typeof useTrashedResources>; courseId: string; onChanged: () => void }) {
@@ -315,33 +316,20 @@ function ResourceTrashTab({ query, courseId, onChanged }: { query: ReturnType<ty
   if (query.isError) return <ErrorState description="回收站加载失败。" onRetry={() => void query.refetch()} />;
   const items = query.data?.items ?? [];
   if (!items.length) return <EmptyState description="当前课程没有已删除的资源、章节、知识点、习题或外部链接。" title="回收站为空" />;
-  return <div className="grid gap-3">{items.map((item) => <Card className="gap-3 py-5" key={`${item.item_type}-${item.id}`}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>{item.title}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{resourceItemTypeLabel(item.item_type)} · 删除于 {item.trashed_at?.slice(0, 16).replace("T", " ") ?? "未知时间"}</p></div><div className="flex gap-2"><Button disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate(item.id)} size="sm" type="button" variant="outline"><RotateCcw data-icon="inline-start" />恢复</Button><Button disabled={deleteMutation.isPending} onClick={() => { if (window.confirm("永久删除后无法恢复，确定继续吗？")) deleteMutation.mutate(item.id); }} size="sm" type="button" variant="destructive"><Trash2 data-icon="inline-start" />永久删除</Button></div></div></CardHeader></Card>)}</div>;
-}
-
-function externalStatusLabel(status: "unchecked" | "valid" | "invalid" | "unknown") {
-  return { unchecked: "未校验", valid: "链接有效", invalid: "链接失效", unknown: "状态未知" }[status];
-}
-
-function externalStatusTone(status: "unchecked" | "valid" | "invalid" | "unknown") {
-  if (status === "valid") return "success" as const;
-  if (status === "invalid") return "danger" as const;
-  return "neutral" as const;
-}
-
-function questionTypeLabel(type: string) {
-  const labels: Record<string, string> = { single_choice: "单选", multiple_choice: "多选", true_false: "判断", short_answer: "简答", coding: "编程", experiment: "实验" };
-  return labels[type] ?? type;
-}
-
-function questionDifficultyLabel(difficulty: string) {
-  return { easy: "基础", medium: "中等", hard: "困难" }[difficulty] ?? difficulty;
+  return <div className="space-y-3">
+    {restoreMutation.isError || deleteMutation.isError ? (
+      <p className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        {(restoreMutation.error ?? deleteMutation.error) instanceof Error ? (restoreMutation.error ?? deleteMutation.error)?.message : "回收站操作失败。"}
+      </p>
+    ) : null}
+    <div className="grid gap-3">{items.map((item) => <Card className="gap-3 py-5" key={`${item.item_type}-${item.id}`}><CardHeader className="px-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle>{item.title}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{resourceItemTypeLabel(item.item_type)} · 删除于 {item.trashed_at?.slice(0, 16).replace("T", " ") ?? "未知时间"}</p></div><div className="flex gap-2"><Button disabled={restoreMutation.isPending} onClick={() => restoreMutation.mutate(item.id)} size="sm" type="button" variant="outline"><RotateCcw data-icon="inline-start" />恢复</Button><Button disabled={deleteMutation.isPending} onClick={() => { if (window.confirm("永久删除后无法恢复，确定继续吗？")) deleteMutation.mutate(item.id); }} size="sm" type="button" variant="destructive"><Trash2 data-icon="inline-start" />永久删除</Button></div></div></CardHeader></Card>)}</div>
+  </div>;
 }
 
 function resourceItemTypeLabel(type: string) {
   const labels: Record<string, string> = { document: "文档", chapter: "章节", knowledge_point: "知识点", question_item: "习题", external_resource: "外部资源" };
   return labels[type] ?? type;
 }
-
 function ResourceStats({ summary }: { summary: ReturnType<typeof summarizeKnowledgeBase> }) {
   const items = [
     { label: "资源总数", value: summary.total, icon: FileText, tone: "text-primary" },

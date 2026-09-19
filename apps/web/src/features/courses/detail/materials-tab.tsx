@@ -1,15 +1,16 @@
 "use client";
 
-import type { CourseDocument } from "@echo/shared-types";
+import type { CourseDocument, ResourceType } from "@echo/shared-types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, FileText, Upload } from "lucide-react";
 import Link from "next/link";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -23,12 +24,24 @@ import { formatBytes, formatDate } from "@/features/courses/detail/utils";
 import { apiClient } from "@/lib/api";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
+const resourceTypeOptions: Array<{ value: ResourceType; label: string }> = [
+  { value: "textbook", label: "教材文档" },
+  { value: "outline", label: "教学大纲" },
+  { value: "question_bank", label: "题库" },
+  { value: "code_example", label: "代码示例" },
+  { value: "lab", label: "实验资料" },
+];
+
 const statusLabels: Record<CourseDocument["status"], string> = {
   uploaded: "已上传",
   parsing: "解析中",
   ready: "可用",
   failed: "失败",
 };
+
+function resourceTypeLabel(resourceType: ResourceType) {
+  return resourceTypeOptions.find((option) => option.value === resourceType)?.label ?? resourceType;
+}
 
 export function CourseMaterialsTab({
   courseId,
@@ -38,10 +51,11 @@ export function CourseMaterialsTab({
   documents: CourseDocument[];
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [resourceType, setResourceType] = useState<ResourceType>("textbook");
   const { user } = useTeacherSession();
   const queryClient = useQueryClient();
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => apiClient.uploadCourseDocument(user!.id, courseId, file, file.name),
+    mutationFn: (file: File) => apiClient.uploadCourseDocument(user!.id, courseId, file, file.name, resourceType),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: courseDetailQueryKeys.documents(user!.id, courseId),
@@ -62,18 +76,28 @@ export function CourseMaterialsTab({
           <p className="text-sm font-medium">课程资料</p>
           <p className="mt-1 text-xs text-muted-foreground">当前后端稳定支持 PDF；上传成功后会进入真实文档列表。</p>
         </div>
-        <input
-          accept=".pdf,application/pdf"
-          className="sr-only"
-          disabled={uploadMutation.isPending}
-          onChange={(event) => handleFileChange(event.target.files)}
-          ref={inputRef}
-          type="file"
-        />
-        <Button disabled={uploadMutation.isPending} onClick={() => inputRef.current?.click()} type="button">
-          <Upload data-icon="inline-start" />
-          {uploadMutation.isPending ? "正在上传..." : "上传 PDF 资料"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            accept=".pdf,application/pdf"
+            className="sr-only"
+            disabled={uploadMutation.isPending}
+            onChange={(event) => handleFileChange(event.target.files)}
+            ref={inputRef}
+            type="file"
+          />
+          <Select
+            items={resourceTypeOptions}
+            onValueChange={(value) => value && setResourceType(value as ResourceType)}
+            value={resourceType}
+          >
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectGroup>{resourceTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
+          </Select>
+          <Button disabled={uploadMutation.isPending} onClick={() => inputRef.current?.click()} type="button">
+            <Upload data-icon="inline-start" />
+            {uploadMutation.isPending ? "正在上传..." : "上传 PDF 资料"}
+          </Button>
+        </div>
       </div>
 
       {uploadMutation.isError ? (
@@ -111,7 +135,7 @@ export function CourseMaterialsTab({
                         <span className="truncate font-medium">{document.original_name}</span>
                       </span>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{document.content_type || "PDF"}</TableCell>
+                    <TableCell className="text-muted-foreground">{resourceTypeLabel(document.resource_type)}</TableCell>
                     <TableCell>{formatBytes(document.size_bytes)}</TableCell>
                     <TableCell>
                       <StatusBadge tone={document.status === "ready" || document.status === "uploaded" ? "success" : document.status === "failed" ? "danger" : "info"}>

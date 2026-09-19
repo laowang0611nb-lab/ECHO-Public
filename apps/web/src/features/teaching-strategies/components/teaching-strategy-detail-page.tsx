@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTeachingStrategy, useTeachingStrategyAction, useTeachingStrategyEffect } from "@/features/teaching-strategies/queries";
+import { canCreateExecutionPlan } from "@/features/teaching-strategies/view-model";
 
 const tabs = [
   { value: "overview", label: "策略概览" },
@@ -62,9 +63,13 @@ export function TeachingStrategyDetailPage({ strategyId, initialTab }: { strateg
         actions={
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => router.back()} type="button" variant="outline"><ArrowLeft data-icon="inline-start" />返回</Button>
-            <Link className={buttonVariants()} href={`/execution-plans/new?strategyId=${strategy.id}&courseId=${strategy.course.id}`}>
-              <Plus data-icon="inline-start" />创建执行计划
-            </Link>
+            {canCreateExecutionPlan(strategy.status) ? (
+              <Link className={buttonVariants()} href={`/execution-plans/new?strategyId=${strategy.id}&courseId=${strategy.course.id}`}>
+                <Plus data-icon="inline-start" />创建执行计划
+              </Link>
+            ) : (
+              <Button disabled type="button" variant="outline"><Plus data-icon="inline-start" />采纳后可创建计划</Button>
+            )}
           </div>
         }
         breadcrumbs={[{ label: "教学策略", href: "/teaching-strategies" }, { label: "策略详情" }]}
@@ -154,14 +159,14 @@ function StrategyOverview({ strategy }: { strategy: TeachingStrategyDetail }) {
         <Card className="gap-4 py-5"><CardHeader className="px-5"><CardTitle>教学流程</CardTitle></CardHeader><CardContent className="grid gap-3 px-5 md:grid-cols-5">{strategy.teaching_flow.map((step) => <div className="rounded-lg border border-border px-3 py-3" key={step.order}><p className="text-xs font-semibold text-primary">0{step.order}</p><p className="mt-2 text-sm font-medium">{step.title}</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{step.description}</p></div>)}</CardContent></Card>
       </div>
       <aside className="space-y-4">
-        <LinkedPlansCard strategy={strategy} />
+        <LinkedPlansCard canCreate={canCreateExecutionPlan(strategy.status)} strategy={strategy} />
         <Card className="gap-3 border-blue-300/70 bg-blue-50/45 py-5"><CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><Sparkles className="size-4 text-primary" />ECHO 依据</CardTitle></CardHeader><CardContent className="space-y-2 px-5 text-sm text-muted-foreground"><p>涉及 {strategy.evidence.knowledge_point_count} 个知识点</p><p>关联 {strategy.evidence.learning_event_count} 条学习事件</p><p>覆盖 {strategy.evidence.student_count} 名学生</p></CardContent></Card>
       </aside>
     </div>
   );
 }
 
-function LinkedPlansCard({ strategy }: { strategy: TeachingStrategyDetail }) {
+function LinkedPlansCard({ strategy, canCreate }: { strategy: TeachingStrategyDetail; canCreate: boolean }) {
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5"><CardTitle>关联执行计划</CardTitle></CardHeader>
@@ -171,7 +176,7 @@ function LinkedPlansCard({ strategy }: { strategy: TeachingStrategyDetail }) {
             <span className="min-w-0"><span className="block truncate text-sm font-medium">{plan.title}</span><span className="mt-1 block text-xs text-muted-foreground">{planStatusLabel(plan.status)}</span></span><ArrowRight className="size-4 shrink-0 text-muted-foreground" />
           </Link>
         )) : <p className="py-6 text-center text-sm text-muted-foreground">还没有执行计划。</p>}
-        <Link className={buttonVariants({ variant: "outline" })} href={`/execution-plans/new?strategyId=${strategy.id}&courseId=${strategy.course.id}`}><Plus data-icon="inline-start" />创建执行计划</Link>
+        {canCreate ? <Link className={buttonVariants({ variant: "outline" })} href={`/execution-plans/new?strategyId=${strategy.id}&courseId=${strategy.course.id}`}><Plus data-icon="inline-start" />创建执行计划</Link> : <p className="rounded-lg bg-muted/45 px-3 py-2 text-xs text-muted-foreground">先采纳策略，才能创建执行计划。</p>}
       </CardContent>
     </Card>
   );

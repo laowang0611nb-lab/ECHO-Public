@@ -92,7 +92,7 @@ export function TeacherActionSection({ courseId, overview }: { courseId: string;
 
         <ActionCard
           action="创建教学任务"
-          href={supportPoint ? `/execution-plans/new?knowledgePointId=${supportPoint.knowledge_point_id}` : "/execution-plans/new"}
+          href={supportPoint ? `/execution-plans/new?courseId=${courseId}&knowledgePointId=${supportPoint.knowledge_point_id}` : `/execution-plans/new?courseId=${courseId}`}
           icon={Compass}
           title="ECHO 教师建议"
         >

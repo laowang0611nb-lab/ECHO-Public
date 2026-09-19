@@ -52,6 +52,7 @@ export default async function StudentsPage({
     activity?: string | string[];
     risk?: string | string[];
     sort?: string | string[];
+    knowledgePointId?: string | string[];
   }>;
 }) {
   const query = await searchParams;
@@ -61,10 +62,12 @@ export default async function StudentsPage({
     activity: normalizeActivity(query.activity),
     risk: normalizeRisk(query.risk),
     sort: normalizeSort(query.sort),
+    knowledgePointId: first(query.knowledgePointId),
   };
   return (
     <StudentLearningPage
       initialCourseId={first(query.courseId)}
+      initialKnowledgePointId={first(query.knowledgePointId)}
       initialListQuery={initialListQuery}
       initialTab={normalizeTab(query.tab)}
     />

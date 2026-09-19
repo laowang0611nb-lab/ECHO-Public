@@ -7,13 +7,17 @@ import type {
   DocumentIndexStatus,
   DocumentPageEvidence,
   ErrorPatternReport,
+  ExternalResourceCreateRequest,
   ExternalResourcePage,
   ExternalResourceStatus,
+  ExternalResourceUpdateRequest,
   KnowledgeGraph,
   KnowledgePoint,
   KnowledgePointAnalytics,
   MasteryTrend,
+  QuestionItemCreateRequest,
   QuestionItemPage,
+  QuestionItemUpdateRequest,
   ResourceListPage,
 } from "@echo/shared-types";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -248,6 +252,79 @@ export function useExternalResources(courseId: string | null, pointId?: string |
   });
 }
 
+export function useCreateQuestionItem(courseId: string | null) {
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useMutation({
+    mutationFn: (payload: QuestionItemCreateRequest) => apiClient.createQuestionItem(userId!, courseId!, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge", "question-items"] });
+    },
+  });
+}
+
+export function useUpdateQuestionItem(courseId: string | null) {
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useMutation({
+    mutationFn: ({ itemId, payload }: { itemId: string; payload: QuestionItemUpdateRequest }) =>
+      apiClient.updateQuestionItem(userId!, courseId!, itemId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge", "question-items"] });
+    },
+  });
+}
+
+export function useDeleteQuestionItem(courseId: string | null) {
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useMutation({
+    mutationFn: (itemId: string) => apiClient.deleteQuestionItem(userId!, courseId!, itemId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge", "question-items"] });
+    },
+  });
+}
+
+export function useCreateExternalResource(courseId: string | null) {
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useMutation({
+    mutationFn: (payload: ExternalResourceCreateRequest) => apiClient.createExternalResource(userId!, courseId!, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge", "external-resources"] });
+    },
+  });
+}
+
+export function useUpdateExternalResource(courseId: string | null) {
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useMutation({
+    mutationFn: ({ resourceId, payload }: { resourceId: string; payload: ExternalResourceUpdateRequest }) =>
+      apiClient.updateExternalResource(userId!, courseId!, resourceId, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge", "external-resources"] });
+    },
+  });
+}
+
+export function useDeleteExternalResource(courseId: string | null) {
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useMutation({
+    mutationFn: (resourceId: string) => apiClient.deleteExternalResource(userId!, courseId!, resourceId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge", "external-resources"] });
+    },
+  });
+}
 export function useTrashedResources(courseId: string | null) {
   const { user } = useTeacherSession();
   const userId = user?.id;

@@ -65,7 +65,7 @@ export function PublishStep({
             <QrCode className="mx-auto size-5 text-primary" />
             <p className="mt-3 text-sm font-medium">课程加入码</p>
             <p className="mt-2 text-2xl font-semibold tracking-[0.12em]">{course?.code ?? "生成中"}</p>
-            <div className="mt-5 flex justify-center rounded-lg bg-white p-3"><QRCodeSVG value={course ? `echo://join?code=${course.code}` : "echo://join"} size={148} /></div>
+            <div className="mt-5 flex justify-center rounded-lg bg-white p-3"><QRCodeSVG value={course ? `echo://join-course?code=${course.code}` : "echo://join"} size={148} /></div>
             <Button className="mt-4 w-full" onClick={() => void copyCode()} type="button" variant="outline"><Copy data-icon="inline-start" />{copied ? "已复制" : "复制课程码"}</Button>
           </div>
         </div>
