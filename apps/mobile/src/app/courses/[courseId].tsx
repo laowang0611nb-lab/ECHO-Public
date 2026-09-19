@@ -223,7 +223,7 @@ export default function CourseDetailScreen() {
             </Pressable>
             {continueTarget ? (
               <Text style={styles.derivedHint}>
-                 当前入口根据最近学习状态和章节顺序推导，不代表服务器确认的章节完成状态。
+                根据最近学习活动和章节顺序，为你推荐下一步。
               </Text>
             ) : null}
           </View>

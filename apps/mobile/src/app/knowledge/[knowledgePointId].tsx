@@ -199,8 +199,8 @@ export default function KnowledgePointDetailScreen() {
             </View>
             <Text style={styles.masteryHint}>
               {state
-                ? `最近更新：${formatUpdatedAt(state.updated_at)}。学习状态由服务器维护，客户端不重新计算。`
-                : "完成 AI 提问、提示或快速检测后，服务器会形成新的学习证据。"}
+                ? `最近更新：${formatUpdatedAt(state.updated_at)}。`
+                : "完成 AI 提问、提示或快速检测后，这里会记录新的学习状态。"}
             </Text>
           </View>
 
@@ -261,7 +261,7 @@ export default function KnowledgePointDetailScreen() {
                 : "完成一次学习活动后，证据会显示在这里。"}
             </Text>
             <Text style={styles.gapText}>
-              更多学习证据将在后续开放。
+              继续学习后，这里会记录更多变化。
             </Text>
           </View>
 
@@ -281,7 +281,7 @@ export default function KnowledgePointDetailScreen() {
                   : `先阅读“${point.name}”的说明，再向 ECHO 提问。`}
               </Text>
               <Text style={styles.suggestionText}>
-                当前建议基于真实课程结构和学习状态生成，不调用额外 LLM。
+                当前建议根据课程结构和你的学习状态整理。
               </Text>
             </View>
           </View>

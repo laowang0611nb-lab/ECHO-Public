@@ -148,7 +148,7 @@ export default function CoursesScreen() {
       <Text style={styles.sectionTitle}>最近课程动态</Text>
       <View style={styles.emptyCard}>
         <Text style={styles.emptyTitle}>暂无学习动态</Text>
-        <Text style={styles.emptyText}>学习记录接口接入后将在这里展示最近活动。</Text>
+        <Text style={styles.emptyText}>完成学习后，最近活动会显示在这里。</Text>
       </View>
     </ScrollView>
     </PageFade>

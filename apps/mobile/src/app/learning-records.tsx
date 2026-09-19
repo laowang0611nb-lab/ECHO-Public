@@ -163,7 +163,7 @@ export default function LearningRecordsScreen() {
               <Metric label="状态更新" value={recentMasteryCount} />
             </View>
             <Text style={styles.heroHint}>
-              当前展示最近可用的学习记录，更多统计和检测记录将在后续开放。
+              当前展示最近的学习记录，更多内容会在数据积累后显示。
             </Text>
           </View>
 

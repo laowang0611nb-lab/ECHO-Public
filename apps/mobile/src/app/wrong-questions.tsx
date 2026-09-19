@@ -1,6 +1,6 @@
 import { SymbolView } from "expo-symbols";
 import { router } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { DetailHeader } from "@/components/student/detail-header";
@@ -21,7 +21,10 @@ export default function WrongQuestionsScreen() {
           subtitle={selectedCourse?.name ?? "当前课程"}
           title="错题整理"
         />
-        <View style={styles.content}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.hero}>
             <View style={styles.heroIcon}>
               <SymbolView
@@ -48,7 +51,7 @@ export default function WrongQuestionsScreen() {
                 size={18}
                 tintColor={studentTheme.color.textSubtle}
               />
-              <Text style={styles.disabledButtonText}>开始复习 · 接口待接入</Text>
+              <Text style={styles.disabledButtonText}>开始复习 · 暂无可复习内容</Text>
             </View>
           </View>
 
@@ -69,9 +72,9 @@ export default function WrongQuestionsScreen() {
               />
             </View>
             <View style={styles.unavailableCopy}>
-              <Text style={styles.unavailableTitle}>错题整理暂未开放</Text>
+              <Text style={styles.unavailableTitle}>错题记录暂不可用</Text>
               <Text style={styles.unavailableText}>
-                当前暂时无法读取你的错题记录，完成后续学习后会在这里提供复习入口。
+                当前无法读取你的错题记录，请稍后再试。
               </Text>
             </View>
           </View>
@@ -81,7 +84,7 @@ export default function WrongQuestionsScreen() {
             <View style={styles.placeholderCard}>
               <Text style={styles.placeholderTitle}>暂时无法展示错题</Text>
               <Text style={styles.placeholderText}>
-                功能开放后会显示题目摘要、章节、知识点、错误次数、最近错误时间和真实状态。
+                错题记录可用后，这里会显示题目摘要、章节、知识点、错误次数和最近错误时间。
               </Text>
             </View>
           </View>
@@ -97,12 +100,12 @@ export default function WrongQuestionsScreen() {
               <View style={styles.suggestionCopy}>
                 <Text style={styles.suggestionTitle}>暂无足够错题证据</Text>
                 <Text style={styles.suggestionText}>
-                  收到真实错题数据后，可按重复错误次数和最近错误时间进行可解释排序，客户端不会伪造 AI 推荐。
+                  有足够错题记录后，这里会优先提示需要再次复习的知识点。
                 </Text>
               </View>
             </View>
           </View>
-        </View>
+        </ScrollView>
       </PageFade>
     </SafeAreaView>
   );
