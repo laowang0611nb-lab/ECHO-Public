@@ -1,23 +1,29 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, UserPlus } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Info, LoaderCircle, UserPlus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { mapAuthError } from "@/features/auth/auth-error";
 import { AuthPanel } from "@/features/auth/components/auth-panel";
 import { PhoneVerificationFields } from "@/features/auth/components/phone-verification-fields";
 import { passwordValidationMessage } from "@/features/auth/validation";
 import { useSmsCodeFlow } from "@/features/auth/use-sms-code-flow";
+import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 export function RegisterPage() {
-  const sms = useSmsCodeFlow();
+  const router = useRouter();
+  const { registerWithSms } = useTeacherSession();
+  const sms = useSmsCodeFlow("register");
   const [step, setStep] = useState<1 | 2>(1);
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   function changePhone(value: string) {
     sms.setPhone(value);
@@ -48,9 +54,9 @@ export function RegisterPage() {
     }
   }
 
-  function submitRegistration(event: FormEvent<HTMLFormElement>) {
+  async function submitRegistration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!sms.verified) {
+    if (!sms.verified || !sms.verificationToken) {
       setFormError("请先完成手机号验证。");
       return;
     }
@@ -67,12 +73,29 @@ export function RegisterPage() {
       setFormError("两次输入的密码不一致。");
       return;
     }
-    setFormError("注册接口待后端补齐，当前不会创建账号或建立教师会话。");
+
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await registerWithSms({
+        phone: sms.phone,
+        verification_token: sms.verificationToken,
+        display_name: displayName.trim(),
+        password,
+        role: "teacher",
+        device_name: "ECHO Teacher Web",
+      });
+      router.replace("/dashboard");
+    } catch (requestError) {
+      setFormError(mapAuthError(requestError));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
     <AuthPanel
-      description="注册教师账号需要先验证中国大陆手机号。验证码通过不会自动登录，账号创建必须等真实注册接口返回用户和会话。"
+      description="注册教师账号需要先验证中国大陆手机号。验证通过后才会创建真实用户、密码凭证和教师会话。"
       title="注册教师账号"
     >
       <div className="mb-5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -149,17 +172,18 @@ export function RegisterPage() {
           {sms.verified ? (
             <div className="rounded-lg border-2 border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
               <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="size-4" />手机号验证已通过</p>
-              <p className="mt-1 text-xs leading-5 text-emerald-800">验证票据只保留在当前注册流程内存中，不会写入浏览器存储，也不代表已经登录。</p>
+              <p className="mt-1 text-xs leading-5 text-emerald-800">验证票据只保留在当前注册流程内存中，注册成功前不会建立登录状态。</p>
             </div>
-          ) : null}
+          ) : (
+            <div className="rounded-lg border-2 border-blue-200 bg-blue-50/50 px-3 py-3 text-sm text-blue-900">
+              <p className="flex items-center gap-2 font-medium"><Info className="size-4" />先填写验证码并完成手机号验证</p>
+              <p className="mt-1 text-xs leading-5 text-blue-800">验证通过后，显示名称和密码会锁定，随后提交真实注册接口。</p>
+            </div>
+          )}
 
-          <div className="rounded-lg border-2 border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
-            <p className="flex items-start gap-2 font-medium"><AlertTriangle className="mt-0.5 size-4 shrink-0" />注册接口待后端补齐</p>
-            <p className="mt-1.5 pl-6 text-xs leading-5 text-amber-800">当前不会创建用户、写入手机号或进入工作台。后端完成 `register/sms` 后才能提交真实注册请求。</p>
-          </div>
-          <Button className="h-10 w-full" type="submit" variant="outline">
-            {sms.verified ? <UserPlus /> : null}
-            注册接口待接入
+          <Button className="h-10 w-full" disabled={submitting} type="submit">
+            {submitting ? <LoaderCircle className="animate-spin" /> : <UserPlus />}
+            {submitting ? "正在创建账号..." : "完成注册并进入工作台"}
           </Button>
           <p className="text-center text-xs text-muted-foreground">
             已有教师账号？<Link className="font-medium text-primary hover:underline" href="/login">返回登录</Link>

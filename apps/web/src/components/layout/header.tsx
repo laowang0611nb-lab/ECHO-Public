@@ -16,6 +16,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiClient } from "@/lib/api";
+import { accountIdentifier } from "@/lib/account-identity";
 import { NotificationCenter } from "@/features/notifications/components/notification-center";
 import { useDemoMode } from "@/features/demo/demo-provider";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
@@ -95,7 +96,7 @@ export function Header() {
           <DropdownMenuContent align="end" className="w-60" sideOffset={8}>
             <div className="px-2 py-2">
               <span className="block truncate text-sm font-medium text-foreground">{user?.display_name}</span>
-              <span className="mt-0.5 block truncate text-xs text-muted-foreground">{user?.email}</span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">{user ? accountIdentifier(user) : "未登录"}</span>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push("/me?tab=profile")}>
@@ -111,7 +112,7 @@ export function Header() {
               服务器设置
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} variant="destructive">
+            <DropdownMenuItem onClick={() => void logout()} variant="destructive">
               <LogOut />
               退出登录
             </DropdownMenuItem>

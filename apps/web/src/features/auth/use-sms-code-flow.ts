@@ -1,12 +1,13 @@
 "use client";
 
+import type { PhoneVerificationPurpose } from "@echo/shared-types";
 import { useCallback, useEffect, useState } from "react";
 
 import { apiClient } from "@/lib/api";
 import { mapSmsError } from "@/features/auth/sms-error";
 import { isValidMainlandPhone, normalizeMainlandPhone } from "@/features/auth/validation";
 
-export function useSmsCodeFlow() {
+export function useSmsCodeFlow(purpose: PhoneVerificationPurpose) {
   const [phone, setPhoneState] = useState("");
   const [code, setCode] = useState("");
   const [cooldown, setCooldown] = useState(0);
@@ -81,7 +82,7 @@ export function useSmsCodeFlow() {
     setError(null);
     setNotice(null);
     try {
-      const response = await apiClient.verifySmsCode({ phone, code: code.trim() });
+      const response = await apiClient.verifySmsCode({ purpose, phone, code: code.trim() });
       setVerificationToken(response.verification_token);
       setExpiresInSeconds(response.expires_in_seconds);
       setVerified(true);
@@ -97,7 +98,7 @@ export function useSmsCodeFlow() {
     } finally {
       setVerifying(false);
     }
-  }, [code, phone]);
+  }, [code, phone, purpose]);
 
   const clearVerification = useCallback(() => {
     setCode("");

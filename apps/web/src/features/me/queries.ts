@@ -36,6 +36,7 @@ export function useUpdateTeacherProfile() {
       queryClient.setQueryData(teacherProfileQueryKeys.profile(userId!), profile);
       updateUser({
         display_name: profile.display_name,
+        phone: profile.phone,
         email: profile.email,
         role: profile.role,
         avatar_url: profile.avatar_url,

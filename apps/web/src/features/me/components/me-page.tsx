@@ -2,7 +2,7 @@
 
 import { ApiClientError } from "@echo/api-client";
 import type { TeacherProfile, TeacherProfileUpdateRequest } from "@echo/shared-types";
-import { BookOpen, Building2, CalendarDays, Camera, KeyRound, LayoutDashboard, Mail, Pencil, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Sparkles, Trash2, User, Users, Waypoints, X } from "lucide-react";
+import { BookOpen, Building2, CalendarDays, Camera, KeyRound, LayoutDashboard, Mail, Pencil, Phone, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Sparkles, Trash2, User, Users, Waypoints, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -27,6 +27,7 @@ import { useServerHealth, useSystemStatus } from "@/features/server-settings/que
 import { serviceStateLabel } from "@/features/server-settings/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
+import { accountIdentifier, isPlaceholderPhoneEmail } from "@/lib/account-identity";
 import { TEACHER_WEB_VERSION } from "@/lib/version";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
@@ -262,7 +263,8 @@ function ProfileTab({
           <CardContent className="divide-y divide-border px-0">
             <ProfileRow icon={User} label="姓名" value={user.display_name} />
             <ProfileRow icon={ShieldCheck} label="角色" value={roleLabel(profile?.role ?? user.role)} />
-            <ProfileRow icon={Mail} label="邮箱" value={user.email} />
+            <ProfileRow icon={Phone} label="手机号" value={profile?.phone ?? user.phone ?? "未配置"} />
+            <ProfileRow icon={Mail} label="邮箱" value={isPlaceholderPhoneEmail(profile?.email ?? user.email) ? "未绑定邮箱" : profile?.email ?? user.email} />
             <ProfileRow icon={Building2} label="学校" value={profile?.school_name || "未配置"} />
             <ProfileRow icon={Building2} label="所属院系" value={profile?.department || "未配置"} />
             <ProfileRow icon={KeyRound} label="工号" value={profile?.employee_no || "未配置"} />
@@ -403,7 +405,7 @@ function SecurityTab({ user, deviceLabel }: { user: NonNullable<ReturnType<typeo
       <Card className="gap-0 overflow-hidden border-2 py-0">
         <CardHeader className="border-b px-5 py-4"><CardTitle>登录账号</CardTitle></CardHeader>
         <CardContent className="divide-y divide-border px-0">
-          <ProfileRow icon={Mail} label="登录邮箱" value={user.email} />
+          <ProfileRow icon={Mail} label="登录账号" value={accountIdentifier({ phone: user.phone, email: user.email })} />
           <ProfileRow icon={ShieldCheck} label="身份" value={roleLabel(user.role)} />
           <ProfileRow icon={KeyRound} label="密码" value="可通过修改密码接口更新" />
         </CardContent>
@@ -765,7 +767,8 @@ function ProfileDrawer({
             {avatarNotice ? <p className="mt-3 text-xs text-emerald-700">{avatarNotice}</p> : null}
           </div>
           <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">显示名称</span><Input maxLength={120} onChange={(event) => updateField("displayName", event.target.value)} value={form.displayName} /></label>
-          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">邮箱</span><Input disabled value={profile?.email ?? user.email} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">手机号</span><Input disabled value={profile?.phone ?? user.phone ?? "未配置"} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">邮箱</span><Input disabled value={isPlaceholderPhoneEmail(profile?.email ?? user.email) ? "未绑定邮箱" : profile?.email ?? user.email} /></label>
           <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">学校</span><Input maxLength={200} onChange={(event) => updateField("schoolName", event.target.value)} value={form.schoolName} /></label>
           <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">院系</span><Input maxLength={200} onChange={(event) => updateField("department", event.target.value)} value={form.department} /></label>
           <div className="grid gap-4 sm:grid-cols-2">
