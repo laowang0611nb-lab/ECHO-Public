@@ -1,4 +1,19 @@
 import type {
+  Announcement,
+  AnnouncementCreateRequest,
+  AnnouncementPage,
+  AnnouncementReadResponse,
+  KnowledgePointQuickCheckSet,
+  KnowledgePointSourcePage,
+  MisconceptionEvidence,
+  StudentConversationPage,
+  StudentCourseProgress,
+  StudentLearningEventPage,
+  StudentPlanTaskPage,
+  StudentResourcePage,
+  StudentTeacherListResponse,
+  WrongQuestionDetail,
+  WrongQuestionPage,
   AuthSessionResponse,
   Chapter,
   ChapterAnalytics,
@@ -328,6 +343,164 @@ export function createApiClient({
         method: "POST",
         body: JSON.stringify({ refresh_token: refreshToken }),
       }),
+    getStudentLearningEvents: (
+      userId: string,
+      courseId: string,
+      studentId: string,
+      options?: {
+        cursor?: string;
+        limit?: number;
+        eventType?: LearningEventType;
+        knowledgePointId?: string;
+        from?: string;
+        to?: string;
+      },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      if (options?.eventType) params.set("eventType", options.eventType);
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.from) params.set("from", options.from);
+      if (options?.to) params.set("to", options.to);
+      const query = params.toString();
+      return request<StudentLearningEventPage>(
+        `/api/v1/courses/${courseId}/students/${studentId}/learning-events${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getStudentCourseProgress: (userId: string, courseId: string, studentId: string) =>
+      request<StudentCourseProgress>(
+        `/api/v1/courses/${courseId}/students/${studentId}/progress`,
+        undefined,
+        userId,
+      ),
+    listWrongQuestions: (
+      userId: string,
+      courseId: string,
+      studentId: string,
+      options?: { cursor?: string; limit?: number; knowledgePointId?: string; status?: string },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.status) params.set("status", options.status);
+      const query = params.toString();
+      return request<WrongQuestionPage>(
+        `/api/v1/courses/${courseId}/students/${studentId}/wrong-questions${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getWrongQuestion: (
+      userId: string,
+      courseId: string,
+      studentId: string,
+      questionId: string,
+    ) =>
+      request<WrongQuestionDetail>(
+        `/api/v1/courses/${courseId}/students/${studentId}/wrong-questions/${questionId}`,
+        undefined,
+        userId,
+      ),
+    getKnowledgePointQuickChecks: (
+      userId: string,
+      courseId: string,
+      knowledgePointId: string,
+      count = 3,
+    ) =>
+      request<KnowledgePointQuickCheckSet>(
+        `/api/v1/courses/${courseId}/knowledge-points/${knowledgePointId}/quick-checks?count=${count}&purpose=consolidation`,
+        undefined,
+        userId,
+      ),
+    getStudentCourseResources: (userId: string, courseId: string) =>
+      request<StudentResourcePage>(
+        `/api/v1/courses/${courseId}/student-resources`,
+        undefined,
+        userId,
+      ),
+    getKnowledgePointSources: (
+      userId: string,
+      courseId: string,
+      knowledgePointId: string,
+    ) =>
+      request<KnowledgePointSourcePage>(
+        `/api/v1/courses/${courseId}/knowledge-points/${knowledgePointId}/sources`,
+        undefined,
+        userId,
+      ),
+    getStudentRelatedConversations: (
+      userId: string,
+      courseId: string,
+      studentId: string,
+      knowledgePointId: string,
+    ) =>
+      request<StudentConversationPage>(
+        `/api/v1/courses/${courseId}/students/${studentId}/knowledge-points/${knowledgePointId}/conversations`,
+        undefined,
+        userId,
+      ),
+    getCourseTeachers: (userId: string, courseId: string) =>
+      request<StudentTeacherListResponse>(
+        `/api/v1/courses/${courseId}/teachers`,
+        undefined,
+        userId,
+      ),
+    getStudentPlanTasks: (userId: string, courseId: string, studentId: string) =>
+      request<StudentPlanTaskPage>(
+        `/api/v1/courses/${courseId}/students/${studentId}/plan-tasks`,
+        undefined,
+        userId,
+      ),
+    getStudentMisconceptions: (
+      userId: string,
+      courseId: string,
+      studentId: string,
+      knowledgePointId: string,
+      days = 30,
+    ) =>
+      request<MisconceptionEvidence>(
+        `/api/v1/courses/${courseId}/students/${studentId}/knowledge-points/${knowledgePointId}/misconceptions?days=${days}`,
+        undefined,
+        userId,
+      ),
+    createAnnouncement: (
+      userId: string,
+      courseId: string,
+      payload: AnnouncementCreateRequest,
+    ) =>
+      request<Announcement>(`/api/v1/courses/${courseId}/announcements`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, userId),
+    listAnnouncements: (
+      userId: string,
+      courseId: string,
+      options?: { includeDrafts?: boolean; cursor?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.includeDrafts !== undefined)
+        params.set("includeDrafts", String(options.includeDrafts));
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<AnnouncementPage>(
+        `/api/v1/courses/${courseId}/announcements${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    markAnnouncementRead: (userId: string, courseId: string, announcementId: string) =>
+      request<AnnouncementReadResponse>(
+        `/api/v1/courses/${courseId}/announcements/${announcementId}/read`,
+        { method: "POST" },
+        userId,
+      ),
     me: (userId: string) => request<User>("/api/v1/auth/me", undefined, userId),
     getTeacherProfile: (userId: string) =>
       request<TeacherProfile>("/api/v1/auth/me/profile", undefined, userId),

@@ -15,6 +15,8 @@ def test_core_tables_are_registered() -> None:
         "execution_plans",
         "external_resources",
         "course_invites",
+        "course_announcement_reads",
+        "course_announcements",
         "course_members",
         "courses",
         "knowledge_points",

@@ -1622,3 +1622,223 @@ export interface HintResponse {
   message_id: string;
   hint: HintBlock;
 }
+
+export interface StudentLearningEventItem {
+  id: string;
+  course_id: string;
+  student_id: string;
+  knowledge_point_id: string | null;
+  knowledge_point_name: string | null;
+  conversation_id: string | null;
+  message_id: string | null;
+  plan_id: string | null;
+  task_id: string | null;
+  week_number: number | null;
+  event_type: LearningEventType;
+  result: "correct" | "wrong" | "completed" | "unresolved";
+  weight: number;
+  evidence: string | null;
+  metadata_json: Record<string, unknown>;
+  mastery_before: number | null;
+  mastery_after: number | null;
+  created_at: string;
+}
+
+export interface StudentLearningEventPage {
+  items: StudentLearningEventItem[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface ChapterProgressItem {
+  chapter_id: string;
+  title: string;
+  order_index: number;
+  status: "not_started" | "in_progress" | "completed";
+  progress_percent: number;
+  knowledge_point_count: number;
+  started_knowledge_point_count: number;
+  mastered_knowledge_point_count: number;
+  average_mastery: number | null;
+  last_learning_at: string | null;
+  completion_basis: string;
+}
+
+export interface StudentCourseProgress {
+  course_id: string;
+  student_id: string;
+  current_chapter_id: string | null;
+  current_knowledge_point_id: string | null;
+  last_learning_at: string | null;
+  overall_progress_percent: number;
+  chapters: ChapterProgressItem[];
+}
+
+export interface WrongQuestionSummary {
+  question_id: string;
+  title: string;
+  prompt: string;
+  question_type: string;
+  difficulty: string;
+  chapter_id: string | null;
+  chapter_title: string | null;
+  knowledge_point_id: string | null;
+  knowledge_point_name: string | null;
+  wrong_count: number;
+  latest_wrong_at: string;
+  mastery: number | null;
+  review_status: "unresolved" | "resolved";
+}
+
+export interface WrongQuestionPage {
+  items: WrongQuestionSummary[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface WrongQuestionDetail {
+  question: WrongQuestionSummary;
+  options: Array<{ id: string; label: string }>;
+  correct_option_id: string | null;
+  explanation: string | null;
+  selected_option_id: string | null;
+  latest_attempt_id: string | null;
+  source_document_id: string | null;
+  source_page: number | null;
+}
+
+export interface KnowledgePointQuickCheckSet {
+  course_id: string;
+  knowledge_point_id: string;
+  knowledge_point_name: string;
+  purpose: "consolidation";
+  requested_count: number;
+  items: QuickCheckBlock[];
+  insufficient_questions: boolean;
+}
+
+export interface StudentResourceItem {
+  id: string;
+  title: string;
+  resource_type: string;
+  status: string;
+  summary: string | null;
+  chapter_title: string | null;
+  mime_type: string | null;
+  page_count: number | null;
+  external_url: string | null;
+  available: boolean;
+  updated_at: string;
+}
+
+export interface StudentResourcePage {
+  items: StudentResourceItem[];
+  total: number;
+}
+
+export interface KnowledgePointSourceItem {
+  document_id: string;
+  document_name: string;
+  chapter_id: string;
+  chapter_title: string;
+  chunk_id: string;
+  page_start: number;
+  page_end: number;
+  quote: string;
+}
+
+export interface KnowledgePointSourcePage {
+  knowledge_point_id: string;
+  knowledge_point_name: string;
+  items: KnowledgePointSourceItem[];
+  total: number;
+}
+
+export interface StudentTeacherSummary {
+  user_id: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+export interface StudentTeacherListResponse {
+  course_id: string;
+  teachers: StudentTeacherSummary[];
+}
+
+export interface StudentPlanTaskItem {
+  id: string;
+  plan_id: string;
+  plan_title: string;
+  week_number: number;
+  title: string;
+  description: string;
+  task_type: string;
+  status: string;
+  due_at: string | null;
+  knowledge_point_ids: string[];
+  resources: Array<Record<string, unknown>>;
+  completed_at: string | null;
+  completion_evidence: string | null;
+}
+
+export interface StudentPlanTaskPage {
+  items: StudentPlanTaskItem[];
+  total: number;
+}
+
+export interface StudentConversationSummary {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  matching_message_count: number;
+  latest_matching_message_id: string;
+  latest_matching_at: string;
+}
+
+export interface StudentConversationPage {
+  items: StudentConversationSummary[];
+  total: number;
+}
+
+export interface MisconceptionEvidence {
+  knowledge_point_id: string;
+  label: string;
+  description: string;
+  occurrence_count: number;
+  affected_student_count: number;
+  sample_event_ids: string[];
+  insufficient_evidence: boolean;
+  window_start: string;
+  window_end: string;
+}
+
+export interface AnnouncementCreateRequest {
+  title: string;
+  content: string;
+  publish?: boolean;
+}
+
+export interface Announcement {
+  id: string;
+  course_id: string;
+  title: string;
+  content: string;
+  published_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  is_read: boolean;
+  read_at: string | null;
+}
+
+export interface AnnouncementPage {
+  items: Announcement[];
+  total: number;
+  next_cursor: string | null;
+}
+
+export interface AnnouncementReadResponse {
+  announcement_id: string;
+  read_at: string;
+}

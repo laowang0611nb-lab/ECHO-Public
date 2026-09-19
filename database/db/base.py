@@ -1,4 +1,5 @@
 from database.db.base_class import Base
+from database.models.announcement import CourseAnnouncement, CourseAnnouncementRead
 from database.models.auth import AuthSession, PhoneVerificationClaim, UserCredential
 from database.models.chat import (
     Conversation,
@@ -74,6 +75,8 @@ __all__ = [
     "Chapter",
     "Conversation",
     "Course",
+    "CourseAnnouncement",
+    "CourseAnnouncementRead",
     "CourseInvite",
     "CourseMember",
     "Document",

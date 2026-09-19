@@ -1,11 +1,8 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.91`
-> 冻结版本：`v0.0.110`
+> 冻结版本：`v0.0.111`
 > 基础路径：`/api/v1`  
-> 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
 > 当前认证：正式 Bearer JWT + Refresh Session；开发环境保留 `X-User-Id` 兼容入口。
-> 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session、手机号验证和 Profile 基础，正式手机号注册、密码登录、密码重置、刷新和退出接口已进入本契约。
 
 ## 1. 通用约定
@@ -170,6 +167,20 @@ Quick Check 由服务端校验答案并通过 `LearningEvent -> StudentKnowledge
 | PUT | `/courses/{course_id}/teaching-policy` | 课程教师 | 更新教学规则 |
 | POST | `/courses/{course_id}/learning-events` | 课程教师 | 记录学习事件 |
 | GET | `/courses/{course_id}/students/{student_id}/mastery` | 本人或课程教师 | 查询知识点状态 |
+| POST | `/courses/{course_id}/announcements` | 课程教师 | 创建或发布课程公告 |
+| GET | `/courses/{course_id}/announcements` | 课程成员 | 公告分页、草稿可见性和已读状态 |
+| POST | `/courses/{course_id}/announcements/{announcement_id}/read` | 课程成员 | 标记公告已读 |
+| GET | `/courses/{course_id}/students/{student_id}/learning-events` | 本人或课程教师 | 学生学习事件分页、筛选和学习前后掌握度 |
+| GET | `/courses/{course_id}/students/{student_id}/progress` | 本人或课程教师 | 当前章节、知识点、整体进度和章节完成规则 |
+| GET | `/courses/{course_id}/students/{student_id}/wrong-questions` | 本人或课程教师 | 错题聚合、错误次数和复习状态 |
+| GET | `/courses/{course_id}/students/{student_id}/wrong-questions/{question_id}` | 本人或课程教师 | 错题原文、选项、解析和最近错误尝试 |
+| GET | `/courses/{course_id}/knowledge-points/{knowledge_point_id}/quick-checks?count=3` | 课程成员 | 按知识点获取巩固题并复用既有作答接口 |
+| GET | `/courses/{course_id}/student-resources` | 课程成员 | 学生只读课程资料和可用状态 |
+| GET | `/courses/{course_id}/knowledge-points/{knowledge_point_id}/sources` | 课程成员 | 知识点的教材、页码、Chunk 和引用原文 |
+| GET | `/courses/{course_id}/students/{student_id}/knowledge-points/{knowledge_point_id}/conversations` | 本人或课程教师 | 由 LearningEvent 证据关联的知识点会话 |
+| GET | `/courses/{course_id}/teachers` | 课程成员 | 学生的只读授课教师信息 |
+| GET | `/courses/{course_id}/students/{student_id}/plan-tasks` | 本人或课程教师 | 当前学生的已发布计划任务和完成证据 |
+| GET | `/courses/{course_id}/students/{student_id}/knowledge-points/{knowledge_point_id}/misconceptions` | 本人或课程教师 | 有 LearningEvent 证据的学生错因，样本不足明确标记 |
 
 ## 6. Dashboard
 
@@ -606,7 +617,21 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 - 独立 Suggestion 实体和 `ignored` flag；策略忽略继续使用 `TeachingStrategyStatus.dismissed`。
 - 会话级 LearningEvent 的 `reviewId` 筛选；Conversation/Message 已有持久化关联，后续单独扩展筛选契约。
 
-## 11. 接口冻结规则
+## 11. 学生端只读学习闭环
+
+学生接口统一使用课程成员或本人/课程教师权限。LearningEvent 分页使用服务端游标，支持 `eventType`、`knowledgePointId`、`from`、`to`；课程进度只根据真实 Chapter、KnowledgePoint、LearningEvent 和 StudentKnowledgeState 计算，章节完成固定为“所有知识点均有学习证据且掌握度不低于 80”。
+
+错题由 QuickCheckAttempt 的 `correct=false` 聚合，正确尝试晚于最近错误时标记 `resolved`。巩固题按知识点关联的 QuestionItem 返回现有 QuickCheckBlock，学生仍通过 `/quick-checks/{question_id}/attempts` 提交。
+
+学生资源只读接口合并未删除的 Document 和 ExternalResource；知识点来源来自同章节有效 KnowledgeChunk。知识点相关会话只使用 LearningEvent 中同时存在 `knowledge_point_id` 与 `conversation_id` 的证据，不使用文本关键词猜测。
+
+计划任务只返回 `active` 或 `paused` 计划中面向当前学生的任务，任务目标按全班、计划目标或任务目标继承判断，完成证据来自该学生对应的 LearningEvent。
+
+错因接口返回个人 LearningEvent 聚合证据；窗口内少于 2 条时 `insufficient_evidence=true`，不建立无证据的 misconception 元数据。
+
+课程公告使用 `course_announcements` 和 `course_announcement_reads`；教师可保存草稿或发布，学生只读取已发布公告并持久化已读状态。
+
+## 12. 接口冻结规则
 
 - 已登记的方法、路径和枚举值视为稳定契约。
 - 新功能只能新增可选字段、新枚举值或新路径。

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    announcements,
     auth,
     chat,
     chunks,
@@ -17,6 +18,7 @@ from app.api.routes import (
     quick_check,
     review,
     search,
+    student_resources,
     system,
     teacher_resources,
     teaching_policy,
@@ -24,6 +26,7 @@ from app.api.routes import (
 )
 
 api_router = APIRouter()
+api_router.include_router(announcements.router)
 api_router.include_router(auth.router)
 api_router.include_router(chat.router)
 api_router.include_router(chunks.router)
@@ -40,6 +43,7 @@ api_router.include_router(review.router)
 api_router.include_router(quick_check.router)
 api_router.include_router(system.router)
 api_router.include_router(search.router)
+api_router.include_router(student_resources.router)
 api_router.include_router(teaching_policy.router)
 api_router.include_router(teacher_resources.router)
 api_router.include_router(users.router)
