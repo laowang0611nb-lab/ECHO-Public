@@ -39,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useKnowledgePointData, useKnowledgePointErrorPatterns, useKnowledgePointMasteryTrend, useQuestionItems, useSourceEvidence } from "@/features/knowledge/queries";
+import { useExternalResources, useKnowledgePointData, useKnowledgePointErrorPatterns, useKnowledgePointMasteryTrend, useQuestionItems, useSourceEvidence } from "@/features/knowledge/queries";
 import type { KnowledgePointTab } from "@/features/knowledge/types";
 import { buildPointHref, buildResourceHref, buildSourceHref } from "@/features/knowledge/view-model";
 import { apiClient } from "@/lib/api";
@@ -82,6 +82,7 @@ export function KnowledgePointDetailPage({
   const masteryTrendQuery = useKnowledgePointMasteryTrend(courseId || null, pointId);
   const errorPatternsQuery = useKnowledgePointErrorPatterns(courseId || null, pointId);
   const questionItemsQuery = useQuestionItems(courseId || null, pointId);
+  const externalResourcesQuery = useExternalResources(courseId || null, pointId);
 
   function handleTabChange(value: string) {
     const next = tabs.some((tab) => tab.value === value) ? (value as KnowledgePointTab) : "overview";
@@ -156,7 +157,7 @@ export function KnowledgePointDetailPage({
               </aside>
             </div>
           ) : null}
-          {activeTab === "related" ? <RelatedContentTab context={context} /> : null}
+          {activeTab === "related" ? <RelatedContentTab context={context} externalResourcesQuery={externalResourcesQuery} questionItemsQuery={questionItemsQuery} /> : null}
           {activeTab === "students" ? <StudentMasteryTab context={context} /> : null}
           {activeTab === "exercises" ? <QuestionItemsPanel query={questionItemsQuery} /> : null}
           {activeTab === "suggestions" ? <TeachingSuggestionDetail courseId={courseId} knowledgePointId={pointId} mastery={mastery} /> : null}
@@ -359,7 +360,20 @@ function TeachingSuggestionCard({ mastery }: { mastery: number | null }) {
   );
 }
 
-function RelatedContentTab({ context }: { context: NonNullable<ReturnType<typeof useKnowledgePointData>["context"]> }) {
+function RelatedContentTab({
+  context,
+  questionItemsQuery,
+  externalResourcesQuery,
+}: {
+  context: NonNullable<ReturnType<typeof useKnowledgePointData>["context"]>;
+  questionItemsQuery: ReturnType<typeof useQuestionItems>;
+  externalResourcesQuery: ReturnType<typeof useExternalResources>;
+}) {
+  const questions = questionItemsQuery.data?.items ?? [];
+  const externalResources = externalResourcesQuery.data?.items ?? [];
+  const loading = questionItemsQuery.isLoading || externalResourcesQuery.isLoading;
+  const hasError = questionItemsQuery.isError || externalResourcesQuery.isError;
+
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <Card className="gap-4 py-5">
@@ -375,9 +389,42 @@ function RelatedContentTab({ context }: { context: NonNullable<ReturnType<typeof
       </Card>
       <RelatedPointsCard context={context} />
       <Card className="gap-4 py-5 xl:col-span-2">
-        <CardHeader className="px-5"><CardTitle>相关资源与证据</CardTitle></CardHeader>
-        <CardContent className="px-5">
-          <EmptyState description="后端没有知识点与题库、视频、案例或外部资源的关联接口。" title="暂无更多关联资源" />
+        <CardHeader className="px-5"><CardTitle>相关资源与证据</CardTitle><p className="mt-1 text-xs text-muted-foreground">来自当前知识点关联的习题和外部资源接口。</p></CardHeader>
+        <CardContent className="space-y-5 px-5">
+          {loading ? <p className="py-6 text-center text-sm text-muted-foreground">正在加载关联内容...</p> : null}
+          {hasError ? <ErrorState description="关联习题或外部资源加载失败。" onRetry={() => { void questionItemsQuery.refetch(); void externalResourcesQuery.refetch(); }} /> : null}
+          {!loading && !hasError && !questions.length && !externalResources.length ? (
+            <EmptyState description="当前没有关联习题或外部资源，可由教师继续补充。" title="暂无更多关联资源" />
+          ) : null}
+
+          {questions.length ? (
+            <section>
+              <h3 className="text-sm font-semibold">关联习题</h3>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {questions.slice(0, 6).map((item) => (
+                  <div className="rounded-lg border-2 border-border px-4 py-3" key={item.id}>
+                    <div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-medium">{item.title}</p><StatusBadge tone="info">{questionTypeLabel(item.type)}</StatusBadge></div>
+                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.content}</p>
+                    <p className="mt-2 text-[11px] text-muted-foreground">{questionDifficultyLabel(item.difficulty)}{item.source_page ? ` · 来源第 ${item.source_page} 页` : ""}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {externalResources.length ? (
+            <section>
+              <h3 className="text-sm font-semibold">外部资源</h3>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {externalResources.slice(0, 6).map((item) => (
+                  <div className="flex items-start justify-between gap-4 rounded-lg border-2 border-border px-4 py-3" key={item.id}>
+                    <div className="min-w-0"><p className="truncate text-sm font-medium">{item.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.provider || "外部来源"}{item.description ? ` · ${item.description}` : ""}</p></div>
+                    <a className={buttonVariants({ size: "sm", variant: "outline" })} href={item.url} rel="noreferrer" target="_blank"><ExternalLink data-icon="inline-start" />打开</a>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </CardContent>
       </Card>
     </div>
@@ -435,7 +482,7 @@ function AnalysisTab({
         <CardContent className="space-y-4 px-5 text-sm leading-7 text-muted-foreground">
           <p>知识点“{context.point.name}”位于“{context.chapter.title}”。</p>
           <p>{mastery === null ? "当前没有可用于分析的掌握度证据。" : `当前平均掌握度为 ${Math.round(mastery)}%，受影响学生 ${affectedStudents} 人。`}</p>
-          <p>趋势、错误模式和习题数据暂未接入，因此不输出无法验证的 AI 结论。</p>
+          <p>掌握趋势、错误模式和关联习题均来自真实接口；该页只汇总当前可追溯证据，不生成无法验证的因果结论。</p>
         </CardContent>
       </Card>
       <Card className="gap-4 py-5">

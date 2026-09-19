@@ -199,7 +199,6 @@ function ChatWorkspace({
           contextLabel={knowledgePointName}
           course={selectedCourse}
           onBack={() => router.back()}
-          onNewConversation={newConversation}
           onOpenHistory={() => setDrawerVisible(true)}
         />
         {knowledgePointName ? <ContextBanner label={knowledgePointName} /> : null}
@@ -274,6 +273,7 @@ function ChatWorkspace({
       <ConversationDrawer
         activeConversationId={chat.activeConversationId}
         conversations={chat.conversations}
+        courseName={selectedCourse?.name ?? "当前课程"}
         loading={chat.conversationsLoading}
         onClose={() => setDrawerVisible(false)}
         onNewConversation={newConversation}
