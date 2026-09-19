@@ -154,8 +154,8 @@ class AliyunPnvsProvider:
                 access_key_id=self._access_key_id,
                 access_key_secret=self._access_key_secret,
                 endpoint=self.ENDPOINT,
-                read_timeout=self._timeout_seconds,
-                connect_timeout=self._timeout_seconds,
+                read_timeout=self._timeout_seconds * 1000,
+                connect_timeout=self._timeout_seconds * 1000,
             )
         )
         return self._sdk_client
@@ -164,8 +164,8 @@ class AliyunPnvsProvider:
         return util_models.RuntimeOptions(
             autoretry=False,
             max_attempts=1,
-            read_timeout=self._timeout_seconds,
-            connect_timeout=self._timeout_seconds,
+            read_timeout=self._timeout_seconds * 1000,
+            connect_timeout=self._timeout_seconds * 1000,
         )
 
     @staticmethod

@@ -209,6 +209,8 @@ async def test_send_maps_sdk_code_ok_as_success_and_preserves_request_fields() -
     assert request.return_verify_code is False
     assert sdk_client.send_runtime.autoretry is False
     assert sdk_client.send_runtime.max_attempts == 1
+    assert sdk_client.send_runtime.read_timeout == 10_000
+    assert sdk_client.send_runtime.connect_timeout == 10_000
 
 
 async def test_verify_requires_pass_even_when_success_and_code_are_ok() -> None:
