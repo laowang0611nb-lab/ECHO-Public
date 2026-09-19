@@ -3,6 +3,7 @@ from uuid import UUID
 from database.models.course import CourseMember
 from database.models.document import Document
 from database.models.knowledge import Chapter, KnowledgePoint
+from database.models.planning import PlanTaskType
 from database.models.resource import ExternalResource, QuestionItem
 from database.models.user import User, UserRole
 from sqlalchemy import select
@@ -176,6 +177,15 @@ def resource_references_from_json(values: list[dict[str, object]]) -> list[Resou
         normalized.setdefault("title", type_labels.get(legacy_type, "关联资源"))
         references.append(ResourceReference.model_validate(normalized))
     return references
+
+def normalize_plan_action(value: str) -> PlanTaskType:
+    legacy_actions = {
+        "lecture": PlanTaskType.CLASSROOM_LECTURE,
+        "practice": PlanTaskType.SUPPLEMENTARY_PRACTICE,
+        "review": PlanTaskType.INDIVIDUAL_TUTORING,
+    }
+    mapped = legacy_actions.get(value)
+    return mapped if mapped is not None else PlanTaskType(value)
 
 
 def resource_json(values: list[ResourceReference]) -> list[dict[str, object]]:

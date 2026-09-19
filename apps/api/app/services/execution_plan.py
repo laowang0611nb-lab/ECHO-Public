@@ -13,7 +13,6 @@ from database.models.planning import (
     PlanTargetScope,
     PlanTask,
     PlanTaskStatus,
-    PlanTaskType,
     TeachingStrategy,
     TeachingStrategyStatus,
 )
@@ -50,6 +49,7 @@ from app.services.plan_generation import generate_weekly_plan_draft
 from app.services.plan_resources import (
     list_course_students,
     load_course_students,
+    normalize_plan_action,
     resolve_resource_references,
     resource_json,
     resource_references_from_json,
@@ -702,7 +702,7 @@ async def _plan_detail(
         target_students=_student_references(target_students),
         knowledge_points=_point_references(plan.knowledge_points),
         resources=resource_references_from_json(plan.resources_json),
-        actions=[PlanTaskType(value) for value in plan.actions],
+        actions=[normalize_plan_action(value) for value in plan.actions],
         plan_parameters=plan.plan_parameters,
         evaluation_metrics=plan.evaluation_metrics,
         teacher_note=plan.teacher_note,

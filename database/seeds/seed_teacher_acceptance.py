@@ -1502,7 +1502,12 @@ def _build_planning(
                 "start_date": (now - timedelta(days=42)).date(),
                 "end_date": (now + timedelta(days=14)).date(),
                 "target_scope": PlanTargetScope.STUDENT_GROUP,
-                "actions": ["lecture", "practice", "quick_check", "review"],
+                "actions": [
+                    "classroom_lecture",
+                    "supplementary_practice",
+                    "quick_check",
+                    "individual_tutoring",
+                ],
                 "plan_parameters": {
                     "acceptance_seed": DEFAULT_DATASET_NAME,
                     "weeks": 4,
