@@ -27,7 +27,10 @@ from app.schemas.review import (
     ReviewFlagResponse,
 )
 from app.services.learning import LearningEventForbiddenError, ensure_course_teacher
-from app.services.notifications import create_notification
+from app.services.notifications import (
+    create_notification,
+    review_notification_action_url,
+)
 
 FOLLOW_UP_MARKERS = (
     "没解决",
@@ -279,7 +282,7 @@ async def attach_auto_review_flags(
                     severity=NotificationSeverity.CRITICAL,
                     title="AI 回答需要高风险审核",
                     body=question[:500],
-                    action_url=f"/review-flags/{flag.id}",
+                    action_url=review_notification_action_url(course_id, flag.id),
                     payload_json={"review_flag_id": str(flag.id)},
                     dedupe_key=f"review-high-risk:{assistant_message.id}:{reason.value}",
                 )

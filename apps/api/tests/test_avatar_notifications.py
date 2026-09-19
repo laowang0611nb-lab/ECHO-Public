@@ -235,3 +235,4 @@ async def test_student_join_creates_teacher_notification(client: AsyncClient) ->
     payload = notifications.json()
     assert payload["unreadCount"] == 1
     assert payload["items"][0]["type"] == "course_member_change"
+    assert payload["items"][0]["action_url"] == (f"/courses/{course['id']}?tab=students")

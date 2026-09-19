@@ -4,6 +4,7 @@ import base64
 import binascii
 import json
 from datetime import UTC, datetime
+from urllib.parse import urlencode
 from uuid import UUID
 
 from database.models.notification import (
@@ -13,6 +14,15 @@ from database.models.notification import (
 )
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def review_notification_action_url(course_id: UUID, flag_id: UUID) -> str:
+    query = urlencode({"reviewId": str(flag_id), "courseId": str(course_id)})
+    return f"/ai-review/pending?{query}"
+
+
+def course_students_notification_action_url(course_id: UUID) -> str:
+    return f"/courses/{course_id}?tab=students"
 
 
 class NotificationNotFoundError(Exception):

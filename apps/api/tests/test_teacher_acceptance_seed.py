@@ -69,6 +69,8 @@ async def test_teacher_acceptance_seed_is_repeatable_and_resettable(tmp_path: Pa
             )
 
         assert first.manifest["courses"][0]["courseId"] == second.manifest["courses"][0]["courseId"]
+        assert second.manifest["courses"][0]["courseCode"] == "ACC00001"
+        assert all(len(course["courseCode"]) == 8 for course in second.manifest["courses"])
         assert first.counts == second.counts
         assert second.counts["courses"] == 4
         assert second.counts["students"] == 12

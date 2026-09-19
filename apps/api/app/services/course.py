@@ -16,7 +16,10 @@ from app.schemas.course import (
     CourseMemberResponse,
     CourseUpdate,
 )
-from app.services.notifications import create_notification
+from app.services.notifications import (
+    course_students_notification_action_url,
+    create_notification,
+)
 
 COURSE_CODE_LENGTH = 8
 COURSE_CODE_ALPHABET = string.ascii_uppercase + string.digits
@@ -252,7 +255,7 @@ async def join_course_by_code(
             severity=NotificationSeverity.INFO,
             title="有新学生加入课程",
             body=f"{user.display_name} 已加入课程 {course.name}。",
-            action_url=f"/courses/{course.id}/students",
+            action_url=course_students_notification_action_url(course.id),
             payload_json={"student_id": str(user.id), "course_id": str(course.id)},
             dedupe_key=f"course-member-joined:{course.id}:{user.id}",
         )

@@ -48,6 +48,8 @@
 | POST | `/notifications/{notification_id}/read` | 已登录 | 标记自己的单条通知已读 |
 | POST | `/notifications/read-all` | 已登录 | 标记当前用户全部通知已读 |
 
+通知的 `action_url` 使用教师端可直接跳转的站内路由，例如 `/ai-review/pending?reviewId=...&courseId=...` 和 `/courses/{course_id}?tab=students`。
+
 ## 3. 文档与知识结构
 
 | 方法 | 路径 | 权限 | 说明 |
@@ -557,7 +559,7 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 
 `Course` 新增可选字段 `course_type`、`target_audience`、`expected_student_count` 和只读 `archived_at`。现有 `term` 作为学期字段，请求和响应同时兼容 `semester` 别名。
 
-课程状态扩展为 `draft`、`published`、`archived`。归档不物理删除课程、成员、资源、对话或 LearningEvent；归档课程不可发布或通过课程码加入，恢复后回到 `draft`。
+课程状态扩展为 `draft`、`published`、`archived`。归档不物理删除课程、成员、资源、对话或 LearningEvent；归档课程不可发布或通过课程码加入，恢复后回到 `draft`。课程码固定为 8 位大写字母或数字；验收 Seed 使用 `ACC00001` 至 `ACC99999` 格式，历史 `ACCxxx` 数据由迁移自动补零。
 
 ### 10.2 Teacher Profile 与 Password
 
