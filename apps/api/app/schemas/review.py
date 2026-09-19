@@ -26,7 +26,7 @@ class ReviewCitationResponse(BaseModel):
     chunk_id: UUID | None
     page_start: int
     page_end: int
-    quote: str
+    quote: str = ""
 
 
 class ReviewVersionResponse(BaseModel):

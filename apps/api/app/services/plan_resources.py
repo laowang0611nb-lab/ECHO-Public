@@ -160,7 +160,22 @@ async def resolve_resource_references(
 
 
 def resource_references_from_json(values: list[dict[str, object]]) -> list[ResourceReference]:
-    return [ResourceReference.model_validate(value) for value in values]
+    type_labels = {
+        "textbook": "教材资料",
+        "outline": "教学大纲",
+        "question_bank": "题库",
+        "code_example": "代码示例",
+        "lab": "实验资料",
+        "external_link": "外部资源",
+    }
+    references: list[ResourceReference] = []
+    for value in values:
+        normalized = dict(value)
+        legacy_type = str(normalized.get("type") or "textbook")
+        normalized.setdefault("resource_type", legacy_type)
+        normalized.setdefault("title", type_labels.get(legacy_type, "关联资源"))
+        references.append(ResourceReference.model_validate(normalized))
+    return references
 
 
 def resource_json(values: list[ResourceReference]) -> list[dict[str, object]]:

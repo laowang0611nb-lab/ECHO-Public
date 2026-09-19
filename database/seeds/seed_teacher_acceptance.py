@@ -1112,6 +1112,9 @@ def _build_conversations_messages_citations(
                                     "chunk_id": str(chunk["id"]),
                                     "page_start": chunk["page_start"],
                                     "page_end": chunk["page_end"],
+                                    "quote": chunk["content"][:240],
+                                    "document_name": _document_display_name(course_index),
+                                    "chapter_title": _chapter_title(course_index, chunk),
                                 },
                                 "teacher_note": (
                                     "验收教师备注：检查定义与边界条件是否讲清楚。"
@@ -1185,6 +1188,9 @@ def _build_review_details(
                         "chunk_id": flag["details"]["chunk_id"],
                         "page_start": flag["details"]["page_start"],
                         "page_end": flag["details"]["page_end"],
+                        "quote": flag["details"]["quote"],
+                        "document_name": flag["details"]["document_name"],
+                        "chapter_title": flag["details"]["chapter_title"],
                     }
                 ],
                 "source": ReviewVersionSource.ORIGINAL,
@@ -1214,6 +1220,9 @@ def _build_review_details(
                             "chunk_id": flag["details"]["chunk_id"],
                             "page_start": flag["details"]["page_start"],
                             "page_end": flag["details"]["page_end"],
+                            "quote": flag["details"]["quote"],
+                            "document_name": flag["details"]["document_name"],
+                            "chapter_title": flag["details"]["chapter_title"],
                         }
                     ],
                     "source": source,
@@ -1450,7 +1459,7 @@ def _build_planning(
                 "expected_effect": {"summary": "预计减少重复错误", "impact": 0.1},
                 "generated_context": {"acceptance_seed": DEFAULT_DATASET_NAME},
                 "resources_json": [
-                    {"id": str(_document_id(course_id)), "type": "textbook"}
+                    {"id": str(_document_id(course_id)), "title": "验收教材", "resource_type": "textbook"}
                 ],
                 "created_by": _teacher_id(),
                 "updated_by": _teacher_id(),
@@ -1500,7 +1509,7 @@ def _build_planning(
                 },
                 "evaluation_metrics": ["mastery_change", "repeated_error_rate"],
                 "resources_json": [
-                    {"id": str(_document_id(course_id)), "type": "textbook"}
+                    {"id": str(_document_id(course_id)), "title": "验收教材", "resource_type": "textbook"}
                 ],
                 "teacher_note": "仅用于验收、分页、检索和教师工作流压力测试。",
                 "created_by": _teacher_id(),
@@ -1521,7 +1530,7 @@ def _build_planning(
                     "content": f"第{week_number}周：完成目标知识点讲解、练习和证据复核。",
                     "knowledge_point_ids": [str(point) for point in target_points],
                     "resources_json": [
-                        {"id": str(_document_id(course_id)), "type": "textbook"}
+                        {"id": str(_document_id(course_id)), "title": "验收教材", "resource_type": "textbook"}
                     ],
                     "created_at": now - timedelta(days=50 - week_number),
                 }
@@ -1551,7 +1560,7 @@ def _build_planning(
                     ),
                     "due_at": now - timedelta(days=49 - week_number * 7),
                     "resources_json": [
-                        {"id": str(_document_id(course_id)), "type": "textbook"}
+                        {"id": str(_document_id(course_id)), "title": "验收教材", "resource_type": "textbook"}
                     ],
                     "created_by": _teacher_id(),
                     "created_at": now - timedelta(days=50 - week_number),
