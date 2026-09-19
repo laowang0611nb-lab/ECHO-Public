@@ -1,7 +1,7 @@
 import type { KnowledgePoint } from "@echo/shared-types";
 import { SymbolView } from "expo-symbols";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -18,9 +18,16 @@ import {
   OfflineState,
 } from "@/components/states/page-state";
 import { SkeletonBlock, SkeletonLine } from "@/components/states/skeleton";
+import { ConsolidationQuizSheet } from "@/components/student/consolidation-quiz-sheet";
 import { DetailHeader } from "@/components/student/detail-header";
 import { PageFade } from "@/components/student/page-fade";
 import { studentTheme } from "@/constants/student-theme";
+import {
+  learningEventDescription,
+  learningEventTitle,
+  masteryDeltaLabel,
+} from "@/features/learning/learning-event-view-model";
+import { useKnowledgePointLearningData } from "@/features/learning/use-knowledge-point-learning-data";
 import { useStudentCourseData } from "@/features/learning/use-student-course-data";
 import { isOfflineError } from "@/lib/service-status";
 import { useCurrentCourse } from "@/providers/current-course-provider";
@@ -50,6 +57,12 @@ export default function KnowledgePointDetailScreen() {
   const { selectedCourse, selectCourse } = useCurrentCourse();
   const effectiveCourseId = routeCourseId ?? selectedCourse?.id ?? null;
   const data = useStudentCourseData(user?.id ?? "", effectiveCourseId);
+  const [consolidationVisible, setConsolidationVisible] = useState(false);
+  const learningData = useKnowledgePointLearningData(
+    user?.id ?? "",
+    effectiveCourseId,
+    knowledgePointId,
+  );
 
   useEffect(() => {
     if (routeCourseId && selectedCourse?.id !== routeCourseId) {
@@ -236,34 +249,151 @@ export default function KnowledgePointDetailScreen() {
           )}
 
           <Text style={styles.sectionTitle}>教材来源</Text>
-          <View style={styles.unavailableCard}>
-            <SymbolView
-              name={{ android: "menu_book", web: "menu_book" }}
-              size={18}
-              tintColor={studentTheme.color.warning}
-            />
-            <View style={styles.unavailableCopy}>
-              <Text style={styles.unavailableTitle}>暂无课程教材来源</Text>
-              <Text style={styles.unavailableText}>
-                暂未提供可追溯的教材名称、章节和页码。
-              </Text>
+          {learningData.sourcesLoading ? (
+            <Text style={styles.emptyText}>正在读取教材来源...</Text>
+          ) : learningData.sources.length === 0 ? (
+            <View style={styles.unavailableCard}>
+              <SymbolView
+                name={{ android: "menu_book", web: "menu_book" }}
+                size={18}
+                tintColor={studentTheme.color.warning}
+              />
+              <View style={styles.unavailableCopy}>
+                <Text style={styles.unavailableTitle}>暂无课程教材来源</Text>
+                <Text style={styles.unavailableText}>
+                  暂未提供可追溯的教材名称、章节和页码。
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View style={styles.sourceList}>
+              {learningData.sources.slice(0, 5).map((source) => (
+                <View key={source.chunk_id} style={styles.sourceCard}>
+                  <View style={styles.sourceTop}>
+                    <Text numberOfLines={1} style={styles.sourceTitle}>
+                      {source.document_name}
+                    </Text>
+                    <Text style={styles.sourcePage}>
+                      P.{source.page_start}-{source.page_end}
+                    </Text>
+                  </View>
+                  <Text style={styles.sourceChapter}>{source.chapter_title}</Text>
+                  <Text numberOfLines={4} style={styles.sourceQuote}>
+                    “{source.quote}”
+                  </Text>
+                </View>
+              ))}
+              {learningData.sources.length > 5 ? (
+                <Text style={styles.sourceMore}>
+                  已展示前 5 条教材来源，共 {learningData.sources.length} 条。
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          <Text style={styles.sectionTitle}>相关对话</Text>
+          {learningData.conversationsLoading ? (
+            <Text style={styles.emptyText}>正在读取相关对话...</Text>
+          ) : learningData.conversations.length === 0 ? (
+            <Text style={styles.emptyText}>暂时没有围绕该知识点的对话记录。</Text>
+          ) : (
+            <View style={styles.conversationList}>
+              {learningData.conversations.slice(0, 5).map((conversation) => (
+                <Pressable
+                  key={conversation.id}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/chat",
+                      params: {
+                        conversationId: conversation.id,
+                        courseId: effectiveCourseId,
+                        knowledgePointId: point.id,
+                      },
+                    })
+                  }
+                  style={({ pressed }) => [
+                    styles.conversationRow,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.conversationIcon}>
+                    <SymbolView
+                      name={{ android: "chat_bubble", web: "chat_bubble" }}
+                      size={17}
+                      tintColor={studentTheme.color.primary}
+                    />
+                  </View>
+                  <View style={styles.conversationCopy}>
+                    <Text numberOfLines={1} style={styles.conversationTitle}>
+                      {conversation.title || "知识点学习对话"}
+                    </Text>
+                    <Text style={styles.conversationMeta}>
+                      {conversation.matching_message_count} 条相关消息 · {formatUpdatedAt(conversation.latest_matching_at)}
+                    </Text>
+                  </View>
+                  <SymbolView
+                    name={{ android: "chevron_right", web: "chevron_right" }}
+                    size={18}
+                    tintColor={studentTheme.color.textSubtle}
+                  />
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {learningData.misconceptions &&
+          !learningData.misconceptions.insufficient_evidence ? (
+            <>
+              <Text style={styles.sectionTitle}>常见易错点</Text>
+              <View style={styles.misconceptionCard}>
+                <Text style={styles.misconceptionTitle}>
+                  {learningData.misconceptions.label}
+                </Text>
+                <Text style={styles.misconceptionText}>
+                  {learningData.misconceptions.description}
+                </Text>
+                <Text style={styles.misconceptionMeta}>
+                  近 30 天出现 {learningData.misconceptions.occurrence_count} 次
+                </Text>
+              </View>
+            </>
+          ) : null}
 
           <Text style={styles.sectionTitle}>最近学习证据</Text>
-          <View style={styles.evidenceCard}>
-            <Text style={styles.evidenceTitle}>
-              {state ? "已有学习状态记录" : "暂无学习证据"}
-            </Text>
-            <Text style={styles.evidenceText}>
-              {state
-                ? `当前状态 ${Math.round(state.score)}%，更新时间 ${formatUpdatedAt(state.updated_at)}。`
-                : "完成一次学习活动后，证据会显示在这里。"}
-            </Text>
-            <Text style={styles.gapText}>
-              继续学习后，这里会记录更多变化。
-            </Text>
-          </View>
+          {learningData.eventsLoading ? (
+            <Text style={styles.emptyText}>正在读取学习证据...</Text>
+          ) : learningData.events.length === 0 ? (
+            <View style={styles.evidenceCard}>
+              <Text style={styles.evidenceTitle}>暂无学习证据</Text>
+              <Text style={styles.evidenceText}>
+                完成一次学习活动后，证据会显示在这里。
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.evidenceList}>
+              {learningData.events.slice(0, 8).map((event) => {
+                const delta = masteryDeltaLabel(event);
+                return (
+                  <View key={event.id} style={styles.evidenceCard}>
+                    <View style={styles.evidenceTop}>
+                      <Text style={styles.evidenceTitle}>
+                        {learningEventTitle(event)}
+                      </Text>
+                      <Text style={styles.evidenceTime}>
+                        {formatUpdatedAt(event.created_at)}
+                      </Text>
+                    </View>
+                    <Text style={styles.evidenceText}>
+                      {learningEventDescription(event)}
+                    </Text>
+                    {delta ? (
+                      <Text style={styles.evidenceDelta}>{delta}</Text>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           <Text style={styles.sectionTitle}>ECHO 学习建议</Text>
           <View style={styles.suggestionCard}>
@@ -287,15 +417,25 @@ export default function KnowledgePointDetailScreen() {
           </View>
 
           <View style={styles.actions}>
-            <View style={[styles.actionButton, styles.actionDisabled]}>
+            <Pressable
+              disabled={offline}
+              onPress={() => setConsolidationVisible(true)}
+              style={({ pressed }) => [
+                styles.actionButton,
+                styles.actionSecondary,
+                offline && styles.actionDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
               <SymbolView
                 name={{ android: "quiz", web: "quiz" }}
                 size={18}
-                tintColor={studentTheme.color.textSubtle}
+                tintColor={studentTheme.color.primary}
               />
-              <Text style={styles.actionDisabledText}>5 分钟巩固 · 即将开放</Text>
-            </View>
+              <Text style={styles.actionSecondaryText}>5 分钟巩固</Text>
+            </Pressable>
             <Pressable
+              disabled={offline}
               onPress={() =>
                 router.push({
                   pathname: "/chat",
@@ -305,6 +445,7 @@ export default function KnowledgePointDetailScreen() {
               style={({ pressed }) => [
                 styles.actionButton,
                 styles.actionPrimary,
+                offline && styles.actionDisabled,
                 pressed && styles.pressed,
               ]}
             >
@@ -317,6 +458,13 @@ export default function KnowledgePointDetailScreen() {
             </Pressable>
           </View>
         </ScrollView>
+        <ConsolidationQuizSheet
+          courseId={effectiveCourseId}
+          knowledgePointId={point.id}
+          knowledgePointName={point.name}
+          onClose={() => setConsolidationVisible(false)}
+          visible={consolidationVisible}
+        />
       </PageFade>
     </SafeAreaView>
   );
@@ -489,6 +637,106 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
   },
+  sourceList: {
+    gap: 10,
+  },
+  sourceCard: {
+    backgroundColor: studentTheme.color.surface,
+    borderColor: studentTheme.color.border,
+    borderRadius: studentTheme.radius.card,
+    borderWidth: 1,
+    padding: 14,
+  },
+  sourceTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  sourceTitle: {
+    color: studentTheme.color.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  sourcePage: {
+    color: studentTheme.color.primary,
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  sourceChapter: {
+    color: studentTheme.color.textMuted,
+    fontSize: 10,
+    marginTop: 6,
+  },
+  sourceQuote: {
+    color: studentTheme.color.textMuted,
+    fontSize: 11,
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  sourceMore: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 10,
+    textAlign: "center",
+  },
+  conversationList: {
+    gap: 9,
+  },
+  conversationRow: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.surface,
+    borderColor: studentTheme.color.border,
+    borderRadius: studentTheme.radius.card,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 13,
+  },
+  conversationIcon: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.primarySoft,
+    borderRadius: 10,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  conversationCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  conversationTitle: {
+    color: studentTheme.color.text,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  conversationMeta: {
+    color: studentTheme.color.textMuted,
+    fontSize: 10,
+    marginTop: 5,
+  },
+  misconceptionCard: {
+    backgroundColor: studentTheme.color.warningSoft,
+    borderColor: studentTheme.color.warningBorder,
+    borderRadius: studentTheme.radius.card,
+    borderWidth: 1,
+    padding: 15,
+  },
+  misconceptionTitle: {
+    color: studentTheme.color.warning,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  misconceptionText: {
+    color: studentTheme.color.textMuted,
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 7,
+  },
+  misconceptionMeta: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 10,
+    marginTop: 8,
+  },
   unavailableCard: {
     alignItems: "flex-start",
     backgroundColor: studentTheme.color.warningSoft,
@@ -513,12 +761,31 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     marginTop: 4,
   },
+  evidenceList: {
+    gap: 9,
+  },
   evidenceCard: {
     backgroundColor: studentTheme.color.surface,
     borderColor: studentTheme.color.border,
     borderRadius: studentTheme.radius.card,
     borderWidth: 1,
     padding: 14,
+  },
+  evidenceTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+  },
+  evidenceTime: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 9,
+  },
+  evidenceDelta: {
+    color: studentTheme.color.success,
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 8,
   },
   evidenceTitle: {
     color: studentTheme.color.text,
@@ -585,10 +852,20 @@ const styles = StyleSheet.create({
   actionPrimary: {
     backgroundColor: studentTheme.color.primary,
   },
+  actionSecondary: {
+    backgroundColor: studentTheme.color.primarySoft,
+    borderColor: studentTheme.color.primaryBorder,
+    borderWidth: 1,
+  },
   actionDisabled: {
     backgroundColor: studentTheme.color.surface,
     borderColor: studentTheme.color.border,
     borderWidth: 1,
+  },
+  actionSecondaryText: {
+    color: studentTheme.color.primary,
+    fontSize: 14,
+    fontWeight: "800",
   },
   actionPrimaryText: {
     color: "#ffffff",

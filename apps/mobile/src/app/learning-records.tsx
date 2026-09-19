@@ -1,4 +1,5 @@
 import { SymbolView } from "expo-symbols";
+import type { StudentLearningEventItem } from "@echo/shared-types";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -17,9 +18,16 @@ import { DetailHeader } from "@/components/student/detail-header";
 import { PageFade } from "@/components/student/page-fade";
 import { studentTheme } from "@/constants/student-theme";
 import {
-  type StudentActivityItem,
   useStudentCourseData,
 } from "@/features/learning/use-student-course-data";
+import {
+  isChapterEvent,
+  isConversationEvent,
+  isQuizEvent,
+  learningEventDescription,
+  learningEventTitle,
+} from "@/features/learning/learning-event-view-model";
+import { useStudentLearningEvents } from "@/features/learning/use-student-learning-events";
 import { isOfflineError } from "@/lib/service-status";
 import { useCurrentCourse } from "@/providers/current-course-provider";
 import { useStudentSession } from "@/providers/student-session-provider";
@@ -66,6 +74,10 @@ export default function LearningRecordsScreen() {
   const { selectedCourse, selectCourse } = useCurrentCourse();
   const effectiveCourseId = routeCourseId ?? selectedCourse?.id ?? null;
   const data = useStudentCourseData(user?.id ?? "", effectiveCourseId);
+  const eventData = useStudentLearningEvents(
+    user?.id ?? "",
+    effectiveCourseId,
+  );
   const [activeTab, setActiveTab] = useState<RecordTab>("all");
 
   useEffect(() => {
@@ -74,28 +86,35 @@ export default function LearningRecordsScreen() {
     }
   }, [routeCourseId, selectCourse, selectedCourse?.id]);
 
-  const filteredActivities = useMemo(() => {
+  const filteredEvents = useMemo(() => {
     if (activeTab === "conversation") {
-      return data.recentActivities.filter((item) => item.kind === "conversation");
+      return eventData.events.filter((event) =>
+        isConversationEvent(event.event_type),
+      );
     }
-    if (activeTab === "all") return data.recentActivities;
-    return [];
-  }, [activeTab, data.recentActivities]);
+    if (activeTab === "quiz") {
+      return eventData.events.filter((event) => isQuizEvent(event.event_type));
+    }
+    if (activeTab === "chapter") {
+      return eventData.events.filter((event) => isChapterEvent(event.event_type));
+    }
+    return eventData.events;
+  }, [activeTab, eventData.events]);
 
   const groups = useMemo(() => {
-    const grouped = new Map<string, StudentActivityItem[]>();
-    for (const item of filteredActivities) {
-      const key = dateKey(item.createdAt);
+    const grouped = new Map<string, StudentLearningEventItem[]>();
+    for (const item of filteredEvents) {
+      const key = dateKey(item.created_at);
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     }
     return Array.from(grouped.entries());
-  }, [filteredActivities]);
+  }, [filteredEvents]);
 
-  const recentConversationCount = data.recentActivities.filter(
-    (item) => item.kind === "conversation",
+  const conversationCount = eventData.events.filter((event) =>
+    isConversationEvent(event.event_type),
   ).length;
-  const recentMasteryCount = data.recentActivities.filter(
-    (item) => item.kind === "mastery",
+  const quizCount = eventData.events.filter((event) =>
+    isQuizEvent(event.event_type),
   ).length;
 
   if (!user || !effectiveCourseId) {
@@ -108,11 +127,11 @@ export default function LearningRecordsScreen() {
     );
   }
 
-  if (data.loading && !data.course) {
+  if ((data.loading || eventData.loading) && !data.course) {
     return <LearningRecordsSkeleton />;
   }
 
-  if (data.error && !data.course) {
+  if ((data.error || eventData.error) && !data.course) {
     return isOfflineError(data.error) ? (
       <OfflineState onRetry={() => void data.reload()} />
     ) : (
@@ -124,8 +143,12 @@ export default function LearningRecordsScreen() {
     );
   }
 
-  const offline = isOfflineError(data.error);
+  const offline = isOfflineError(data.error ?? eventData.error);
   const courseName = data.course?.name ?? selectedCourse?.name ?? "当前课程";
+
+  async function reload() {
+    await Promise.all([data.reload(), eventData.reload()]);
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
@@ -140,7 +163,7 @@ export default function LearningRecordsScreen() {
           refreshControl={
             <RefreshControl
               colors={[studentTheme.color.primary]}
-              onRefresh={() => void data.reload()}
+              onRefresh={() => void reload()}
               refreshing={false}
               tintColor={studentTheme.color.primary}
             />
@@ -150,7 +173,7 @@ export default function LearningRecordsScreen() {
           {offline ? (
             <OfflineBanner
               description="已缓存的学习记录仍可查看。"
-              onRetry={() => void data.reload()}
+              onRetry={() => void reload()}
             />
           ) : null}
 
@@ -158,12 +181,12 @@ export default function LearningRecordsScreen() {
             <Text style={styles.heroEyebrow}>最近学习概况</Text>
             <Text style={styles.heroTitle}>当前可读取记录</Text>
             <View style={styles.metrics}>
-              <Metric label="AI 对话" value={recentConversationCount} />
-              <Metric label="检测" value={null} />
-              <Metric label="状态更新" value={recentMasteryCount} />
+              <Metric label="学习事件" value={eventData.total} />
+              <Metric label="问答" value={conversationCount} />
+              <Metric label="检测" value={quizCount} />
             </View>
             <Text style={styles.heroHint}>
-              当前展示最近的学习记录，更多内容会在数据积累后显示。
+              共 {eventData.total} 条真实学习记录，当前展示最近加载的内容。
             </Text>
           </View>
 
@@ -184,16 +207,7 @@ export default function LearningRecordsScreen() {
             })}
           </View>
 
-          {activeTab === "quiz" || activeTab === "chapter" ? (
-            <UnavailableTimeline
-              description={
-                activeTab === "quiz"
-                  ? "暂时无法读取检测记录，完成更多学习后再来看看。"
-                  : "暂时无法读取章节学习记录，可先从课程目录进入章节学习。"
-              }
-              title={activeTab === "quiz" ? "检测记录暂不可用" : "章节学习记录暂不可用"}
-            />
-          ) : groups.length === 0 ? (
+          {groups.length === 0 ? (
             <EmptyState
               description="完成一次 AI 提问、快速检测或章节学习后，这里会记录你的学习过程。"
               title="还没有学习记录"
@@ -202,27 +216,27 @@ export default function LearningRecordsScreen() {
             <View style={styles.timeline}>
               {groups.map(([key, items]) => (
                 <View key={key} style={styles.dayGroup}>
-                  <Text style={styles.dayLabel}>{dateLabel(items[0].createdAt)}</Text>
+                  <Text style={styles.dayLabel}>{dateLabel(items[0].created_at)}</Text>
                   <View style={styles.dayLine} />
                   <View style={styles.dayItems}>
                     {items.map((item, index) => (
                       <Pressable
                         key={item.id}
                         onPress={() => {
-                          if (item.conversationId) {
+                          if (item.conversation_id) {
                             router.push({
                               pathname: "/chat",
                               params: {
                                 courseId: effectiveCourseId,
-                                conversationId: item.conversationId,
+                                conversationId: item.conversation_id,
                               },
                             });
-                          } else if (item.knowledgePointId) {
+                          } else if (item.knowledge_point_id) {
                             router.push({
                               pathname: "/knowledge/[knowledgePointId]",
                               params: {
                                 courseId: effectiveCourseId,
-                                knowledgePointId: item.knowledgePointId,
+                                knowledgePointId: item.knowledge_point_id,
                               },
                             });
                           }
@@ -236,20 +250,20 @@ export default function LearningRecordsScreen() {
                           <View
                             style={[
                               styles.eventDot,
-                              item.kind === "mastery" && styles.eventDotSuccess,
+                              isQuizEvent(item.event_type) && styles.eventDotSuccess,
                             ]}
                           />
                           {index < items.length - 1 ? <View style={styles.eventLine} /> : null}
                         </View>
                         <View style={styles.eventCopy}>
                           <Text style={styles.eventTitle}>
-                            {item.kind === "conversation" ? "AI 对话" : "状态更新"}
+                            {learningEventTitle(item)}
                           </Text>
                           <Text numberOfLines={2} style={styles.eventDescription}>
-                            {item.title}
+                            {learningEventDescription(item)}
                           </Text>
                           <Text style={styles.eventMeta}>
-                            {item.description} · {timeLabel(item.createdAt)}
+                            {timeLabel(item.created_at)}
                           </Text>
                         </View>
                         <SymbolView
@@ -264,6 +278,21 @@ export default function LearningRecordsScreen() {
               ))}
             </View>
           )}
+
+          {eventData.hasNextPage ? (
+            <Pressable
+              disabled={eventData.fetchingNextPage}
+              onPress={() => void eventData.loadMore()}
+              style={({ pressed }) => [
+                styles.loadMore,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.loadMoreText}>
+                {eventData.fetchingNextPage ? "正在加载..." : "加载更多记录"}
+              </Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       </PageFade>
     </SafeAreaView>
@@ -279,29 +308,6 @@ function Metric({ label, value }: { label: string; value: number | null }) {
   );
 }
 
-function UnavailableTimeline({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <View style={styles.unavailableCard}>
-      <View style={styles.unavailableIcon}>
-        <SymbolView
-          name={{ android: "hourglass_empty", web: "hourglass_empty" }}
-          size={19}
-          tintColor={studentTheme.color.warning}
-        />
-      </View>
-      <View style={styles.unavailableCopy}>
-        <Text style={styles.unavailableTitle}>{title}</Text>
-        <Text style={styles.unavailableText}>{description}</Text>
-      </View>
-    </View>
-  );
-}
 
 function LearningRecordsSkeleton() {
   return (
@@ -505,6 +511,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     marginTop: 5,
+  },
+  loadMore: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.surface,
+    borderColor: studentTheme.color.border,
+    borderRadius: studentTheme.radius.medium,
+    borderWidth: 1,
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  loadMoreText: {
+    color: studentTheme.color.primary,
+    fontSize: 13,
+    fontWeight: "800",
   },
   skeletonContent: {
     gap: 14,

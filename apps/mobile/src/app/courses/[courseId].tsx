@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -19,12 +20,13 @@ import {
 } from "@/components/states/page-state";
 import { SkeletonBlock, SkeletonLine } from "@/components/states/skeleton";
 import { DetailHeader } from "@/components/student/detail-header";
+import { CourseAnnouncementSheet } from "@/components/student/course-announcement-sheet";
 import { PageFade } from "@/components/student/page-fade";
 import {
   ResourceListSheet,
-  type StudentCourseResource,
 } from "@/components/student/course-resource-sheet";
 import { studentTheme } from "@/constants/student-theme";
+import { learningEventIcon } from "@/features/learning/learning-event-view-model";
 import { useStudentCourseData } from "@/features/learning/use-student-course-data";
 import { isOfflineError } from "@/lib/service-status";
 import { useCurrentCourse } from "@/providers/current-course-provider";
@@ -50,6 +52,19 @@ function courseStatusLabel(status: string): string {
   return "进行中";
 }
 
+function taskStatusLabel(status: string): string {
+  if (status === "completed") return "已完成";
+  if (status === "in_progress") return "进行中";
+  if (status === "overdue") return "已延期";
+  return "未开始";
+}
+
+function chapterStatusLabel(status: string): string {
+  if (status === "completed") return "已完成";
+  if (status === "in_progress") return "学习中";
+  return "未开始";
+}
+
 export default function CourseDetailScreen() {
   const params = useLocalSearchParams<{ courseId?: string | string[] }>();
   const routeCourseId = firstParam(params.courseId);
@@ -58,6 +73,7 @@ export default function CourseDetailScreen() {
   const effectiveCourseId = routeCourseId ?? selectedCourse?.id ?? null;
   const data = useStudentCourseData(user?.id ?? "", effectiveCourseId);
   const [resourceSheetVisible, setResourceSheetVisible] = useState(false);
+  const [announcementSheetVisible, setAnnouncementSheetVisible] = useState(false);
 
   useEffect(() => {
     if (routeCourseId && selectedCourse?.id !== routeCourseId) {
@@ -107,6 +123,21 @@ export default function CourseDetailScreen() {
   const offline = isOfflineError(data.error);
   const continueTarget = data.continueTarget;
   const courseIdForLinks = course.id;
+  const progressPercent = data.progress?.overall_progress_percent ?? 0;
+  const teacherLabel = data.teachers.length
+    ? data.teachers.map((teacher) => teacher.display_name).join("、")
+    : "授课教师待同步";
+  const currentTasks = [...data.planTasks]
+    .sort((left, right) => {
+      const rank = (status: string) => {
+        if (status === "overdue") return 0;
+        if (status === "in_progress") return 1;
+        if (status === "not_started") return 2;
+        return 3;
+      };
+      return rank(left.status) - rank(right.status) || left.week_number - right.week_number;
+    })
+    .slice(0, 3);
 
   function openContinue() {
     if (!continueTarget) return;
@@ -166,7 +197,7 @@ export default function CourseDetailScreen() {
             </View>
             <Text style={styles.courseName}>{course.name}</Text>
             <Text style={styles.courseMeta}>
-              {[course.term ?? "学期待同步", "授课教师待同步"].join(" · ")}
+              {[course.term ?? "学期待同步", teacherLabel].join(" · ")}
             </Text>
             {course.description ? (
               <Text style={styles.courseDescription}>{course.description}</Text>
@@ -180,9 +211,7 @@ export default function CourseDetailScreen() {
               <View>
                 <Text style={styles.sectionEyebrow}>当前学习进度</Text>
                 <Text style={styles.progressValue}>
-                  {data.averageMastery === null
-                    ? "暂无足够学习证据"
-                    : `平均掌握 ${data.averageMastery}%`}
+                  {`总体进度 ${progressPercent}%`}
                 </Text>
               </View>
               <View style={styles.chapterCountBadge}>
@@ -197,12 +226,16 @@ export default function CourseDetailScreen() {
                 style={[
                   styles.progressFill,
                   {
-                    width:
-                      data.averageMastery === null ? "0%" : `${data.averageMastery}%`,
+                    width: `${progressPercent}%`,
                   },
                 ]}
               />
             </View>
+            {data.averageMastery !== null ? (
+              <Text style={styles.derivedHint}>
+                综合掌握 {data.averageMastery}% · 章节完成标准：全部知识点有证据且掌握度不低于 80%
+              </Text>
+            ) : null}
             <Pressable
               disabled={!continueTarget}
               onPress={openContinue}
@@ -273,11 +306,17 @@ export default function CourseDetailScreen() {
                       <Text
                         style={[
                           styles.chapterStatus,
-                          item.status === "learning" && styles.chapterStatusLearning,
+                          item.status === "in_progress" && styles.chapterStatusLearning,
+                          item.status === "completed" && styles.chapterStatusCompleted,
                         ]}
                       >
-                        {item.status === "learning" ? "学习中" : "未开始"}
+                        {chapterStatusLabel(item.status)}
                       </Text>
+                      {item.status !== "not_started" ? (
+                        <Text style={styles.chapterMastery}>
+                          {item.progressPercent}%
+                        </Text>
+                      ) : null}
                       {item.averageMastery !== null ? (
                         <Text style={styles.chapterMastery}>
                           掌握 {item.averageMastery}%
@@ -296,19 +335,67 @@ export default function CourseDetailScreen() {
           )}
 
           <Text style={styles.sectionTitle}>本周任务</Text>
-          <View style={styles.unavailableCard}>
-            <SymbolView
-              name={{ android: "assignment", web: "assignment" }}
-              size={18}
-              tintColor={studentTheme.color.warning}
-            />
-            <View style={styles.unavailableCopy}>
-              <Text style={styles.unavailableTitle}>暂无可读取的学习任务</Text>
-              <Text style={styles.unavailableText}>
-                 教师暂未发布可查看的本周学习任务。
-              </Text>
+          {currentTasks.length === 0 ? (
+            <View style={styles.unavailableCard}>
+              <SymbolView
+                name={{ android: "assignment", web: "assignment" }}
+                size={18}
+                tintColor={studentTheme.color.warning}
+              />
+              <View style={styles.unavailableCopy}>
+                <Text style={styles.unavailableTitle}>暂无学习任务</Text>
+                <Text style={styles.unavailableText}>
+                  当前计划中没有分配给自己的学习任务。
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View style={styles.taskList}>
+              {currentTasks.map((task) => (
+                <Pressable
+                  key={task.id}
+                  onPress={() =>
+                    task.knowledge_point_ids[0]
+                      ? router.push({
+                          pathname: "/knowledge/[knowledgePointId]",
+                          params: {
+                            courseId: course.id,
+                            knowledgePointId: task.knowledge_point_ids[0],
+                          },
+                        })
+                      : undefined
+                  }
+                  style={({ pressed }) => [
+                    styles.taskCard,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.taskTop}>
+                    <Text numberOfLines={1} style={styles.taskTitle}>
+                      {task.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.taskStatus,
+                        task.status === "completed" && styles.taskStatusCompleted,
+                        task.status === "overdue" && styles.taskStatusOverdue,
+                      ]}
+                    >
+                      {taskStatusLabel(task.status)}
+                    </Text>
+                  </View>
+                  <Text numberOfLines={2} style={styles.taskDescription}>
+                    {task.description}
+                  </Text>
+                  <Text style={styles.taskMeta}>
+                    {[task.plan_title, `第 ${task.week_number} 周`, task.due_at ? `截止 ${formatShortDate(task.due_at)}` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
 
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>课程资料</Text>
@@ -330,8 +417,40 @@ export default function CourseDetailScreen() {
             <View style={styles.resourceCopy}>
               <Text style={styles.resourceTitle}>课程资料清单</Text>
               <Text style={styles.resourceText}>
-                 课程资料暂未开放查看。
+                {data.resourcesLoading
+                  ? "正在读取真实课程资料"
+                  : data.resources.length > 0
+                    ? `${data.resources.length} 份资料可查看`
+                    : "当前课程还没有可查看的资料"}
               </Text>
+            </View>
+            <SymbolView
+              name={{ android: "chevron_right", web: "chevron_right" }}
+              size={19}
+              tintColor={studentTheme.color.textSubtle}
+            />
+          </Pressable>
+
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>课程公告</Text>
+            <Pressable onPress={() => setAnnouncementSheetVisible(true)}>
+              <Text style={styles.sectionAction}>查看</Text>
+            </Pressable>
+          </View>
+          <Pressable
+            onPress={() => setAnnouncementSheetVisible(true)}
+            style={({ pressed }) => [styles.resourceCard, pressed && styles.pressed]}
+          >
+            <View style={styles.resourceIcon}>
+              <SymbolView
+                name={{ android: "campaign", web: "campaign" }}
+                size={19}
+                tintColor={studentTheme.color.violet}
+              />
+            </View>
+            <View style={styles.resourceCopy}>
+              <Text style={styles.resourceTitle}>课程公告与教师消息</Text>
+              <Text style={styles.resourceText}>查看老师发布的最新课程安排</Text>
             </View>
             <SymbolView
               name={{ android: "chevron_right", web: "chevron_right" }}
@@ -388,15 +507,22 @@ export default function CourseDetailScreen() {
                   >
                     <SymbolView
                       name={{
-                        android:
-                          activity.kind === "conversation" ? "chat_bubble" : "trending_up",
-                        web: activity.kind === "conversation" ? "chat_bubble" : "trending_up",
+                        android: activity.eventType
+                          ? learningEventIcon(activity.eventType)
+                          : activity.kind === "conversation"
+                            ? "chat_bubble"
+                            : "trending_up",
+                        web: activity.eventType
+                          ? learningEventIcon(activity.eventType)
+                          : activity.kind === "conversation"
+                            ? "chat_bubble"
+                            : "trending_up",
                       }}
                       size={16}
                       tintColor={
-                        activity.kind === "conversation"
-                          ? studentTheme.color.primary
-                          : studentTheme.color.success
+                        activity.kind === "mastery"
+                          ? studentTheme.color.success
+                          : studentTheme.color.primary
                       }
                     />
                   </View>
@@ -419,10 +545,32 @@ export default function CourseDetailScreen() {
       </PageFade>
 
       <ResourceListSheet
+        error={
+          data.resourcesError ? "暂时无法读取课程资料，请稍后重试。" : null
+        }
+        loading={data.resourcesLoading}
         onClose={() => setResourceSheetVisible(false)}
-        resources={[] satisfies StudentCourseResource[]}
+        onOpenResource={(resource) => {
+          if (resource.externalUrl) void Linking.openURL(resource.externalUrl);
+        }}
+        resources={data.resources.map((resource) => ({
+          available: resource.available,
+          chapterTitle: resource.chapter_title,
+          externalUrl: resource.external_url,
+          id: resource.id,
+          openable: Boolean(resource.external_url),
+          resourceType: resource.resource_type,
+          status: resource.status,
+          summary: resource.summary,
+          title: resource.title,
+        }))}
         unavailableReason="课程资料暂未开放查看，请稍后再试。"
         visible={resourceSheetVisible}
+      />
+      <CourseAnnouncementSheet
+        courseId={course.id}
+        onClose={() => setAnnouncementSheetVisible(false)}
+        visible={announcementSheetVisible}
       />
     </SafeAreaView>
   );
@@ -657,10 +805,64 @@ const styles = StyleSheet.create({
     backgroundColor: studentTheme.color.primarySoft,
     color: studentTheme.color.primary,
   },
+  chapterStatusCompleted: {
+    backgroundColor: studentTheme.color.successSoft,
+    color: studentTheme.color.success,
+  },
   chapterMastery: {
     color: studentTheme.color.success,
     fontSize: 10,
     fontWeight: "800",
+  },
+  taskList: {
+    gap: 9,
+  },
+  taskCard: {
+    backgroundColor: studentTheme.color.surface,
+    borderColor: studentTheme.color.border,
+    borderRadius: studentTheme.radius.card,
+    borderWidth: 1,
+    padding: 14,
+  },
+  taskTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  taskTitle: {
+    color: studentTheme.color.text,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  taskStatus: {
+    backgroundColor: studentTheme.color.primarySoft,
+    borderRadius: studentTheme.radius.pill,
+    color: studentTheme.color.primary,
+    fontSize: 10,
+    fontWeight: "800",
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  taskStatusCompleted: {
+    backgroundColor: studentTheme.color.successSoft,
+    color: studentTheme.color.success,
+  },
+  taskStatusOverdue: {
+    backgroundColor: studentTheme.color.warningSoft,
+    color: studentTheme.color.warning,
+  },
+  taskDescription: {
+    color: studentTheme.color.textMuted,
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  taskMeta: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 10,
+    marginTop: 9,
   },
   unavailableCard: {
     alignItems: "flex-start",

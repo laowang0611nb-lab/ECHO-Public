@@ -1,7 +1,7 @@
 import type { KnowledgePoint } from "@echo/shared-types";
 import { SymbolView } from "expo-symbols";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -19,6 +19,7 @@ import {
   OfflineState,
 } from "@/components/states/page-state";
 import { SkeletonBlock, SkeletonLine } from "@/components/states/skeleton";
+import { ConsolidationQuizSheet } from "@/components/student/consolidation-quiz-sheet";
 import { DetailHeader } from "@/components/student/detail-header";
 import { PageFade } from "@/components/student/page-fade";
 import { studentTheme } from "@/constants/student-theme";
@@ -42,6 +43,7 @@ export default function ChapterGuideScreen() {
   const { selectedCourse, selectCourse } = useCurrentCourse();
   const effectiveCourseId = routeCourseId ?? selectedCourse?.id ?? null;
   const data = useStudentCourseData(user?.id ?? "", effectiveCourseId);
+  const [consolidationVisible, setConsolidationVisible] = useState(false);
 
   useEffect(() => {
     if (routeCourseId && selectedCourse?.id !== routeCourseId) {
@@ -64,8 +66,12 @@ export default function ChapterGuideScreen() {
   const firstIncompletePoint = useMemo(
     () =>
       orderedPoints.find(
-        (point) =>
-          !data.masteryStates.some((state) => state.knowledge_point_id === point.id),
+        (point) => {
+          const state = data.masteryStates.find(
+            (item) => item.knowledge_point_id === point.id,
+          );
+          return !state || state.score < 80;
+        },
       ) ??
       orderedPoints[0] ??
       null,
@@ -165,9 +171,19 @@ export default function ChapterGuideScreen() {
               </View>
               <View style={styles.heroMeta}>
                 <Text style={styles.heroMetaValue}>
-                  {chapterSummary.status === "learning" ? "学习中" : "未开始"}
+                  {chapterSummary.status === "completed"
+                    ? "已完成"
+                    : chapterSummary.status === "in_progress"
+                      ? "学习中"
+                      : "未开始"}
                 </Text>
                 <Text style={styles.heroMetaLabel}>当前状态</Text>
+              </View>
+              <View style={styles.heroMeta}>
+                <Text style={styles.heroMetaValue}>
+                  {`${chapterSummary.progressPercent}%`}
+                </Text>
+                <Text style={styles.heroMetaLabel}>章节进度</Text>
               </View>
             </View>
             <Pressable
@@ -315,30 +331,55 @@ export default function ChapterGuideScreen() {
               <Text style={styles.actionTitle}>进入 AI 对话</Text>
               <Text style={styles.actionText}>围绕本章继续提问</Text>
             </Pressable>
-            <View style={[styles.actionCard, styles.actionDisabled]}>
+            <Pressable
+              disabled={!firstIncompletePoint}
+              onPress={() => firstIncompletePoint && openPoint(firstIncompletePoint)}
+              style={({ pressed }) => [
+                styles.actionCard,
+                !firstIncompletePoint && styles.actionDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
               <View style={styles.actionIcon}>
                 <SymbolView
                   name={{ android: "description", web: "description" }}
                   size={19}
-                  tintColor={studentTheme.color.textSubtle}
+                  tintColor={studentTheme.color.primary}
                 />
               </View>
               <Text style={styles.actionTitle}>查看教材来源</Text>
-              <Text style={styles.actionText}>即将开放</Text>
-            </View>
-            <View style={[styles.actionCard, styles.actionDisabled]}>
+              <Text style={styles.actionText}>查看知识点引用与页码</Text>
+            </Pressable>
+            <Pressable
+              disabled={offline || !firstIncompletePoint}
+              onPress={() => setConsolidationVisible(true)}
+              style={({ pressed }) => [
+                styles.actionCard,
+                (offline || !firstIncompletePoint) && styles.actionDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
               <View style={styles.actionIcon}>
                 <SymbolView
                   name={{ android: "quiz", web: "quiz" }}
                   size={19}
-                  tintColor={studentTheme.color.textSubtle}
+                  tintColor={studentTheme.color.primary}
                 />
               </View>
               <Text style={styles.actionTitle}>5 分钟巩固</Text>
-              <Text style={styles.actionText}>即将开放</Text>
+              <Text style={styles.actionText}>
+                {offline ? "服务恢复后可用" : "完成 2 至 3 道快速验证"}
+              </Text>
+            </Pressable>
             </View>
-          </View>
         </ScrollView>
+        <ConsolidationQuizSheet
+          courseId={effectiveCourseId}
+          knowledgePointId={firstIncompletePoint?.id ?? ""}
+          knowledgePointName={firstIncompletePoint?.name}
+          onClose={() => setConsolidationVisible(false)}
+          visible={consolidationVisible && Boolean(firstIncompletePoint)}
+        />
       </PageFade>
     </SafeAreaView>
   );

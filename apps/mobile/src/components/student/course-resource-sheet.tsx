@@ -1,5 +1,13 @@
 import { SymbolView } from "expo-symbols";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/states/page-state";
@@ -11,18 +19,26 @@ export interface StudentCourseResource {
   resourceType: string | null;
   status: string | null;
   chapterTitle?: string | null;
+  summary?: string | null;
+  externalUrl?: string | null;
+  available?: boolean;
+  openable?: boolean;
 }
 
 export function ResourceListSheet({
   visible,
   resources,
   unavailableReason,
+  error,
+  loading = false,
   onClose,
   onOpenResource,
 }: {
   visible: boolean;
   resources: StudentCourseResource[];
   unavailableReason?: string;
+  error?: string | null;
+  loading?: boolean;
   onClose: () => void;
   onOpenResource?: (resource: StudentCourseResource) => void;
 }) {
@@ -62,7 +78,7 @@ export function ResourceListSheet({
             >
               {resources.map((resource) => (
                 <Pressable
-                  disabled={!onOpenResource}
+                  disabled={!onOpenResource || resource.openable === false}
                   key={resource.id}
                   onPress={() => onOpenResource?.(resource)}
                   style={({ pressed }) => [
@@ -87,7 +103,7 @@ export function ResourceListSheet({
                         .join(" · ")}
                     </Text>
                   </View>
-                  {onOpenResource ? (
+                  {onOpenResource && resource.openable !== false ? (
                     <SymbolView
                       name={{ android: "chevron_right", web: "chevron_right" }}
                       size={19}
@@ -97,11 +113,18 @@ export function ResourceListSheet({
                 </Pressable>
               ))}
             </ScrollView>
+          ) : loading ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator color={studentTheme.color.primary} />
+              <Text style={styles.loadingText}>正在读取真实课程资料</Text>
+            </View>
           ) : (
             <View style={styles.emptyWrap}>
               <EmptyState
-                description={unavailableReason || "当前课程还没有可查看的资料。"}
-                title="暂无课程资料"
+                description={
+                  error || unavailableReason || "当前课程还没有可查看的资料。"
+                }
+                title={error ? "课程资料加载失败" : "暂无课程资料"}
               />
             </View>
           )}
@@ -193,6 +216,16 @@ const styles = StyleSheet.create({
   },
   emptyWrap: {
     minHeight: 260,
+  },
+  loadingWrap: {
+    alignItems: "center",
+    gap: 10,
+    justifyContent: "center",
+    minHeight: 260,
+  },
+  loadingText: {
+    color: studentTheme.color.textMuted,
+    fontSize: 12,
   },
   pressed: {
     opacity: 0.76,
