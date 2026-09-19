@@ -259,6 +259,16 @@ async def test_sdk_provider_errors_are_mapped(provider_code, expected_error) -> 
         await provider.send_verify_code(PHONE)
 
 
+async def test_sdk_validate_fail_maps_to_invalid_code() -> None:
+    sdk_client = FakeSdkClient(
+        check_error=TeaException({"code": "isv.ValidateFail", "message": "verification failed"})
+    )
+    provider = make_provider(sdk_client)
+
+    with pytest.raises(AliyunPnvsCodeInvalidOrExpiredError):
+        await provider.check_verify_code(PHONE, "0000")
+
+
 async def test_missing_credentials_are_rejected() -> None:
     provider = AliyunPnvsProvider(
         access_key_id=None,

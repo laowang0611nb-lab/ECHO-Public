@@ -274,7 +274,8 @@ def _translate_provider_error(
     ):
         return AliyunPnvsServiceUnavailableError
     if operation == "verify" and any(
-        token in haystack for token in ("verify", "verifycode", "expired", "invalid")
+        token in haystack
+        for token in ("verify", "verifycode", "validatefail", "expired", "invalid")
     ):
         return AliyunPnvsCodeInvalidOrExpiredError
     if operation == "verify":
