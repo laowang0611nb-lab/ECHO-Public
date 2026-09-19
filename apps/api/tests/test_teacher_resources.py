@@ -666,6 +666,54 @@ async def test_permanent_document_delete_rolls_back_all_steps(
         assert await session.get(KnowledgePoint, point_id) is not None
 
 
+async def test_knowledge_analytics_rejects_soft_deleted_document(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "deleted-analytics@example.com", "teacher")
+    student = await login(client, "deleted-analytics-student@example.com", "student")
+    course = await create_course_and_student(client, teacher, student)
+    document = await create_ready_document(client, teacher, course)
+    course_id = UUID(course["id"])
+    document_id = UUID(str(document["id"]))
+    chapter_id = uuid4()
+    point_id = uuid4()
+    async with session_factory() as session:
+        session.add(
+            Chapter(
+                id=chapter_id,
+                course_id=course_id,
+                document_id=document_id,
+                title="Deleted Analytics Chapter",
+                order_index=0,
+            )
+        )
+        session.add(
+            KnowledgePoint(
+                id=point_id,
+                course_id=course_id,
+                chapter_id=chapter_id,
+                name="Deleted Analytics Point",
+                order_index=0,
+            )
+        )
+        stored_document = await session.get(Document, document_id)
+        assert stored_document is not None
+        stored_document.trashed_at = datetime.now(UTC)
+        await session.commit()
+
+    trend = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-points/{point_id}/mastery-trend",
+        headers=auth_headers(teacher),
+    )
+    errors = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-points/{point_id}/error-patterns",
+        headers=auth_headers(teacher),
+    )
+    assert trend.status_code == 404
+    assert errors.status_code == 404
+
+
 def test_teacher_resource_openapi_paths() -> None:
     from app.main import app
 

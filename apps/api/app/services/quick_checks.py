@@ -3,7 +3,8 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from database.models.chat import Conversation, Message, MessageRole
-from database.models.knowledge import KnowledgeChunk, KnowledgePoint
+from database.models.document import Document
+from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import (
     LearningEventType,
     QuickCheckAttempt,
@@ -14,6 +15,7 @@ from database.models.resource import (
     QuestionType,
     question_item_knowledge_points,
 )
+from database.models.user import User
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,13 +114,9 @@ def _hint_levels(item: QuestionItem) -> list[str]:
     if fallback and fallback not in hints:
         hints.append(fallback)
     if not hints:
-        hints.append(
-            "先回到课程材料，把题干中的关键词和每个选项分别对应起来。"
-        )
+        hints.append("先回到课程材料，把题干中的关键词和每个选项分别对应起来。")
     if len(hints) == 1:
-        hints.append(
-            "再检查一次题干限制条件，想一想哪个选项最符合课程中的定义。"
-        )
+        hints.append("再检查一次题干限制条件，想一想哪个选项最符合课程中的定义。")
     return hints[:3]
 
 
@@ -148,13 +146,37 @@ async def _question_knowledge_point_id(
     points = list(
         await session.scalars(
             select(question_item_knowledge_points.c.knowledge_point_id)
-            .where(question_item_knowledge_points.c.question_item_id == item.id)
+            .join(
+                KnowledgePoint,
+                KnowledgePoint.id == question_item_knowledge_points.c.knowledge_point_id,
+            )
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
+                question_item_knowledge_points.c.question_item_id == item.id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
+            )
             .limit(1)
         )
     )
     if points:
         return points[0]
-    return _question_knowledge_point_id_sync(item)
+    fallback = _question_knowledge_point_id_sync(item)
+    if fallback is None:
+        return None
+    return await session.scalar(
+        select(KnowledgePoint.id)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            KnowledgePoint.id == fallback,
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
+    )
 
 
 async def resolve_knowledge_point_id(
@@ -165,10 +187,15 @@ async def resolve_knowledge_point_id(
 ) -> UUID | None:
     if explicit_id is not None:
         point = await session.scalar(
-            select(KnowledgePoint.id).where(
+            select(KnowledgePoint.id)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
                 KnowledgePoint.id == explicit_id,
                 KnowledgePoint.course_id == course_id,
                 KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
         if point is None:
@@ -180,10 +207,14 @@ async def resolve_knowledge_point_id(
     chapter_ids = list(
         await session.scalars(
             select(KnowledgeChunk.chapter_id)
+            .join(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
             .where(
                 KnowledgeChunk.id.in_(source_chunk_ids),
                 KnowledgeChunk.course_id == course_id,
                 KnowledgeChunk.chapter_id.is_not(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
     )
@@ -192,10 +223,14 @@ async def resolve_knowledge_point_id(
         return None
     return await session.scalar(
         select(KnowledgePoint.id)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
         .where(
             KnowledgePoint.course_id == course_id,
             KnowledgePoint.chapter_id.in_(chapter_ids),
             KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
         )
         .order_by(KnowledgePoint.order_index, KnowledgePoint.created_at)
         .limit(1)
@@ -412,6 +447,7 @@ async def submit_quick_check_attempt(
         item,
     )
 
+    await session.execute(select(User.id).where(User.id == user_id).with_for_update())
     attempt_count_statement = (
         select(func.count())
         .select_from(QuickCheckAttempt)
@@ -474,9 +510,7 @@ async def submit_quick_check_attempt(
             conversation_id=conversation_id,
             message_id=message.id if message is not None else None,
             event_type=(
-                LearningEventType.QUIZ_CORRECT
-                if correct
-                else LearningEventType.QUIZ_WRONG
+                LearningEventType.QUIZ_CORRECT if correct else LearningEventType.QUIZ_WRONG
             ),
             evidence=f"Quick Check 选择：{payload.selected_option_id}",
             metadata_json={
@@ -486,6 +520,7 @@ async def submit_quick_check_attempt(
                 "selected_option_id": payload.selected_option_id,
             },
         ),
+        commit=False,
     )
     after_score = await _mastery_score(
         session,
@@ -554,8 +589,7 @@ async def submit_quick_check_attempt(
                 if not (
                     isinstance(block, dict)
                     and block.get("type") == "mastery_update"
-                    and block.get("knowledge_point_id")
-                    == str(mastery_update.knowledge_point_id)
+                    and block.get("knowledge_point_id") == str(mastery_update.knowledge_point_id)
                 )
             ]
             message.blocks = [
@@ -596,9 +630,7 @@ async def request_next_hint(
         raise QuickCheckConflictError
     current_level = _hint_level_from_message(message)
     target_level = (
-        current_level + 1
-        if requested_level is None
-        else max(current_level + 1, requested_level)
+        current_level + 1 if requested_level is None else max(current_level + 1, requested_level)
     )
     hint = build_hint_block(item, target_level)
     _replace_message_block(
@@ -638,8 +670,7 @@ async def _generate_question_draft(
     if complete is None:
         return None
     source_text = "\n\n".join(
-        f"[{index}] {source.content[:1200]}"
-        for index, source in enumerate(sources[:4], start=1)
+        f"[{index}] {source.content[:1200]}" for index, source in enumerate(sources[:4], start=1)
     )
     system_prompt = (
         "You design one short single-choice diagnostic question for a student. "
@@ -703,8 +734,7 @@ async def ensure_quick_check_for_chat(
         statement = statement.where(
             QuestionItem.id.in_(
                 select(question_item_knowledge_points.c.question_item_id).where(
-                    question_item_knowledge_points.c.knowledge_point_id
-                    == knowledge_point_id
+                    question_item_knowledge_points.c.knowledge_point_id == knowledge_point_id
                 )
             )
         )

@@ -178,6 +178,7 @@ def resource_references_from_json(values: list[dict[str, object]]) -> list[Resou
         references.append(ResourceReference.model_validate(normalized))
     return references
 
+
 def normalize_plan_action(value: str) -> PlanTaskType:
     legacy_actions = {
         "lecture": PlanTaskType.CLASSROOM_LECTURE,

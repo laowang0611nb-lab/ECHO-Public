@@ -3,13 +3,14 @@ from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from database.models.knowledge import KnowledgePoint
+from database.models.document import Document
+from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.learning import (
     LearningEvent,
     LearningEventType,
     MasterySnapshot,
 )
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -118,10 +119,15 @@ async def get_knowledge_point_mastery_trend(
 ) -> MasteryTrendResponse:
     await ensure_teacher(session, course_id, requester_id)
     point = await session.scalar(
-        select(KnowledgePoint.id).where(
+        select(KnowledgePoint.id)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
             KnowledgePoint.id == knowledge_point_id,
             KnowledgePoint.course_id == course_id,
             KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
         )
     )
     if point is None:
@@ -160,11 +166,20 @@ async def get_student_mastery_trend(
     snapshots = list(
         await session.scalars(
             select(MasterySnapshot)
+            .join(
+                KnowledgePoint,
+                KnowledgePoint.id == MasterySnapshot.knowledge_point_id,
+            )
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
             .where(
                 MasterySnapshot.course_id == course_id,
                 MasterySnapshot.user_id == student_id,
                 MasterySnapshot.created_at >= start,
                 MasterySnapshot.created_at < end,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
             .order_by(MasterySnapshot.created_at, MasterySnapshot.id)
         )
@@ -266,10 +281,15 @@ async def get_knowledge_point_error_patterns(
 ) -> ErrorPatternResponse:
     await ensure_teacher(session, course_id, requester_id)
     point = await session.scalar(
-        select(KnowledgePoint.id).where(
+        select(KnowledgePoint.id)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
             KnowledgePoint.id == knowledge_point_id,
             KnowledgePoint.course_id == course_id,
             KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
         )
     )
     if point is None:
@@ -306,12 +326,27 @@ async def get_student_error_patterns(
     _, _, start, end = _window(days)
     events = list(
         await session.scalars(
-            select(LearningEvent).where(
+            select(LearningEvent)
+            .outerjoin(
+                KnowledgePoint,
+                KnowledgePoint.id == LearningEvent.knowledge_point_id,
+            )
+            .outerjoin(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .outerjoin(Document, Document.id == Chapter.document_id)
+            .where(
                 LearningEvent.course_id == course_id,
                 LearningEvent.user_id == student_id,
                 LearningEvent.event_type.in_(ERROR_EVENT_TYPES),
                 LearningEvent.created_at >= start,
                 LearningEvent.created_at < end,
+                or_(
+                    KnowledgePoint.id.is_(None),
+                    and_(
+                        KnowledgePoint.trashed_at.is_(None),
+                        Chapter.trashed_at.is_(None),
+                        Document.trashed_at.is_(None),
+                    ),
+                ),
             )
         )
     )

@@ -372,11 +372,7 @@ async def _stream_chat_response_contents(
             if existing_assistant_message.status != MessageStatus.COMPLETE:
                 yield ChatEvent(
                     "error",
-                    {
-                        "detail": (
-                            "Previous response was interrupted; continue it before retrying"
-                        )
-                    },
+                    {"detail": ("Previous response was interrupted; continue it before retrying")},
                 )
                 return
             yield ChatEvent(

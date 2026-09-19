@@ -417,9 +417,7 @@ async def test_teacher_can_read_student_conversation_evidence(
     assert conversations.status_code == 200
     assert conversations.json()[0]["id"] == str(conversation_id)
     assert messages.status_code == 200
-    assistant = next(
-        item for item in messages.json() if item["role"] == "assistant"
-    )
+    assistant = next(item for item in messages.json() if item["role"] == "assistant")
     assert assistant["knowledgePointIds"] == [str(point.id)]
     assert assistant["reviewStatus"] == ReviewStatus.OPEN
     assert assistant["citations"][0]["chunk_id"] == str(chunk.id)
@@ -520,9 +518,7 @@ async def test_interrupted_assistant_message_can_continue(
 
     assert response.status_code == 200
     assert "event: text_delta" in response.text
-    assistant = next(
-        item for item in messages.json() if item["role"] == "assistant"
-    )
+    assistant = next(item for item in messages.json() if item["role"] == "assistant")
     assert assistant["content"] == "Partial Echo [1] answer"
     assert assistant["status"] == "complete"
 

@@ -1,5 +1,7 @@
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+import pytest
 from database.models.chat import Conversation, Message, MessageRole
 from database.models.document import Document, DocumentStatus
 from database.models.knowledge import Chapter, KnowledgePoint
@@ -12,6 +14,12 @@ from database.models.learning import (
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.services import quick_checks
+from app.services.quick_checks import (
+    QuickCheckNotFoundError,
+    resolve_knowledge_point_id,
+)
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -403,3 +411,71 @@ async def test_quick_check_attempt_limit_is_scoped_to_conversation(
     assert first_attempt.json()["correct"] is False
     assert second_attempt.status_code == 200
     assert second_attempt.json()["correct"] is True
+
+
+async def test_quick_check_transaction_rolls_back_attempt_and_allows_retry(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teacher = await login(client, "atomic-quick-check@example.com", "teacher")
+    student = await login(client, "atomic-quick-check-student@example.com", "student")
+    course = await create_published_course(client, teacher, student)
+    question, _ = await create_question(client, session_factory, teacher, course)
+    original_recorder = quick_checks.record_learning_event
+
+    async def fail_recording(*_: object, **__: object) -> object:
+        raise RuntimeError("simulated event failure")
+
+    monkeypatch.setattr(quick_checks, "record_learning_event", fail_recording)
+    payload = {
+        "attempt_id": "atomic-attempt",
+        "selected_option_id": "a",
+        "question_id": question["id"],
+    }
+    failed = await client.post(
+        f"/api/v1/quick-checks/{question['id']}/attempts",
+        headers=auth_headers(student),
+        json=payload,
+    )
+    assert failed.status_code == 409
+    async with session_factory() as session:
+        assert await session.scalar(select(QuickCheckAttempt)) is None
+
+    monkeypatch.setattr(quick_checks, "record_learning_event", original_recorder)
+    retry = await client.post(
+        f"/api/v1/quick-checks/{question['id']}/attempts",
+        headers=auth_headers(student),
+        json=payload,
+    )
+    assert retry.status_code == 200
+    assert retry.json()["correct"] is True
+
+
+async def test_explicit_quick_check_point_rejects_soft_deleted_document(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "deleted-point@example.com", "teacher")
+    student = await login(client, "deleted-point-student@example.com", "student")
+    course = await create_published_course(client, teacher, student)
+    _, point_id = await create_question(client, session_factory, teacher, course)
+    async with session_factory() as session:
+        document = await session.scalar(
+            select(Document)
+            .join(Chapter, Chapter.document_id == Document.id)
+            .join(KnowledgePoint, KnowledgePoint.chapter_id == Chapter.id)
+            .where(KnowledgePoint.id == point_id)
+        )
+        assert document is not None
+        document.trashed_at = datetime.now(UTC)
+        await session.commit()
+
+    async with session_factory() as session:
+        with pytest.raises(QuickCheckNotFoundError):
+            await resolve_knowledge_point_id(
+                session,
+                UUID(course["id"]),
+                [],
+                point_id,
+            )

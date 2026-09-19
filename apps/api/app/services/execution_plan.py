@@ -129,6 +129,7 @@ async def create_execution_plan(
             selectinload(TeachingStrategy.target_knowledge_points),
             selectinload(TeachingStrategy.target_students),
         )
+        .with_for_update()
         .where(
             TeachingStrategy.id == payload.strategy_id,
             TeachingStrategy.course_id == course_id,
@@ -324,6 +325,12 @@ async def apply_execution_plan_action(
         if plan.status in {ExecutionPlanStatus.COMPLETED, ExecutionPlanStatus.CANCELLED}:
             raise ExecutionPlanConflictError("Completed or cancelled plans cannot be cancelled")
         plan.status = ExecutionPlanStatus.CANCELLED
+        await set_strategy_status_from_plan(
+            session,
+            plan.strategy,
+            requester_id,
+            TeachingStrategyStatus.PLANNED,
+        )
     plan.updated_by = requester_id
     await session.commit()
     return await get_execution_plan(session, plan.id, requester_id)
@@ -340,8 +347,14 @@ async def generate_weekly_plan(
     if plan is None:
         raise ExecutionPlanNotFoundError
     await ensure_teacher(session, plan.course_id, requester_id)
-    if plan.status not in {ExecutionPlanStatus.DRAFT, ExecutionPlanStatus.READY}:
-        raise ExecutionPlanConflictError("Weekly plans can only be regenerated for draft plans")
+    initial_active_generation = plan.status == ExecutionPlanStatus.ACTIVE and not plan.tasks
+    if (
+        plan.status not in {ExecutionPlanStatus.DRAFT, ExecutionPlanStatus.READY}
+        and not initial_active_generation
+    ):
+        raise ExecutionPlanConflictError(
+            "Weekly plans can only be generated for draft plans or an active plan without tasks"
+        )
 
     if not payload.regenerate:
         existing = await session.scalar(
@@ -526,6 +539,8 @@ async def update_plan_task(
         raise ExecutionPlanNotFoundError
     plan = task.plan
     await ensure_teacher(session, plan.course_id, requester_id)
+    if plan.status in {ExecutionPlanStatus.COMPLETED, ExecutionPlanStatus.CANCELLED}:
+        raise ExecutionPlanConflictError("Completed or cancelled plans cannot have editable tasks")
     if "title" in payload.model_fields_set and payload.title is not None:
         task.title = payload.title
     if "description" in payload.model_fields_set:
@@ -551,6 +566,8 @@ async def update_plan_task(
             )
         )
     if payload.target_student_ids is not None:
+        if not payload.target_student_ids and plan.target_scope != PlanTargetScope.WHOLE_CLASS:
+            raise ExecutionPlanConflictError("Grouped tasks require at least one target student")
         task.target_students = await load_course_students(
             session,
             plan.course_id,
@@ -759,10 +776,13 @@ async def _task_item(
     plan: ExecutionPlan | None = None,
 ) -> PlanTaskItem:
     course_id = plan.course_id if plan is not None else task.plan.course_id
-    target_students = task.target_students or await list_course_students(
-        session,
-        course_id,
-    )
+    target_students = list(task.target_students)
+    if (
+        not target_students
+        and plan is not None
+        and plan.target_scope == PlanTargetScope.WHOLE_CLASS
+    ):
+        target_students = await list_course_students(session, course_id)
     total = len(target_students)
     completed = int(
         await session.scalar(

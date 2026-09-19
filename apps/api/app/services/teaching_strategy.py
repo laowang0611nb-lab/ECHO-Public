@@ -2,9 +2,12 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from database.models.course import Course
-from database.models.knowledge import KnowledgePoint
+from database.models.document import Document
+from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.learning import LearningEvent, StudentKnowledgeState
 from database.models.planning import (
+    ExecutionPlan,
+    ExecutionPlanStatus,
     TeachingStrategy,
     TeachingStrategyHistoryAction,
     TeachingStrategyPriority,
@@ -239,7 +242,7 @@ async def update_teaching_strategy(
     requester_id: UUID,
     payload: TeachingStrategyUpdateRequest,
 ) -> TeachingStrategyDetail:
-    strategy = await _load_strategy(session, strategy_id)
+    strategy = await _load_strategy(session, strategy_id, lock=True)
     if strategy is None:
         raise TeachingStrategyNotFoundError
     await ensure_teacher(session, strategy.course_id, requester_id)
@@ -303,7 +306,7 @@ async def apply_teaching_strategy_action(
     requester_id: UUID,
     payload: TeachingStrategyActionRequest,
 ) -> TeachingStrategyDetail:
-    strategy = await _load_strategy(session, strategy_id)
+    strategy = await _load_strategy(session, strategy_id, lock=True)
     if strategy is None:
         raise TeachingStrategyNotFoundError
     await ensure_teacher(session, strategy.course_id, requester_id)
@@ -333,6 +336,47 @@ async def list_teaching_strategy_versions(
     return [_version_item(version) for version in strategy.versions]
 
 
+async def _derived_strategy_status(
+    session: AsyncSession,
+    strategy_id: UUID,
+    fallback: TeachingStrategyStatus,
+) -> TeachingStrategyStatus:
+    statuses = set(
+        await session.scalars(
+            select(ExecutionPlan.status).where(ExecutionPlan.strategy_id == strategy_id)
+        )
+    )
+    if not statuses:
+        return fallback
+    if ExecutionPlanStatus.ACTIVE in statuses:
+        return TeachingStrategyStatus.ACTIVE
+    if ExecutionPlanStatus.PAUSED in statuses:
+        return TeachingStrategyStatus.PAUSED
+    if statuses & {ExecutionPlanStatus.DRAFT, ExecutionPlanStatus.READY}:
+        return TeachingStrategyStatus.PLANNED
+    if ExecutionPlanStatus.COMPLETED in statuses:
+        return TeachingStrategyStatus.COMPLETED
+    return TeachingStrategyStatus.PLANNED
+
+
+async def _set_strategy_status(
+    session: AsyncSession,
+    strategy: TeachingStrategy,
+    requester_id: UUID,
+    status: TeachingStrategyStatus,
+    action: TeachingStrategyHistoryAction,
+) -> None:
+    strategy.status = status
+    strategy.updated_by = requester_id
+    _record_strategy_version(
+        session,
+        strategy,
+        action,
+        requester_id,
+        _strategy_snapshot(strategy),
+    )
+
+
 async def link_strategy_to_plan(
     session: AsyncSession,
     strategy: TeachingStrategy,
@@ -345,18 +389,12 @@ async def link_strategy_to_plan(
         if published
         else TeachingStrategyHistoryAction.PLAN_CREATED
     )
-    if published:
-        strategy.status = TeachingStrategyStatus.ACTIVE
-    elif strategy.status == TeachingStrategyStatus.ACCEPTED:
-        strategy.status = TeachingStrategyStatus.PLANNED
-    strategy.updated_by = requester_id
-    _record_strategy_version(
+    desired = await _derived_strategy_status(
         session,
-        strategy,
-        action,
-        requester_id,
-        _strategy_snapshot(strategy),
+        strategy.id,
+        TeachingStrategyStatus.ACTIVE if published else TeachingStrategyStatus.PLANNED,
     )
+    await _set_strategy_status(session, strategy, requester_id, desired, action)
 
 
 async def set_strategy_status_from_plan(
@@ -365,32 +403,27 @@ async def set_strategy_status_from_plan(
     requester_id: UUID,
     status: TeachingStrategyStatus,
 ) -> None:
-    if strategy.status == status:
+    desired = await _derived_strategy_status(session, strategy.id, status)
+    if desired == strategy.status:
         return
-    action_by_status = {
-        TeachingStrategyStatus.PAUSED: TeachingStrategyHistoryAction.PAUSE,
+    action = {
+        TeachingStrategyStatus.PLANNED: TeachingStrategyHistoryAction.PLAN_CREATED,
         TeachingStrategyStatus.ACTIVE: TeachingStrategyHistoryAction.RESUME,
+        TeachingStrategyStatus.PAUSED: TeachingStrategyHistoryAction.PAUSE,
         TeachingStrategyStatus.COMPLETED: TeachingStrategyHistoryAction.COMPLETE,
-    }
-    action = action_by_status.get(status)
+    }.get(desired)
     if action is None:
         raise TeachingStrategyConflictError("Unsupported strategy status transition")
-    strategy.status = status
-    strategy.updated_by = requester_id
-    _record_strategy_version(
-        session,
-        strategy,
-        action,
-        requester_id,
-        _strategy_snapshot(strategy),
-    )
+    await _set_strategy_status(session, strategy, requester_id, desired, action)
 
 
 async def _load_strategy(
     session: AsyncSession,
     strategy_id: UUID,
+    *,
+    lock: bool = False,
 ) -> TeachingStrategy | None:
-    return await session.scalar(
+    statement = (
         select(TeachingStrategy)
         .options(
             selectinload(TeachingStrategy.target_knowledge_points),
@@ -399,8 +432,10 @@ async def _load_strategy(
             selectinload(TeachingStrategy.plans),
         )
         .execution_options(populate_existing=True)
-        .where(TeachingStrategy.id == strategy_id)
     )
+    if lock:
+        statement = statement.with_for_update()
+    return await session.scalar(statement.where(TeachingStrategy.id == strategy_id))
 
 
 async def _strategy_detail(
@@ -607,6 +642,8 @@ async def _load_generation_points(
     points = list(
         await session.scalars(
             select(KnowledgePoint)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
             .outerjoin(
                 StudentKnowledgeState,
                 StudentKnowledgeState.knowledge_point_id == KnowledgePoint.id,
@@ -614,6 +651,8 @@ async def _load_generation_points(
             .where(
                 KnowledgePoint.course_id == course_id,
                 KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
             .group_by(KnowledgePoint.id)
             .order_by(func.avg(StudentKnowledgeState.score).asc().nulls_last())

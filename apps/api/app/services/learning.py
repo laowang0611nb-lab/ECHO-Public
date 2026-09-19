@@ -89,6 +89,7 @@ async def record_learning_event(
     payload: LearningEventCreate,
     *,
     require_student_membership: bool = True,
+    commit: bool = True,
 ) -> LearningEvent:
     for attempt in range(3):
         try:
@@ -97,6 +98,7 @@ async def record_learning_event(
                 course_id,
                 payload,
                 require_student_membership=require_student_membership,
+                commit=commit,
             )
         except IntegrityError as exc:
             await session.rollback()
@@ -111,6 +113,7 @@ async def _record_learning_event_once(
     payload: LearningEventCreate,
     *,
     require_student_membership: bool = True,
+    commit: bool = True,
 ) -> LearningEvent:
     membership_query = select(CourseMember.id).where(
         CourseMember.course_id == course_id,
@@ -150,6 +153,7 @@ async def _record_learning_event_once(
     plan_id = payload.plan_id
     task_id = payload.task_id
     week_number = payload.week_number
+    task_target_ids: set[UUID] | None = None
     if task_id is not None:
         task = await session.get(PlanTask, task_id)
         if task is None or task.status == PlanTaskStatus.CANCELLED:
@@ -174,7 +178,10 @@ async def _record_learning_event_once(
         plan = await session.get(ExecutionPlan, plan_id)
         if plan is None or plan.course_id != course_id:
             raise LearningEventReferenceMismatchError
-        if plan.status == ExecutionPlanStatus.CANCELLED:
+        if plan.status in {
+            ExecutionPlanStatus.CANCELLED,
+            ExecutionPlanStatus.COMPLETED,
+        }:
             raise LearningEventReferenceMismatchError
         if plan.target_scope != PlanTargetScope.WHOLE_CLASS and task_id is None:
             target_ids = set(
@@ -186,6 +193,12 @@ async def _record_learning_event_once(
             )
             if payload.student_id not in target_ids:
                 raise LearningEventReferenceMismatchError
+        if (
+            plan.target_scope != PlanTargetScope.WHOLE_CLASS
+            and task_id is not None
+            and not task_target_ids
+        ):
+            raise LearningEventReferenceMismatchError
 
     knowledge_point_id = payload.knowledge_point_id
     if knowledge_point_id is not None:
@@ -258,8 +271,11 @@ async def _record_learning_event_once(
             )
         )
 
-    await session.commit()
-    await session.refresh(event)
+    if commit:
+        await session.commit()
+        await session.refresh(event)
+    else:
+        await session.flush()
     return event
 
 

@@ -154,8 +154,8 @@ async def _database_and_vector_status(session: DBSession) -> tuple[DatabaseStatu
 
 def _ai_provider_status() -> AIProviderStatus:
     llm_configured = bool(settings.llm_api_key)
-    chat_configured = bool(settings.chat_api_key or settings.llm_api_key)
-    embedding_configured = bool(settings.embedding_api_key or settings.llm_api_key)
+    chat_configured = bool(settings.chat_api_key)
+    embedding_configured = bool(settings.embedding_api_key)
     configured = llm_configured and chat_configured and embedding_configured
     if configured:
         status = "healthy"
