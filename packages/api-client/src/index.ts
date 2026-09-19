@@ -103,6 +103,10 @@ import type {
   ReviewSeverity,
   ReviewStatus,
   ReviewVersion,
+  SmsSendRequest,
+  SmsSendResponse,
+  SmsVerifyRequest,
+  SmsVerifyResponse,
   StudentLearningDetail,
   SystemStatusResponse,
   TeacherMessage,
@@ -265,6 +269,16 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       request<DemoDatasetStatus>("/api/v1/demo/reset", { method: "POST" }, userId),
     login: (payload: DevelopmentLoginRequest) =>
       request<User>("/api/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    sendSmsCode: (payload: SmsSendRequest) =>
+      request<SmsSendResponse>("/api/v1/auth/sms/send", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    verifySmsCode: (payload: SmsVerifyRequest) =>
+      request<SmsVerifyResponse>("/api/v1/auth/sms/verify", {
         method: "POST",
         body: JSON.stringify(payload),
       }),

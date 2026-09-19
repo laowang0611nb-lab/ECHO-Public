@@ -41,6 +41,12 @@ const tabs = [
 
 type MeTab = (typeof tabs)[number]["value"];
 
+function roleLabel(role: string) {
+  if (role === "teacher") return "教师";
+  if (role === "student") return "学生";
+  return "用户";
+}
+
 interface LocalPreferences {
   notifications: {
     highRiskReview: boolean;
@@ -238,7 +244,7 @@ function ProfileTab({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-semibold">{user.display_name}</h2>
-                <StatusBadge tone="info">教师</StatusBadge>
+                <StatusBadge tone="info">{roleLabel(profile?.role ?? user.role)}</StatusBadge>
               </div>
               <p className="mt-3 text-sm font-medium">教育创造更多可能</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">用技术连接教学证据、AI 辅助与教师判断，让每一次教学行动都可追踪。</p>
@@ -255,6 +261,7 @@ function ProfileTab({
           <CardHeader className="border-b px-5 py-4"><CardTitle>基本信息</CardTitle></CardHeader>
           <CardContent className="divide-y divide-border px-0">
             <ProfileRow icon={User} label="姓名" value={user.display_name} />
+            <ProfileRow icon={ShieldCheck} label="角色" value={roleLabel(profile?.role ?? user.role)} />
             <ProfileRow icon={Mail} label="邮箱" value={user.email} />
             <ProfileRow icon={Building2} label="学校" value={profile?.school_name || "未配置"} />
             <ProfileRow icon={Building2} label="所属院系" value={profile?.department || "未配置"} />
@@ -323,6 +330,9 @@ function ProfileTab({
 
 function passwordErrorMessage(error: unknown) {
   if (error instanceof ApiClientError) {
+    if (error.status === 429) return "操作过于频繁，请稍后再试。";
+    if (error.status === 503) return "认证服务暂时不可用，请稍后重试。";
+    if (error.status === 504) return "认证服务响应超时，请稍后重试。";
     const detail = typeof error.detail === "string" ? error.detail : "";
     if (error.status === 409 || detail.includes("not configured")) {
       return "当前账号尚未配置密码，无法在教师端修改。";
@@ -394,7 +404,7 @@ function SecurityTab({ user, deviceLabel }: { user: NonNullable<ReturnType<typeo
         <CardHeader className="border-b px-5 py-4"><CardTitle>登录账号</CardTitle></CardHeader>
         <CardContent className="divide-y divide-border px-0">
           <ProfileRow icon={Mail} label="登录邮箱" value={user.email} />
-          <ProfileRow icon={ShieldCheck} label="身份" value="教师" />
+          <ProfileRow icon={ShieldCheck} label="身份" value={roleLabel(user.role)} />
           <ProfileRow icon={KeyRound} label="密码" value="可通过修改密码接口更新" />
         </CardContent>
       </Card>

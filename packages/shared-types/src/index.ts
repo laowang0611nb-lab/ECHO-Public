@@ -154,6 +154,43 @@ export interface PasswordChangeRequest {
   new_password: string;
 }
 
+export type SmsErrorCode =
+  | "SMS_TOO_FREQUENT"
+  | "SMS_CODE_INVALID_OR_EXPIRED"
+  | "SMS_PROVIDER_NOT_CONFIGURED"
+  | "SMS_AUTH_FAILED"
+  | "SMS_BILLING_UNAVAILABLE"
+  | "SMS_SEND_FAILED"
+  | "SMS_TIMEOUT"
+  | "SMS_SERVICE_UNAVAILABLE";
+
+export interface SmsSendRequest {
+  phone: string;
+}
+
+export interface SmsSendResponse {
+  success: true;
+  message: string;
+  cooldown_seconds: number;
+}
+
+export interface SmsVerifyRequest {
+  phone: string;
+  code: string;
+}
+
+export interface SmsVerifyResponse {
+  success: true;
+  verified: true;
+  verification_token: string;
+  expires_in_seconds: number;
+}
+
+export interface SmsErrorDetail {
+  code: SmsErrorCode | string;
+  message: string;
+}
+
 export interface PasswordChangeResponse {
   changed_at: string;
   sessions_revoked: number;

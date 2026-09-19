@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import type { DevelopmentLoginRequest, User } from "@echo/shared-types";
 import {
   createContext,
@@ -27,6 +28,7 @@ interface TeacherSessionContextValue {
 const TeacherSessionContext = createContext<TeacherSessionContextValue | null>(null);
 
 export function TeacherSessionProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
@@ -75,15 +77,17 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (payload: DevelopmentLoginRequest) => {
     const currentUser = await apiClient.login(payload);
+    queryClient.clear();
     window.localStorage.setItem(SESSION_KEY, currentUser.id);
     setUser(currentUser);
     return currentUser;
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(() => {
     window.localStorage.removeItem(SESSION_KEY);
     setUser(null);
-  }, []);
+    queryClient.clear();
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({ ready, user, login, establishSession, updateUser, logout }),
