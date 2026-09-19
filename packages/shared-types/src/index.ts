@@ -116,6 +116,7 @@ export interface DemoDatasetStatus {
 
 export interface User {
   id: string;
+  phone: string | null;
   email: string;
   display_name: string;
   role: UserRole;
@@ -126,6 +127,7 @@ export interface User {
 
 export interface TeacherProfile {
   id: string;
+  phone: string | null;
   email: string;
   display_name: string;
   role: "teacher";
@@ -164,6 +166,8 @@ export type SmsErrorCode =
   | "SMS_TIMEOUT"
   | "SMS_SERVICE_UNAVAILABLE";
 
+export type PhoneVerificationPurpose = "register" | "password_reset" | "login";
+
 export interface SmsSendRequest {
   phone: string;
 }
@@ -175,6 +179,7 @@ export interface SmsSendResponse {
 }
 
 export interface SmsVerifyRequest {
+  purpose?: PhoneVerificationPurpose;
   phone: string;
   code: string;
 }
@@ -182,6 +187,7 @@ export interface SmsVerifyRequest {
 export interface SmsVerifyResponse {
   success: true;
   verified: true;
+  purpose: PhoneVerificationPurpose | null;
   verification_token: string;
   expires_in_seconds: number;
 }
@@ -189,6 +195,61 @@ export interface SmsVerifyResponse {
 export interface SmsErrorDetail {
   code: SmsErrorCode | string;
   message: string;
+}
+
+export interface SmsRegistrationRequest {
+  phone: string;
+  verification_token: string;
+  display_name: string;
+  password: string;
+  email?: string | null;
+  role?: UserRole;
+  device_name?: string | null;
+}
+
+export interface PasswordLoginRequest {
+  email?: string;
+  phone?: string;
+  password: string;
+  device_name?: string | null;
+}
+
+export interface PasswordResetRequest {
+  phone: string;
+  verification_token: string;
+  new_password: string;
+}
+
+export interface AuthSessionResponse {
+  user: User;
+  session_id: string;
+  access_token: string;
+  refresh_token: string;
+  token_type: "bearer";
+  expires_in_seconds: number;
+  refresh_expires_at: string;
+}
+
+export interface SessionRefreshRequest {
+  refresh_token: string;
+}
+
+export interface SessionLogoutRequest {
+  refresh_token: string;
+}
+
+export interface PasswordResetResponse {
+  success: true;
+  message: string;
+  changed_at: string;
+  sessions_revoked: number;
+}
+
+export interface AuthErrorResponse {
+  detail: {
+    code: string;
+    message: string;
+  };
 }
 
 export interface PasswordChangeResponse {

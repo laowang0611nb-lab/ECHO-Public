@@ -27,15 +27,10 @@ class UserStatus(StrEnum):
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid4
-    )
-    email: Mapped[str] = mapped_column(
-        String(320), unique=True, index=True, nullable=False
-    )
-    username: Mapped[str | None] = mapped_column(
-        String(64), unique=True, index=True, nullable=True
-    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(20), unique=True, index=True, nullable=True)
+    username: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(Text)
     avatar_storage_key: Mapped[str | None] = mapped_column(String(512))

@@ -1,18 +1,19 @@
 # ECHO API 契约
 
 > 冻结版本：`v0.0.91`
-> 冻结版本：`v0.0.109`
+> 冻结版本：`v0.0.110`
 > 基础路径：`/api/v1`  
 > 当前认证：开发环境 `X-User-Id`，生产部署前必须替换。
+> 当前认证：正式 Bearer JWT + Refresh Session；开发环境保留 `X-User-Id` 兼容入口。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session 和 Profile 基础，但正式 Bearer 登录接口尚未进入本契约；在接口冻结前客户端仍使用开发身份头。
+> 数据库层已具备 Argon2id、Access JWT、Refresh Session、手机号验证和 Profile 基础，正式手机号注册、密码登录、密码重置、刷新和退出接口已进入本契约。
 
 ## 1. 通用约定
 
 - 请求和响应使用 JSON，文件上传除外。
 - UUID 均以字符串传输。
 - 时间使用 ISO 8601 字符串。
-- 错误响应统一为 `{"detail": "..."}`。
-- 普通错误响应为 `{"detail": "..."}`；短信验证码接口使用 `{"detail": {"code": "...", "message": "..."}}` 提供机器可读错误码。
+- 普通错误响应为 `{"detail": "..."}`；短信验证码和正式手机号认证接口使用 `{"detail": {"code": "...", "message": "..."}}` 提供机器可读错误码。
 - 未登录或开发身份无效返回 `401`。
 - 角色或课程权限不足返回 `403`。
 - 资源不存在返回 `404`。
@@ -38,6 +39,11 @@
 | POST | `/auth/change-password` | 已登录 | 验证当前密码、更新 Argon2id Hash 并撤销旧 Refresh Session |
 | POST | `/auth/sms/send` | 公开 | 调用阿里云 PNVS 发送手机验证码，不返回验证码或内部 BizId |
 | POST | `/auth/sms/verify` | 公开 | 校验 PNVS 验证码，成功后返回 5 分钟手机验证票据 |
+| POST | `/auth/register/sms` | 公开 | 消费验证票据，创建手机号教师账号并返回正式会话 |
+| POST | `/auth/login/password` | 公开 | 使用邮箱或手机号加密码登录，返回正式会话 |
+| POST | `/auth/password/reset` | 公开 | 消费验证票据，重置手机号账号密码并撤销旧会话 |
+| POST | `/auth/refresh` | 公开 | 轮换 Refresh Token 并签发新 Access Token |
+| POST | `/auth/logout` | 公开 | 撤销指定 Refresh Session |
 | POST | `/courses` | 教师 | 创建课程并自动成为教师成员 |
 | GET | `/courses` | 已登录 | 当前用户加入的课程 |
 | GET | `/courses/{course_id}` | 课程成员 | 课程详情 |
@@ -575,7 +581,6 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 
 资源元数据字段包括 `display_name`（兼容请求别名 `title`）、`summary`、`keywords`、`author`、`publisher` 和 `copyright`。PATCH 只更新元数据，不改变原文件、`storage_key`、页面、Chunk、Embedding、Citation 或解析状态。
 
-### 10.4 保留的 P2
 ### 10.4 手机号验证码
 
 `POST /auth/sms/send` 接受中国大陆手机号 `phone`，调用阿里云号码认证服务 `Dypnsapi` 的 `SendSmsVerifyCode`；`POST /auth/sms/verify` 接受 `phone` 和 `code`，调用 `CheckSmsVerifyCode`。只有 `VerifyResult == PASS` 才视为验证成功，`Success == true` 和 `Code == OK` 本身不代表验证码正确。
@@ -584,7 +589,17 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 
 短信错误码包括 `SMS_TOO_FREQUENT`、`SMS_CODE_INVALID_OR_EXPIRED`、`SMS_PROVIDER_NOT_CONFIGURED`、`SMS_AUTH_FAILED`、`SMS_BILLING_UNAVAILABLE`、`SMS_SEND_FAILED`、`SMS_TIMEOUT` 和 `SMS_SERVICE_UNAVAILABLE`。响应不得包含 AccessKey、完整手机号、验证码、BizId 或 SDK traceback。
 
-### 10.5 保留的 P2
+### 10.5 正式手机号认证
+
+`User` 新增可空且唯一的 `phone` 字段；手机号注册使用内部保留邮箱占位，后续支持绑定真实邮箱。验证票据的 `jti` 会写入 `phone_verification_claims`，消费时采用原子更新，保证一次性使用。支持 `register`、`password_reset`、`login` 和兼容旧前端的通用 `phone_verification` 用途。
+
+`POST /auth/register/sms` 请求包含 `phone`、`verification_token`、`display_name`、`password`，可选 `email`、`role` 和 `device_name`。成功后返回 `user`、`session_id`、`access_token`、`refresh_token`、`token_type`、`expires_in_seconds` 和 `refresh_expires_at`。
+
+`POST /auth/login/password` 支持 `email` 或 `phone` 二选一，请求还要包含 `password`。错误码包括 `AUTH_ACCOUNT_NOT_FOUND`、`AUTH_INVALID_PASSWORD`、`AUTH_ACCOUNT_LOCKED` 和 `AUTH_ACCOUNT_DISABLED`；连续 5 次失败锁定 15 分钟。
+
+`POST /auth/password/reset` 请求包含 `phone`、`verification_token` 和 `new_password`。成功后更新 Argon2id 密码、重置失败登录状态并撤销旧 Refresh Session。`POST /auth/refresh` 轮换 Refresh Token；`POST /auth/logout` 幂等撤销 Refresh Session。受保护接口同时接受 `Authorization: Bearer <access_token>`，开发环境仍保留 `X-User-Id` 兼容入口。
+
+### 10.6 保留的 P2
 
 - 资源文件替换、课程 Deep Copy、教学日历、服务器 CPU/RAM/Disk/Network/日志监控。
 - 独立计划任务 POST 与拖拽排序；现有任务编辑仍使用 `PATCH /plan-tasks/{task_id}`。

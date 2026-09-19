@@ -1,4 +1,5 @@
 import type {
+  AuthSessionResponse,
   Chapter,
   ChapterAnalytics,
   ChapterCreateRequest,
@@ -25,6 +26,10 @@ import type {
   DocumentUploadSource,
   PasswordChangeRequest,
   PasswordChangeResponse,
+  PasswordLoginRequest,
+  PasswordResetRequest,
+  PasswordResetResponse,
+  SessionRefreshRequest,
   TeacherProfile,
   TeacherProfileUpdateRequest,
   ExecutionPlanAction,
@@ -104,6 +109,7 @@ import type {
   ReviewStatus,
   ReviewVersion,
   SmsSendRequest,
+  SmsRegistrationRequest,
   SmsSendResponse,
   SmsVerifyRequest,
   SmsVerifyResponse,
@@ -119,6 +125,7 @@ import type {
 export interface ApiClientOptions {
   baseUrl: string;
   fetchImpl?: typeof fetch;
+  getAccessToken?: () => string | null | undefined;
 }
 
 export class ApiClientError extends Error {
@@ -141,7 +148,14 @@ async function readError(response: Response): Promise<ApiClientError> {
     detail = undefined;
   }
 
-  const message = typeof detail === "string" ? detail : `ECHO API request failed: ${response.status}`;
+  const structuredMessage =
+    typeof detail === "object" && detail !== null && "message" in detail
+      ? String((detail as { message?: unknown }).message || "")
+      : "";
+  const message =
+    typeof detail === "string"
+      ? detail
+      : structuredMessage || `ECHO API request failed: ${response.status}`;
   return new ApiClientError(response.status, message, detail);
 }
 
@@ -214,7 +228,11 @@ async function* parseSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator
   }
 }
 
-export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions) {
+export function createApiClient({
+  baseUrl,
+  fetchImpl = fetch,
+  getAccessToken,
+}: ApiClientOptions) {
   const root = baseUrl.replace(/\/$/, "");
 
   async function request<T>(path: string, init?: RequestInit, userId?: string): Promise<T> {
@@ -223,7 +241,10 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
     if (init?.body !== undefined && !isFormData && !headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
-    if (userId) {
+    const accessToken = getAccessToken?.();
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    } else if (userId) {
       headers.set("X-User-Id", userId);
     }
 
@@ -281,6 +302,31 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       request<SmsVerifyResponse>("/api/v1/auth/sms/verify", {
         method: "POST",
         body: JSON.stringify(payload),
+      }),
+    registerWithSms: (payload: SmsRegistrationRequest) =>
+      request<AuthSessionResponse>("/api/v1/auth/register/sms", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    loginWithPassword: (payload: PasswordLoginRequest) =>
+      request<AuthSessionResponse>("/api/v1/auth/login/password", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    resetPassword: (payload: PasswordResetRequest) =>
+      request<PasswordResetResponse>("/api/v1/auth/password/reset", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    refreshSession: (payload: SessionRefreshRequest) =>
+      request<AuthSessionResponse>("/api/v1/auth/refresh", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    logout: (refreshToken: string) =>
+      request<void>("/api/v1/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({ refresh_token: refreshToken }),
       }),
     me: (userId: string) => request<User>("/api/v1/auth/me", undefined, userId),
     getTeacherProfile: (userId: string) =>

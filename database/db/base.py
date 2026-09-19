@@ -1,5 +1,5 @@
 from database.db.base_class import Base
-from database.models.auth import AuthSession, UserCredential
+from database.models.auth import AuthSession, PhoneVerificationClaim, UserCredential
 from database.models.chat import (
     Conversation,
     Message,
@@ -98,6 +98,7 @@ __all__ = [
     "NotificationSeverity",
     "NotificationType",
     "PlanTargetScope",
+    "PhoneVerificationClaim",
     "PlanTask",
     "PlanTaskStatus",
     "PlanTaskType",

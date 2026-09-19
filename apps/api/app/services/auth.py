@@ -185,6 +185,7 @@ def _profile_response(
     return TeacherProfileResponse(
         id=user.id,
         email=user.email,
+        phone=user.phone,
         display_name=user.display_name,
         role=user.role,
         avatar_url=user.avatar_url,

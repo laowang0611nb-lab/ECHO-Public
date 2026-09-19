@@ -1,10 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
 from database.auth.password import PASSWORD_ALGORITHM, hash_password, verify_password
 from database.auth.sessions import (
     create_auth_session,
@@ -15,6 +11,9 @@ from database.auth.sessions import (
 from database.models.auth import AuthSession, UserCredential
 from database.models.profile import StudentProfile, TeacherProfile
 from database.models.user import User, UserRole, UserStatus
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 async def test_user_account_defaults_and_username_uniqueness(
@@ -47,6 +46,31 @@ async def test_user_account_defaults_and_username_uniqueness(
                 email="other@example.com",
                 username="teacher-one",
                 display_name="Duplicate",
+                role=UserRole.STUDENT,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            await session.commit()
+
+
+async def test_phone_identity_is_unique_in_database(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        first = User(
+            email="phone-one@example.com",
+            phone="13800138000",
+            display_name="Phone One",
+            role=UserRole.TEACHER,
+        )
+        session.add(first)
+        await session.commit()
+
+        session.add(
+            User(
+                email="phone-two@example.com",
+                phone="13800138000",
+                display_name="Phone Two",
                 role=UserRole.STUDENT,
             )
         )
@@ -93,9 +117,7 @@ async def test_credential_hash_verify_and_profile_one_to_one(
         assert profile.school_name == "ECHO University"
 
         async with session_factory() as duplicate_session:
-            duplicate_session.add(
-                TeacherProfile(user_id=user.id, school_name="Duplicate Profile")
-            )
+            duplicate_session.add(TeacherProfile(user_id=user.id, school_name="Duplicate Profile"))
             with pytest.raises(IntegrityError):
                 await duplicate_session.commit()
 
@@ -240,11 +262,7 @@ async def test_auth_session_create_expire_revoke_and_cascade(
         assert stored_user is not None
         await session.delete(stored_user)
         await session.commit()
-        session_count = await session.scalar(
-            select(func.count()).select_from(AuthSession)
-        )
-        credential_count = await session.scalar(
-            select(func.count()).select_from(UserCredential)
-        )
+        session_count = await session.scalar(select(func.count()).select_from(AuthSession))
+        credential_count = await session.scalar(select(func.count()).select_from(UserCredential))
         assert session_count == 0
         assert credential_count == 0

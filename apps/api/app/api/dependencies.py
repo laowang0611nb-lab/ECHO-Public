@@ -1,8 +1,12 @@
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
+import jwt
+from database.auth.tokens import decode_access_token
 from database.db.session import get_db_session
-from database.models.user import User
+from database.models.auth import AuthSession
+from database.models.user import User, UserStatus
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,8 +105,36 @@ ChatProviderDep = Annotated[
 
 async def get_current_user(
     session: DBSession,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
 ) -> User:
+    if authorization is not None and authorization.strip():
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise _invalid_user_header()
+        try:
+            claims = decode_access_token(token.strip())
+            user_id = UUID(str(claims["sub"]))
+            session_id = claims.get("sid")
+        except (KeyError, ValueError, jwt.InvalidTokenError):
+            raise _invalid_user_header() from None
+        if session_id is not None:
+            try:
+                auth_session = await session.get(AuthSession, UUID(str(session_id)))
+            except ValueError:
+                raise _invalid_user_header() from None
+            if (
+                auth_session is None
+                or auth_session.user_id != user_id
+                or auth_session.revoked_at is not None
+                or _as_utc(auth_session.expires_at) <= datetime.now(UTC)
+            ):
+                raise _invalid_user_header()
+        user = await session.get(User, user_id)
+        if user is None or user.status != UserStatus.ACTIVE:
+            raise _invalid_user_header()
+        return user
+
     if not settings.development_auth_enabled:
         raise _invalid_user_header()
     if x_user_id is None or not x_user_id.strip():
@@ -120,6 +152,12 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _invalid_user_header() -> HTTPException:

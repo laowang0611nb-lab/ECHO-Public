@@ -1,17 +1,24 @@
 from typing import Annotated
 
-from database.auth.tokens import create_phone_verification_token
 from database.models.user import User
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
 
 from app.api.dependencies import AliyunPnvsProviderDep, AvatarStorageDep, CurrentUser, DBSession
 from app.core.config import settings
 from app.schemas.auth import (
+    AuthErrorResponse,
+    AuthSessionResponse,
     AvatarResponse,
     LoginRequest,
     PasswordChangeRequest,
     PasswordChangeResponse,
+    PasswordLoginRequest,
+    PasswordResetRequest,
+    PasswordResetResponse,
+    SessionLogoutRequest,
+    SessionRefreshRequest,
     SmsErrorResponse,
+    SmsRegistrationRequest,
     SmsSendRequest,
     SmsSendResponse,
     SmsVerifyRequest,
@@ -46,6 +53,23 @@ from app.services.avatar import (
     UnsupportedAvatarTypeError,
     delete_avatar,
     upload_avatar,
+)
+from app.services.phone_auth import (
+    AccountDisabledError,
+    AccountLockedError,
+    AccountNotFoundError,
+    AuthFlowError,
+    EmailAlreadyRegisteredError,
+    InvalidPasswordError,
+    PhoneAlreadyRegisteredError,
+    PhoneNotRegisteredError,
+    SessionInvalidError,
+    issue_phone_verification_token,
+    login_with_password,
+    logout_refresh_session,
+    refresh_auth_session,
+    register_with_sms,
+    reset_password_with_sms,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -108,6 +132,25 @@ def _sms_http_exception(exc: AliyunPnvsError) -> HTTPException:
     )
 
 
+def _auth_http_exception(exc: AuthFlowError) -> HTTPException:
+    if isinstance(exc, (PhoneAlreadyRegisteredError, EmailAlreadyRegisteredError)):
+        status_code = status.HTTP_409_CONFLICT
+    elif isinstance(exc, (AccountNotFoundError, PhoneNotRegisteredError)):
+        status_code = status.HTTP_404_NOT_FOUND
+    elif isinstance(exc, (InvalidPasswordError, SessionInvalidError)):
+        status_code = status.HTTP_401_UNAUTHORIZED
+    elif isinstance(exc, AccountLockedError):
+        status_code = status.HTTP_423_LOCKED
+    elif isinstance(exc, AccountDisabledError):
+        status_code = status.HTTP_403_FORBIDDEN
+    else:
+        status_code = status.HTTP_400_BAD_REQUEST
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": exc.code, "message": str(exc)},
+    )
+
+
 @router.post(
     "/sms/send",
     response_model=SmsSendResponse,
@@ -135,15 +178,113 @@ async def send_sms_verification_code(
 async def verify_sms_code(
     payload: SmsVerifyRequest,
     provider: AliyunPnvsProviderDep,
+    session: DBSession,
 ) -> SmsVerifyResponse:
     try:
         await provider.check_verify_code(payload.phone, payload.code)
     except AliyunPnvsError as exc:
         raise _sms_http_exception(exc) from exc
+    purpose = payload.purpose or "phone_verification"
+    verification_token = await issue_phone_verification_token(
+        session,
+        payload.phone,
+        purpose,
+    )
     return SmsVerifyResponse(
-        verification_token=create_phone_verification_token(payload.phone),
+        purpose=payload.purpose,
+        verification_token=verification_token,
         expires_in_seconds=PHONE_VERIFICATION_TOKEN_SECONDS,
     )
+
+
+@router.post(
+    "/register/sms",
+    response_model=AuthSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        400: {"model": AuthErrorResponse, "description": "Invalid verification token"},
+        409: {"model": AuthErrorResponse, "description": "Account already exists"},
+    },
+)
+async def register_sms_account(
+    payload: SmsRegistrationRequest,
+    request: Request,
+    session: DBSession,
+) -> AuthSessionResponse:
+    try:
+        return await register_with_sms(
+            session,
+            payload,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except AuthFlowError as exc:
+        raise _auth_http_exception(exc) from exc
+
+
+@router.post(
+    "/login/password",
+    response_model=AuthSessionResponse,
+    responses={
+        401: {"model": AuthErrorResponse, "description": "Invalid password"},
+        404: {"model": AuthErrorResponse, "description": "Account not found"},
+        423: {"model": AuthErrorResponse, "description": "Account locked"},
+    },
+)
+async def password_login(
+    payload: PasswordLoginRequest,
+    request: Request,
+    session: DBSession,
+) -> AuthSessionResponse:
+    try:
+        return await login_with_password(
+            session,
+            payload,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except AuthFlowError as exc:
+        raise _auth_http_exception(exc) from exc
+
+
+@router.post(
+    "/password/reset",
+    response_model=PasswordResetResponse,
+    responses={
+        400: {"model": AuthErrorResponse, "description": "Invalid verification token"},
+        404: {"model": AuthErrorResponse, "description": "Phone account not found"},
+    },
+)
+async def reset_password(
+    payload: PasswordResetRequest,
+    session: DBSession,
+) -> PasswordResetResponse:
+    try:
+        return await reset_password_with_sms(session, payload)
+    except AuthFlowError as exc:
+        raise _auth_http_exception(exc) from exc
+
+
+@router.post("/refresh", response_model=AuthSessionResponse)
+async def refresh_session(
+    payload: SessionRefreshRequest,
+    request: Request,
+    session: DBSession,
+) -> AuthSessionResponse:
+    try:
+        return await refresh_auth_session(
+            session,
+            payload.refresh_token,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except AuthFlowError as exc:
+        raise _auth_http_exception(exc) from exc
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    payload: SessionLogoutRequest,
+    session: DBSession,
+) -> None:
+    await logout_refresh_session(session, payload.refresh_token)
 
 
 @router.post("/me/avatar", response_model=AvatarResponse)

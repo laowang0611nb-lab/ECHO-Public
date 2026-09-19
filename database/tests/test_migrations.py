@@ -37,9 +37,7 @@ def test_existing_review_flag_survives_workflow_upgrade(tmp_path: Path) -> None:
     database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
     _run_alembic(database_url, "upgrade", "a3c4d5e6f7a8")
 
-    user_id, course_id, conversation_id, message_id, flag_id = [
-        str(uuid4()) for _ in range(5)
-    ]
+    user_id, course_id, conversation_id, message_id, flag_id = [str(uuid4()) for _ in range(5)]
     connection = sqlite3.connect(database_path)
     connection.execute(
         "INSERT INTO users (id, email, display_name, role) VALUES (?, ?, ?, ?)",
@@ -84,10 +82,7 @@ def test_existing_review_flag_survives_workflow_upgrade(tmp_path: Path) -> None:
         (flag_id,),
     ).fetchone()
     tables = {
-        row[0]
-        for row in connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        )
+        row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
     connection.close()
 
@@ -107,15 +102,13 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "c1d2e3f4a5b6 (head)" in current.stdout
+    assert "d2e3f4a5b6c7 (head)" in current.stdout
     connection = sqlite3.connect(tmp_path / "echo.db")
-    course_columns = {
-        row[1] for row in connection.execute("PRAGMA table_info(courses)").fetchall()
-    }
+    course_columns = {row[1] for row in connection.execute("PRAGMA table_info(courses)").fetchall()}
     profile_columns = {
-        row[1]
-        for row in connection.execute("PRAGMA table_info(teacher_profiles)").fetchall()
+        row[1] for row in connection.execute("PRAGMA table_info(teacher_profiles)").fetchall()
     }
+    user_columns = {row[1] for row in connection.execute("PRAGMA table_info(users)").fetchall()}
     document_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(documents)").fetchall()
     }
@@ -123,10 +116,15 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
         row[1] for row in connection.execute("PRAGMA table_info(messages)").fetchall()
     }
     citation_columns = {
-        row[1]
-        for row in connection.execute("PRAGMA table_info(message_citations)").fetchall()
+        row[1] for row in connection.execute("PRAGMA table_info(message_citations)").fetchall()
     }
     quick_check_tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    }
+    phone_claim_tables = {
         row[0]
         for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -140,6 +138,7 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
         "archived_at",
     } <= course_columns
     assert "teaching_fields" in profile_columns
+    assert "phone" in user_columns
     assert {
         "display_name",
         "summary",
@@ -155,8 +154,9 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
     } <= message_columns
     assert {"document_name", "chapter_title"} <= citation_columns
     assert "quick_check_attempts" in quick_check_tables
+    assert "phone_verification_claims" in phone_claim_tables
 
     _run_alembic(database_url, "downgrade", "d9e0f1a2b3c4")
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "c1d2e3f4a5b6 (head)" in current.stdout
+    assert "d2e3f4a5b6c7 (head)" in current.stdout

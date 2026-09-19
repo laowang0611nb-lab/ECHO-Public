@@ -33,8 +33,7 @@ async def create_auth_session(
         user_agent=user_agent,
         created_at=issued_at,
         last_used_at=issued_at,
-        expires_at=issued_at
-        + (expires_delta or timedelta(days=settings.auth_refresh_token_days)),
+        expires_at=issued_at + (expires_delta or timedelta(days=settings.auth_refresh_token_days)),
     )
     session.add(auth_session)
     await session.flush()
@@ -45,20 +44,19 @@ async def get_auth_session_by_refresh_token(
     session: AsyncSession,
     raw_refresh_token: str,
     *,
+    for_update: bool = False,
     now: datetime | None = None,
 ) -> AuthSession | None:
     current_time = _as_utc(now or datetime.now(UTC))
-    auth_session = await session.scalar(
-        select(AuthSession).where(
-            AuthSession.refresh_token_hash == hash_refresh_token(raw_refresh_token)
-        )
+    query = select(AuthSession).where(
+        AuthSession.refresh_token_hash == hash_refresh_token(raw_refresh_token)
     )
+    if for_update:
+        query = query.with_for_update()
+    auth_session = await session.scalar(query)
     if auth_session is None:
         return None
-    if (
-        auth_session.revoked_at is not None
-        or _as_utc(auth_session.expires_at) <= current_time
-    ):
+    if auth_session.revoked_at is not None or _as_utc(auth_session.expires_at) <= current_time:
         return None
     return auth_session
 
@@ -83,6 +81,7 @@ async def rotate_refresh_token(
     auth_session = await get_auth_session_by_refresh_token(
         session,
         raw_refresh_token,
+        for_update=True,
         now=now,
     )
     if auth_session is None:

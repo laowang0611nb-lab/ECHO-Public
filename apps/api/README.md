@@ -52,6 +52,29 @@ Replace this mechanism before any deployed or production use.
 Set `ECHO_ENVIRONMENT=production` and `ECHO_DEVELOPMENT_AUTH_ENABLED=false`.
 The application refuses production startup while development auth remains on.
 
+## Formal phone authentication
+
+The following endpoints use the repository-level Argon2id credentials and
+refresh-session foundation:
+
+```text
+POST /api/v1/auth/register/sms
+POST /api/v1/auth/login/password
+POST /api/v1/auth/password/reset
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+```
+
+Registration and password reset consume the short-lived phone verification
+token issued by `/auth/sms/verify`. Password login accepts either `email` or
+`phone`. Successful login or registration returns an Access JWT and a rotating
+Refresh Token. Phone-only accounts use a reserved internal email address until
+a real email-binding flow is implemented.
+
+Protected endpoints accept `Authorization: Bearer <access_token>`. The
+development-only `X-User-Id` fallback remains available only while
+`ECHO_DEVELOPMENT_AUTH_ENABLED=true`.
+
 ## Aliyun PNVS SMS verification
 
 The backend exposes two public SMS verification endpoints. They use the

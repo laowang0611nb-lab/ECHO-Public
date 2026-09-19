@@ -27,6 +27,7 @@ def test_core_tables_are_registered() -> None:
         "plan_task_knowledge_points",
         "plan_task_target_students",
         "plan_tasks",
+        "phone_verification_claims",
         "question_item_knowledge_points",
         "question_items",
         "quick_check_attempts",

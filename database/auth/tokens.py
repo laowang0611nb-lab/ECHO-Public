@@ -56,6 +56,7 @@ def create_access_token(
     user_id: UUID,
     role: str,
     *,
+    session_id: UUID | None = None,
     secret_key: str = settings.auth_secret_key,
     algorithm: str = JWT_ALGORITHM,
     expires_delta: timedelta | None = None,
@@ -72,6 +73,8 @@ def create_access_token(
         "iat": issued_at,
         "exp": expires_at,
     }
+    if session_id is not None:
+        payload["sid"] = str(session_id)
     return jwt.encode(payload, secret_key, algorithm=algorithm)
 
 
