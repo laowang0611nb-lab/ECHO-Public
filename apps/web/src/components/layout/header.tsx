@@ -1,22 +1,22 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, Settings, ShieldCheck, User as UserIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiClient } from "@/lib/api";
+import { NotificationCenter } from "@/features/notifications/components/notification-center";
 import { useDemoMode } from "@/features/demo/demo-provider";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
@@ -81,30 +81,36 @@ export function Header() {
           </Tooltip>
         </TooltipProvider>
         {demo.active ? <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700">DEMO · 演示数据</span> : null}
-        <span title="通知中心待接入：需要后端提供通知列表、未读数和已读接口">
-          <Button aria-label="通知中心待接入，后端通知接口尚未提供" disabled size="icon" type="button" variant="ghost">
-            <Bell data-icon="inline-start" />
-          </Button>
-        </span>
+        <NotificationCenter />
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<Button className="h-auto gap-2 px-1.5 py-1" variant="ghost" />}
+            render={<Button aria-label="打开教师账号菜单" className="h-auto gap-2 px-1.5 py-1" variant="ghost" />}
           >
-            <Avatar className="size-8">
-              <AvatarFallback>{user?.display_name.slice(0, 1) || "教"}</AvatarFallback>
-            </Avatar>
+            <UserAvatar avatarUrl={user?.avatar_url} name={user?.display_name ?? "教师"} />
             <span className="hidden text-left md:block">
               <span className="block text-sm font-medium">{user?.display_name}</span>
               <span className="block text-xs text-muted-foreground">教师</span>
             </span>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel>{user?.email}</DropdownMenuLabel>
+          <DropdownMenuContent align="end" className="w-60" sideOffset={8}>
+            <div className="px-2 py-2">
+              <span className="block truncate text-sm font-medium text-foreground">{user?.display_name}</span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">{user?.email}</span>
+            </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/me")}>
+            <DropdownMenuItem onClick={() => router.push("/me?tab=profile")}>
               <UserIcon />
-              我的
+              个人信息
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/me?tab=security")}>
+              <ShieldCheck />
+              账号与安全
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/settings/server")}>
+              <Settings />
+              服务器设置
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} variant="destructive">
               <LogOut />
               退出登录

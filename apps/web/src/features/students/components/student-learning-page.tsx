@@ -487,7 +487,7 @@ function EchoStudentInsight({ items, summary }: { items: ReturnType<typeof useSt
   const mastered = summary.masteryDistribution[0]?.value ?? 0;
   const risks = summary.attentionCount;
   return (
-    <Card className="gap-4 border-blue-100 bg-blue-50/35 py-5">
+    <Card className="gap-4 border-2 border-blue-200 bg-blue-50/35 py-5">
       <CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><Sparkles className="size-4 text-primary" />ECHO 学情洞察</CardTitle><p className="text-xs text-muted-foreground">由当前真实掌握状态与 LearningEvent 规则生成。</p></CardHeader>
       <CardContent className="grid gap-3 px-5 md:grid-cols-3">
         <InsightItem icon={GraduationCap} text={`${mastered} 名学生已达到 80% 以上掌握参考值。`} />

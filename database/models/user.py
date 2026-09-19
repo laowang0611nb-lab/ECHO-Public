@@ -38,6 +38,7 @@ class User(Base):
     )
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
     avatar_url: Mapped[str | None] = mapped_column(Text)
+    avatar_storage_key: Mapped[str | None] = mapped_column(String(512))
     role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,

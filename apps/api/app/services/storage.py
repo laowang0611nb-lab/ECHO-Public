@@ -43,5 +43,20 @@ class LocalDocumentStorage:
 
         return total_bytes
 
+    async def save_bytes(self, key: str, content: bytes, max_bytes: int) -> int:
+        if len(content) > max_bytes:
+            raise DocumentTooLargeError
+        target = self.path_for(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.part")
+        try:
+            async with await anyio.open_file(temporary, "wb") as output:
+                await output.write(content)
+            temporary.replace(target)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+        return len(content)
+
     def delete(self, key: str) -> None:
         self.path_for(key).unlink(missing_ok=True)

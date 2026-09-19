@@ -30,6 +30,9 @@
 | GET | `/auth/me` | 已登录 | 当前用户 |
 | GET | `/auth/me/profile` | 教师 | 当前教师完整可公开资料 |
 | PATCH | `/auth/me/profile` | 教师 | 更新当前教师资料，不允许修改角色和权限 |
+| POST | `/auth/me/avatar` | 已登录 | 上传 JPEG/PNG/WebP 头像，校验签名和 2 MB 上限 |
+| DELETE | `/auth/me/avatar` | 已登录 | 删除当前用户头像，幂等 |
+| GET | `/users/{user_id}/avatar` | 公开图片 | 稳定头像地址，返回图片流和缓存头 |
 | POST | `/auth/change-password` | 已登录 | 验证当前密码、更新 Argon2id Hash 并撤销旧 Refresh Session |
 | POST | `/courses` | 教师 | 创建课程并自动成为教师成员 |
 | GET | `/courses` | 已登录 | 当前用户加入的课程 |
@@ -40,6 +43,10 @@
 | POST | `/courses/join` | 学生 | 课程码加入已发布课程 |
 | POST | `/courses/{course_id}/publish` | 课程教师 | 发布课程 |
 | GET | `/courses/{course_id}/members` | 课程教师 | 查看含邮箱的成员列表 |
+| GET | `/notifications` | 已登录 | 当前用户通知列表，支持 `unread`、游标和分页 |
+| GET | `/notifications/unread-count` | 已登录 | 当前用户未读通知数 |
+| POST | `/notifications/{notification_id}/read` | 已登录 | 标记自己的单条通知已读 |
+| POST | `/notifications/read-all` | 已登录 | 标记当前用户全部通知已读 |
 
 ## 3. 文档与知识结构
 
@@ -107,6 +114,9 @@ POST /api/v1/courses/{course_id}/knowledge-points/merge
 | GET | `/courses/{course_id}/conversations` | 课程成员 | 当前用户的课程会话 |
 | GET | `/conversations/{conversation_id}/messages` | 会话所有者 | 历史消息和引用 |
 | POST | `/conversations/{conversation_id}/messages/stream` | 会话所有者 | RAG 流式回答 |
+| POST | `/conversations/{conversation_id}/messages/{message_id}/continue` | 会话所有者 | 从中断或失败的助手消息继续生成 |
+| POST | `/messages/{message_id}/hints` | 会话所有者 | 请求下一层后端 Hint，并记录 `hint_requested` |
+| POST | `/quick-checks/{question_id}/attempts` | 课程学生成员 | 提交 Quick Check 答案，幂等并返回真实掌握度变化 |
 | GET | `/courses/{course_id}/students/{student_id}/conversations` | 课程教师 | 查看指定学生会话列表 |
 | GET | `/courses/{course_id}/conversations/{conversation_id}/messages` | 课程教师 | 查看完整对话证据、知识点、引用和审核状态 |
 
@@ -116,8 +126,15 @@ SSE 事件：
 |---|---|
 | `text_delta` | `{"delta": "..."}` |
 | `citation` | `{"index": 1, "chunk_id": "...", "document_id": "...", "page_start": 1, "page_end": 2}` |
+| `message_start` | `{"user_message_id": "...", "assistant_message_id": "..."}` |
+| `block` | `{"block": {"type": "hint|quick_check|mastery_update|warning", ...}}` |
 | `error` | `{"detail": "..."}` |
 | `done` | `{"conversation_id": "...", "message_id": "..."}` |
+
+助手消息持久化 `blocks` 数组，至少包含 `text`、`markdown`、`hint`、`quick_check`、
+`citation`、`mastery_update` 和 `warning`。Hint 请求本身不降低掌握度；
+Quick Check 由服务端校验答案并通过 `LearningEvent -> StudentKnowledgeState`
+更新掌握度，客户端不得自行计算。
 
 历史消息中的引用包含 `citation_index`，表示模型回答使用的原始来源编号。若回答只引用 `[2]`，刷新历史后仍保留编号 `2`，不会重新编号为 `1`。
 

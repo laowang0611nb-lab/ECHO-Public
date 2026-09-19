@@ -2,8 +2,6 @@ import type {
   Chapter,
   ChapterAnalytics,
   Conversation,
-  Course,
-  CourseMember,
   ErrorPatternReport,
   ReviewFlag,
   MasteryTrend,
@@ -112,7 +110,10 @@ export function useStudentAnalytics(courseId: string | null) {
   };
 }
 
-export function useStudentDetail(studentId: string) {
+export function useStudentDetail(
+  studentId: string,
+  preferredCourseId?: string | null,
+) {
   const { user } = useTeacherSession();
   const { courses } = useCourseWorkspace();
   const userId = user?.id;
@@ -125,18 +126,23 @@ export function useStudentDetail(studentId: string) {
     })),
   });
 
-  let match: { course: Course; member: CourseMember; students: CourseMember[] } | null = null;
-  for (let index = 0; index < memberQueries.length; index += 1) {
-    const member = memberQueries[index]?.data?.find((item) => item.user_id === studentId && item.role === "student");
-    if (member) {
-      match = {
-        course: courses[index],
-        member,
-        students: (memberQueries[index]?.data ?? []).filter((item) => item.role === "student"),
-      };
-      break;
+  const matches = memberQueries.flatMap((query, index) => {
+    const member = query.data?.find(
+      (item) => item.user_id === studentId && item.role === "student",
+    );
+    if (!member) {
+      return [];
     }
-  }
+    return [{
+      course: courses[index],
+      member,
+      students: (query.data ?? []).filter((item) => item.role === "student"),
+    }];
+  });
+  const match =
+    matches.find((item) => item.course.id === preferredCourseId) ??
+    matches[0] ??
+    null;
 
   const detailQuery = useQuery({
     queryKey: studentQueryKeys.detail(userId ?? "anonymous", match?.course.id ?? "none", studentId),

@@ -1,9 +1,12 @@
-from database.models.user import User
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
 
-from app.api.dependencies import CurrentUser, DBSession
+from database.models.user import User
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
+
+from app.api.dependencies import AvatarStorageDep, CurrentUser, DBSession
 from app.core.config import settings
 from app.schemas.auth import (
+    AvatarResponse,
     LoginRequest,
     PasswordChangeRequest,
     PasswordChangeResponse,
@@ -22,8 +25,51 @@ from app.services.auth import (
     get_teacher_profile,
     update_teacher_profile,
 )
+from app.services.avatar import (
+    AvatarTooLargeError,
+    UnsupportedAvatarTypeError,
+    delete_avatar,
+    upload_avatar,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.post("/me/avatar", response_model=AvatarResponse)
+async def upload_current_avatar(
+    file: Annotated[UploadFile, File()],
+    current_user: CurrentUser,
+    session: DBSession,
+    storage: AvatarStorageDep,
+) -> AvatarResponse:
+    try:
+        avatar_url = await upload_avatar(
+            session,
+            storage,
+            current_user,
+            file,
+            settings.avatar_max_upload_bytes,
+        )
+    except AvatarTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Avatar exceeds the configured upload limit",
+        ) from exc
+    except UnsupportedAvatarTypeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Avatar must be JPEG, PNG, or WebP",
+        ) from exc
+    return AvatarResponse(avatar_url=avatar_url)
+
+
+@router.delete("/me/avatar", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_current_avatar(
+    current_user: CurrentUser,
+    session: DBSession,
+    storage: AvatarStorageDep,
+) -> None:
+    await delete_avatar(session, storage, current_user)
 
 
 @router.post("/login", response_model=UserResponse, summary="Create or restore a development user")

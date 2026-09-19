@@ -4,6 +4,7 @@ from database.models.chat import (
     Message,
     MessageCitation,
     MessageRole,
+    MessageStatus,
     TeachingPolicy,
 )
 from database.models.course import Course, CourseInvite, CourseMember, CourseStatus
@@ -23,7 +24,13 @@ from database.models.learning import (
     LearningEvent,
     LearningEventType,
     MasterySnapshot,
+    QuickCheckAttempt,
     StudentKnowledgeState,
+)
+from database.models.notification import (
+    Notification,
+    NotificationSeverity,
+    NotificationType,
 )
 from database.models.planning import (
     ExecutionPlan,
@@ -93,6 +100,10 @@ __all__ = [
     "Message",
     "MessageCitation",
     "MessageRole",
+    "MessageStatus",
+    "Notification",
+    "NotificationSeverity",
+    "NotificationType",
     "PlanTargetScope",
     "PlanTask",
     "PlanTaskStatus",
@@ -100,6 +111,7 @@ __all__ = [
     "QuestionDifficulty",
     "QuestionItem",
     "QuestionType",
+    "QuickCheckAttempt",
     "ResourceType",
     "ReviewAnswerVersion",
     "ReviewGenerationStatus",

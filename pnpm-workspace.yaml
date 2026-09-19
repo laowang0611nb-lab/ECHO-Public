@@ -2,6 +2,8 @@ packages:
   - apps/*
   - packages/*
 
+virtualStoreDir: F:/.p
+
 allowBuilds:
   sharp: false
   unrs-resolver: false
@@ -14,3 +16,4 @@ minimumReleaseAgeExclude:
   - '@turbo/windows-64@2.10.13'
   - '@turbo/windows-arm64@2.10.13'
   - turbo@2.10.13
+  - expo-build-properties@57.0.21

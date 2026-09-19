@@ -49,7 +49,7 @@ export function StudentDetailPage({
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<StudentDetailTab>(initialTab);
-  const data = useStudentDetail(studentId);
+  const data = useStudentDetail(studentId, requestedCourseId);
   const context = data.course && data.member && data.detail
     ? {
         course: data.course,

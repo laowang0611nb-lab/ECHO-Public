@@ -64,13 +64,27 @@ class FakeChatProvider:
     def __init__(self, answer: str = "Echo [1] answer") -> None:
         self.answer = answer
         self.last_messages: list[dict[str, str]] = []
+        self.last_stream_messages: list[dict[str, str]] = []
+        self.last_complete_messages: list[dict[str, str]] = []
         self.fail = False
+        self.structured_answer = (
+            '{"title":"Quick Check","prompt":"Which option matches?",'
+            '"options":[{"id":"a","label":"Alpha"},{"id":"b","label":"Beta"}],'
+            '"correct_option_id":"a","explanation":"Alpha is correct",'
+            '"hints":["Compare the definitions.","Check the course source."]}'
+        )
 
     async def stream(self, messages: list[dict[str, str]]):
         self.last_messages = messages
+        self.last_stream_messages = messages
         if self.fail:
             raise RuntimeError("fake chat failure")
         yield self.answer
+
+    async def complete(self, messages: list[dict[str, str]]) -> str:
+        self.last_messages = messages
+        self.last_complete_messages = messages
+        return self.structured_answer
 
 
 class FakeEmbeddingProvider:

@@ -103,7 +103,7 @@ async def search_course_chunks(
         distance_expression = KnowledgeChunk.embedding.cosine_distance(query_vector)
         distance = distance_expression.label("distance")
         rows = await session.execute(
-            select(KnowledgeChunk, distance)
+            select(KnowledgeChunk, Document.original_name, Chapter.title, distance)
             .join(Document, Document.id == KnowledgeChunk.document_id)
             .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
             .where(
@@ -124,17 +124,19 @@ async def search_course_chunks(
             ChunkSearchResult(
                 chunk_id=chunk.id,
                 document_id=chunk.document_id,
+                document_name=document_name,
+                chapter_title=chapter_title,
                 page_start=chunk.page_start,
                 page_end=chunk.page_end,
                 content=chunk.content,
                 distance=float(row_distance),
             )
-            for chunk, row_distance in rows.all()
+            for chunk, document_name, chapter_title, row_distance in rows.all()
         ]
 
-    chunks = list(
-        await session.scalars(
-            select(KnowledgeChunk)
+    rows = list(
+        await session.execute(
+            select(KnowledgeChunk, Document.original_name, Chapter.title)
             .join(Document, Document.id == KnowledgeChunk.document_id)
             .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
             .where(
@@ -154,8 +156,10 @@ async def search_course_chunks(
             (
                 cosine_distance(query_vector, chunk.embedding or []),
                 chunk,
+                document_name,
+                chapter_title,
             )
-            for chunk in chunks
+            for chunk, document_name, chapter_title in rows
         ),
         key=lambda item: item[0],
     )
@@ -164,10 +168,12 @@ async def search_course_chunks(
         ChunkSearchResult(
             chunk_id=chunk.id,
             document_id=chunk.document_id,
+            document_name=document_name,
+            chapter_title=chapter_title,
             page_start=chunk.page_start,
             page_end=chunk.page_end,
             content=chunk.content,
             distance=distance_value,
         )
-        for distance_value, chunk in ranked[:limit]
+        for distance_value, chunk, document_name, chapter_title in ranked[:limit]
     ]

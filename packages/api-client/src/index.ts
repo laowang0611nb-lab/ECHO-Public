@@ -3,6 +3,8 @@ import type {
   ChapterAnalytics,
   ChapterCreateRequest,
   ChapterUpdateRequest,
+  AvatarUploadResponse,
+  ChatContinueRequest,
   ChatStreamEvent,
   ChatStreamRequest,
   ChunkSearchRequest,
@@ -68,6 +70,8 @@ import type {
   ResourceType,
   EmbeddingResult,
   HealthResponse,
+  HintRequest,
+  HintResponse,
   KnowledgeChunk,
   KnowledgePoint,
   KnowledgePointAnalytics,
@@ -79,7 +83,13 @@ import type {
   LearningEventRecord,
   MasteryState,
   Message,
+  Notification,
+  NotificationMarkAllReadResponse,
+  NotificationPage,
+  NotificationUnreadCount,
   NotResolvedRequest,
+  QuickCheckAttemptRequest,
+  QuickCheckAttemptResponse,
   ReviewContext,
   ReviewDecisionRequest,
   ReviewFlag,
@@ -274,6 +284,47 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       request<PasswordChangeResponse>(
         "/api/v1/auth/change-password",
         { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    uploadAvatar: (userId: string, file: DocumentUploadSource, fileName?: string) =>
+      request<AvatarUploadResponse>(
+        "/api/v1/auth/me/avatar",
+        { method: "POST", body: createDocumentFormData(file, fileName) },
+        userId,
+      ),
+    deleteAvatar: (userId: string) =>
+      request<void>("/api/v1/auth/me/avatar", { method: "DELETE" }, userId),
+    listNotifications: (
+      userId: string,
+      options?: { unread?: boolean; cursor?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.unread !== undefined) params.set("unread", String(options.unread));
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<NotificationPage>(
+        `/api/v1/notifications${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getUnreadNotificationCount: (userId: string) =>
+      request<NotificationUnreadCount>(
+        "/api/v1/notifications/unread-count",
+        undefined,
+        userId,
+      ),
+    markNotificationRead: (userId: string, notificationId: string) =>
+      request<Notification>(
+        `/api/v1/notifications/${notificationId}/read`,
+        { method: "POST" },
+        userId,
+      ),
+    markAllNotificationsRead: (userId: string) =>
+      request<NotificationMarkAllReadResponse>(
+        "/api/v1/notifications/read-all",
+        { method: "POST" },
         userId,
       ),
     listCourses: (userId: string) => request<Course[]>("/api/v1/courses", undefined, userId),
@@ -1105,6 +1156,28 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       ),
     listMessages: (userId: string, conversationId: string) =>
       request<Message[]>(`/api/v1/conversations/${conversationId}/messages`, undefined, userId),
+    submitQuickCheck: (
+      userId: string,
+      questionId: string,
+      payload: QuickCheckAttemptRequest,
+    ) =>
+      request<QuickCheckAttemptResponse>(
+        `/api/v1/quick-checks/${questionId}/attempts`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    requestHint: (userId: string, messageId: string, payload: HintRequest = {}) =>
+      request<HintResponse>(
+        `/api/v1/messages/${messageId}/hints`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
     listStudentConversations: (userId: string, courseId: string, studentId: string) =>
       request<Conversation[]>(
         `/api/v1/courses/${courseId}/students/${studentId}/conversations`,
@@ -1125,14 +1198,44 @@ export function createApiClient({ baseUrl, fetchImpl = fetch }: ApiClientOptions
       userId: string,
       conversationId: string,
       payload: ChatStreamRequest,
+      options?: { signal?: AbortSignal },
     ) {
       const headers = new Headers({ "content-type": "application/json" });
       headers.set("X-User-Id", userId);
       const response = await fetchImpl(`${root}/api/v1/conversations/${conversationId}/messages/stream`, {
         method: "POST",
         headers,
+        signal: options?.signal,
         body: JSON.stringify(payload),
       });
+
+      if (!response.ok) {
+        throw await readError(response);
+      }
+      if (!response.body) {
+        throw new Error("Streaming response body is unavailable");
+      }
+
+      yield* parseSseEvents(response.body);
+    },
+    continueConversationMessage: async function* (
+      userId: string,
+      conversationId: string,
+      messageId: string,
+      payload: ChatContinueRequest = {},
+      options?: { signal?: AbortSignal },
+    ) {
+      const headers = new Headers({ "content-type": "application/json" });
+      headers.set("X-User-Id", userId);
+      const response = await fetchImpl(
+        `${root}/api/v1/conversations/${conversationId}/messages/${messageId}/continue`,
+        {
+          method: "POST",
+          headers,
+          signal: options?.signal,
+          body: JSON.stringify(payload),
+        },
+      );
 
       if (!response.ok) {
         throw await readError(response);

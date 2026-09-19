@@ -17,10 +17,12 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
     document_storage_root: Path = PROJECT_ROOT / "tmp" / "uploads"
+    avatar_storage_root: Path = PROJECT_ROOT / "tmp" / "avatars"
     development_auth_enabled: bool = False
     business_timezone: str = "Asia/Shanghai"
     retrieval_max_distance: float = 0.65
     max_upload_bytes: int = 20 * 1024 * 1024
+    avatar_max_upload_bytes: int = 2 * 1024 * 1024
     llm_api_key: str | None = None
     llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     llm_model: str = "qwen3.8-flash"
@@ -52,7 +54,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("document_storage_root")
+    @field_validator("document_storage_root", "avatar_storage_root")
     @classmethod
     def resolve_storage_root(cls, value: Path) -> Path:
         return value if value.is_absolute() else PROJECT_ROOT / value

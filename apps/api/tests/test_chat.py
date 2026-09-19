@@ -1,8 +1,9 @@
+import asyncio
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from database.models.chat import Message, MessageCitation, MessageRole
+from database.models.chat import Conversation, Message, MessageCitation, MessageRole
 from database.models.document import Document, DocumentPage, DocumentStatus
 from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType
@@ -16,7 +17,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.services.chat import _course_has_searchable_material
+from app.services.chat import (
+    _course_has_searchable_material,
+    _stream_chat_response_contents,
+)
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -150,11 +154,21 @@ async def test_conversation_and_sse_message_flow(
     assert "event: text_delta" in stream_response.text
     assert "event: citation" in stream_response.text
     assert "event: done" in stream_response.text
+    assert "event: block" in stream_response.text
+    assert '"type": "hint"' in stream_response.text
+    assert '"type": "quick_check"' in stream_response.text
+    assert '"correct_option_id"' not in stream_response.text
     assert messages_response.status_code == 200
     messages = messages_response.json()
     assert [message["role"] for message in messages] == ["user", "assistant"]
     assert messages[1]["content"] == "Echo [1] answer"
     assert messages[1]["citations"]
+    assert [block["type"] for block in messages[1]["blocks"]] == [
+        "markdown",
+        "citation",
+        "hint",
+        "quick_check",
+    ]
 
     async with session_factory() as session:
         events = list(await session.scalars(select(LearningEvent)))
@@ -403,8 +417,164 @@ async def test_teacher_can_read_student_conversation_evidence(
     assert conversations.status_code == 200
     assert conversations.json()[0]["id"] == str(conversation_id)
     assert messages.status_code == 200
-    assistant = messages.json()[1]
+    assistant = next(
+        item for item in messages.json() if item["role"] == "assistant"
+    )
     assert assistant["knowledgePointIds"] == [str(point.id)]
     assert assistant["reviewStatus"] == ReviewStatus.OPEN
     assert assistant["citations"][0]["chunk_id"] == str(chunk.id)
     assert student_access.status_code == 403
+
+
+async def test_chat_uses_latest_course_teaching_policy(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "policy-chat@example.com", "teacher")
+    course = await create_searchable_course(client, session_factory, teacher)
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Policy chat"},
+    )
+    first_policy = "先给引导，不要直接给答案，并至少检查一次理解。"
+    second_policy = "使用三步推理框架，并用一个课程例子解释。"
+
+    updated = await client.put(
+        f"/api/v1/courses/{course['id']}/teaching-policy",
+        headers=auth_headers(teacher),
+        json={"content": first_policy},
+    )
+    assert updated.status_code == 200
+    first_stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "Explain alpha"},
+    )
+    assert first_stream.status_code == 200
+    assert first_policy in chat_provider.last_stream_messages[0]["content"]
+
+    updated = await client.put(
+        f"/api/v1/courses/{course['id']}/teaching-policy",
+        headers=auth_headers(teacher),
+        json={"content": second_policy},
+    )
+    assert updated.status_code == 200
+    second_stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "Explain alpha again"},
+    )
+    assert second_stream.status_code == 200
+    assert second_policy in chat_provider.last_stream_messages[0]["content"]
+    assert first_policy not in chat_provider.last_stream_messages[0]["content"]
+
+
+async def test_interrupted_assistant_message_can_continue(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "continue-chat@example.com", "teacher")
+    course = await create_searchable_course(client, session_factory, teacher)
+    conversation_id = uuid4()
+    user_message_id = uuid4()
+    assistant_message_id = uuid4()
+    async with session_factory() as session:
+        session.add(
+            Conversation(
+                id=conversation_id,
+                course_id=UUID(course["id"]),
+                user_id=UUID(teacher["id"]),
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                Message(
+                    id=user_message_id,
+                    conversation_id=conversation_id,
+                    role=MessageRole.USER,
+                    content="Explain alpha",
+                ),
+                Message(
+                    id=assistant_message_id,
+                    conversation_id=conversation_id,
+                    role=MessageRole.ASSISTANT,
+                    content="Partial ",
+                    status="interrupted",
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{assistant_message_id}/continue",
+        headers=auth_headers(teacher),
+        json={},
+    )
+    messages = await client.get(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=auth_headers(teacher),
+    )
+
+    assert response.status_code == 200
+    assert "event: text_delta" in response.text
+    assistant = next(
+        item for item in messages.json() if item["role"] == "assistant"
+    )
+    assert assistant["content"] == "Partial Echo [1] answer"
+    assert assistant["status"] == "complete"
+
+
+async def test_cancelled_stream_persists_interrupted_partial_answer(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    embedding_provider,
+) -> None:
+    teacher = await login(client, "cancel-chat@example.com", "teacher")
+    course = await create_searchable_course(client, session_factory, teacher)
+    conversation_id = uuid4()
+
+    class CancellingProvider:
+        async def stream(self, _: list[dict[str, str]]):
+            yield "Partial answer"
+            raise asyncio.CancelledError
+
+    async with session_factory() as session:
+        session.add(
+            Conversation(
+                id=conversation_id,
+                course_id=UUID(course["id"]),
+                user_id=UUID(teacher["id"]),
+            )
+        )
+        await session.commit()
+        events = []
+        with pytest.raises(asyncio.CancelledError):
+            async for event in _stream_chat_response_contents(
+                session,
+                embedding_provider,
+                CancellingProvider(),
+                conversation_id,
+                UUID(teacher["id"]),
+                "Explain alpha",
+                "cancel-request",
+                None,
+                3,
+            ):
+                events.append(event)
+        assistant = await session.scalar(
+            select(Message).where(
+                Message.conversation_id == conversation_id,
+                Message.role == MessageRole.ASSISTANT,
+            )
+        )
+
+    assert [event.event for event in events] == [
+        "message_start",
+        "text_delta",
+    ]
+    assert assistant is not None
+    assert assistant.content == "Partial answer"
+    assert assistant.status.value == "interrupted"

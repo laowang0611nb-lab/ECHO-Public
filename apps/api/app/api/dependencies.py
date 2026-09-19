@@ -22,6 +22,13 @@ def get_document_storage() -> LocalDocumentStorage:
 DocumentStorageDep = Annotated[LocalDocumentStorage, Depends(get_document_storage)]
 
 
+def get_avatar_storage() -> LocalDocumentStorage:
+    return LocalDocumentStorage(settings.avatar_storage_root)
+
+
+AvatarStorageDep = Annotated[LocalDocumentStorage, Depends(get_avatar_storage)]
+
+
 def get_knowledge_structure_provider() -> QwenKnowledgeStructureProvider:
     return QwenKnowledgeStructureProvider(
         api_key=settings.llm_api_key,

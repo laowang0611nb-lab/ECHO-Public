@@ -187,6 +187,7 @@ def _profile_response(
         email=user.email,
         display_name=user.display_name,
         role=user.role,
+        avatar_url=user.avatar_url,
         school_name=profile.school_name if profile else None,
         department=profile.department if profile else None,
         employee_no=profile.employee_no if profile else None,

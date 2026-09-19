@@ -16,6 +16,8 @@ class ChatProviderError(Exception):
 class ChatProvider(Protocol):
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]: ...
 
+    async def complete(self, messages: list[dict[str, str]]) -> str: ...
+
 
 class QwenChatProvider:
     def __init__(
@@ -30,6 +32,34 @@ class QwenChatProvider:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout_seconds = timeout_seconds
+
+    async def complete(self, messages: list[dict[str, str]]) -> str:
+        if not self.api_key:
+            raise ChatConfigurationError("Chat API key is not configured")
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": 0.2,
+                        "stream": False,
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+                content = payload["choices"][0]["message"]["content"]
+        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
+            raise ChatProviderError("Chat request failed") from exc
+        if not isinstance(content, str):
+            raise ChatProviderError("Chat response did not contain text")
+        return content
 
     async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         if not self.api_key:

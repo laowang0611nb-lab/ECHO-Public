@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from collections.abc import AsyncIterator
@@ -10,6 +11,7 @@ from database.models.chat import (
     Message,
     MessageCitation,
     MessageRole,
+    MessageStatus,
     TeachingPolicy,
 )
 from database.models.course import CourseMember
@@ -32,6 +34,12 @@ from app.services.learning import (
     LearningEventForbiddenError,
     ensure_course_teacher,
     record_learning_event,
+)
+from app.services.quick_checks import (
+    build_hint_block,
+    build_quick_check_block,
+    ensure_quick_check_for_chat,
+    resolve_knowledge_point_id,
 )
 from app.services.review import attach_auto_review_flags
 from app.services.search import search_course_chunks
@@ -78,6 +86,10 @@ class ConversationForbiddenError(Exception):
 
 
 class StudentConversationTargetNotFoundError(Exception):
+    pass
+
+
+class ConversationStateConflictError(Exception):
     pass
 
 
@@ -259,6 +271,9 @@ async def list_conversation_messages_for_teacher(
                 conversation_id=message.conversation_id,
                 role=message.role,
                 content=message.content,
+                client_request_id=message.client_request_id,
+                status=message.status,
+                blocks=message.blocks,
                 created_at=message.created_at,
                 citations=message.citations,
                 knowledge_point_ids=sorted(knowledge_point_ids, key=str),
@@ -315,6 +330,8 @@ async def _stream_chat_response_contents(
     conversation_id: UUID,
     user_id: UUID,
     content: str,
+    client_request_id: str | None,
+    knowledge_point_id: UUID | None,
     retrieval_limit: int,
 ) -> AsyncIterator[ChatEvent]:
     conversation = await session.get(Conversation, conversation_id)
@@ -322,6 +339,79 @@ async def _stream_chat_response_contents(
         raise ConversationNotFoundError
     if conversation.user_id != user_id:
         raise ConversationForbiddenError
+
+    if client_request_id:
+        existing_user_message = await session.scalar(
+            select(Message).where(
+                Message.conversation_id == conversation_id,
+                Message.client_request_id == client_request_id,
+                Message.role == MessageRole.USER,
+            )
+        )
+        if existing_user_message is not None:
+            existing_assistant_message = await session.scalar(
+                select(Message)
+                .options(selectinload(Message.citations))
+                .where(
+                    Message.conversation_id == conversation_id,
+                    Message.role == MessageRole.ASSISTANT,
+                    Message.created_at >= existing_user_message.created_at,
+                )
+                .order_by(Message.created_at.asc(), Message.id.asc())
+                .limit(1)
+            )
+            if existing_assistant_message is None:
+                yield ChatEvent("error", {"detail": "Request is already in progress"})
+                return
+            if existing_assistant_message.status in {
+                MessageStatus.SENDING,
+                MessageStatus.STREAMING,
+            }:
+                yield ChatEvent("error", {"detail": "Request is already in progress"})
+                return
+            if existing_assistant_message.status != MessageStatus.COMPLETE:
+                yield ChatEvent(
+                    "error",
+                    {
+                        "detail": (
+                            "Previous response was interrupted; continue it before retrying"
+                        )
+                    },
+                )
+                return
+            yield ChatEvent(
+                "message_start",
+                {
+                    "user_message_id": str(existing_user_message.id),
+                    "assistant_message_id": str(existing_assistant_message.id),
+                },
+            )
+            if existing_assistant_message.content:
+                yield ChatEvent(
+                    "text_delta",
+                    {"delta": existing_assistant_message.content},
+                )
+            for citation in existing_assistant_message.citations:
+                yield ChatEvent(
+                    "citation",
+                    {
+                        "index": citation.citation_index,
+                        "chunk_id": str(citation.chunk_id) if citation.chunk_id else None,
+                        "document_id": (
+                            str(citation.document_id) if citation.document_id else None
+                        ),
+                        "page_start": citation.page_start,
+                        "page_end": citation.page_end,
+                    },
+                )
+            yield ChatEvent(
+                "done",
+                {
+                    "conversation_id": str(conversation.id),
+                    "message_id": str(existing_assistant_message.id),
+                },
+            )
+            return
 
     sources = await search_course_chunks(
         session,
@@ -334,12 +424,21 @@ async def _stream_chat_response_contents(
     policy = await session.scalar(
         select(TeachingPolicy).where(TeachingPolicy.course_id == conversation.course_id)
     )
+    resolved_knowledge_point_id = await resolve_knowledge_point_id(
+        session,
+        conversation.course_id,
+        [source.chunk_id for source in sources],
+        knowledge_point_id,
+    )
     history = await list_messages(session, conversation_id, user_id)
 
     user_message = Message(
         conversation_id=conversation.id,
         role=MessageRole.USER,
         content=content,
+        client_request_id=client_request_id,
+        status=MessageStatus.SENT,
+        blocks=[{"type": "text", "text": content}],
         created_at=datetime.now(UTC),
     )
     session.add(user_message)
@@ -359,26 +458,12 @@ async def _stream_chat_response_contents(
                 student_id=user_id,
                 conversation_id=conversation.id,
                 message_id=user_message.id,
+                knowledge_point_id=resolved_knowledge_point_id,
                 event_type=LearningEventType.QUESTION_ASKED,
                 evidence=content,
             ),
             require_student_membership=True,
         )
-
-    collected: list[str] = []
-    try:
-        prompt = _build_prompt(
-            content,
-            history,
-            sources,
-            policy.content if policy else None,
-        )
-        async for delta in chat_provider.stream(prompt):
-            collected.append(delta)
-            yield ChatEvent("text_delta", {"delta": delta})
-    except Exception as exc:
-        yield ChatEvent("error", {"detail": str(exc)})
-        return
 
     user_created_at = (
         user_message.created_at
@@ -392,23 +477,115 @@ async def _stream_chat_response_contents(
     assistant_message = Message(
         conversation_id=conversation.id,
         role=MessageRole.ASSISTANT,
-        content="".join(collected),
+        content="",
+        status=MessageStatus.STREAMING,
+        blocks=[],
         created_at=assistant_created_at,
     )
-    used_sources = _referenced_sources(assistant_message.content, sources)
-    assistant_message.citations = [
+    session.add(assistant_message)
+    await session.commit()
+    await session.refresh(assistant_message)
+    yield ChatEvent(
+        "message_start",
+        {
+            "user_message_id": str(user_message.id),
+            "assistant_message_id": str(assistant_message.id),
+        },
+    )
+
+    collected: list[str] = []
+    try:
+        prompt = _build_prompt(
+            content,
+            history,
+            sources,
+            policy.content if policy else None,
+        )
+        async for delta in chat_provider.stream(prompt):
+            collected.append(delta)
+            assistant_message.content = "".join(collected)
+            if len(collected) % 20 == 0:
+                await session.commit()
+            yield ChatEvent("text_delta", {"delta": delta})
+    except asyncio.CancelledError:
+        assistant_message.content = "".join(collected)
+        assistant_message.status = MessageStatus.INTERRUPTED
+        await session.commit()
+        raise
+    except Exception as exc:
+        assistant_message.content = "".join(collected)
+        assistant_message.status = MessageStatus.FAILED
+        await session.commit()
+        yield ChatEvent("error", {"detail": str(exc)})
+        return
+
+    answer = "".join(collected)
+    used_sources = _referenced_sources(answer, sources)
+    citations = [
         MessageCitation(
             citation_index=index,
             chunk_id=source.chunk_id,
             document_id=source.document_id,
+            document_name=source.document_name,
+            chapter_title=source.chapter_title,
             page_start=source.page_start,
             page_end=source.page_end,
             quote=source.content[:500],
         )
         for index, source in used_sources
     ]
-    session.add(assistant_message)
-    await session.flush()
+    hint_block = None
+    quick_check_block = None
+    try:
+        quick_check_item = await ensure_quick_check_for_chat(
+            session,
+            chat_provider,
+            course_id=conversation.course_id,
+            user_id=user_id,
+            question=content,
+            knowledge_point_id=resolved_knowledge_point_id,
+            sources=sources,
+            teaching_policy=policy.content if policy else None,
+        )
+        if quick_check_item is not None:
+            hint_block = build_hint_block(quick_check_item, 1)
+            quick_check_block = build_quick_check_block(quick_check_item)
+    except Exception:
+        hint_block = None
+        quick_check_block = None
+    blocks: list[dict[str, object]] = [{"type": "markdown", "markdown": answer}]
+    if citations:
+        blocks.append(
+            {
+                "type": "citation",
+                "citations": [
+                    {
+                        "citation_index": citation.citation_index,
+                        "chunk_id": str(citation.chunk_id) if citation.chunk_id else None,
+                        "document_id": (
+                            str(citation.document_id) if citation.document_id else None
+                        ),
+                        "document_name": citation.document_name,
+                        "chapter_title": citation.chapter_title,
+                        "page_start": citation.page_start,
+                        "page_end": citation.page_end,
+                        "quote": citation.quote,
+                    }
+                    for citation in citations
+                ],
+            }
+        )
+    if hint_block is not None:
+        blocks.append(hint_block.model_dump(mode="json"))
+    if quick_check_block is not None:
+        blocks.append(quick_check_block.model_dump(mode="json"))
+
+    assistant_message.content = answer
+    assistant_message.status = MessageStatus.COMPLETE
+    assistant_message.blocks = blocks
+    for citation in citations:
+        citation.message_id = assistant_message.id
+    session.add_all(citations)
     if is_student:
         has_course_material = bool(sources) or await _course_has_searchable_material(
             session, conversation.course_id
@@ -438,6 +615,13 @@ async def _stream_chat_response_contents(
                 "page_end": source.page_end,
             },
         )
+    if hint_block is not None:
+        yield ChatEvent("block", {"block": hint_block.model_dump(mode="json")})
+    if quick_check_block is not None:
+        yield ChatEvent(
+            "block",
+            {"block": quick_check_block.model_dump(mode="json")},
+        )
     yield ChatEvent(
         "done",
         {
@@ -447,6 +631,159 @@ async def _stream_chat_response_contents(
     )
 
 
+async def _stream_continuation_contents(
+    session: AsyncSession,
+    chat_provider: ChatProvider,
+    conversation_id: UUID,
+    message_id: UUID,
+    user_id: UUID,
+) -> AsyncIterator[ChatEvent]:
+    conversation = await session.get(Conversation, conversation_id)
+    if conversation is None:
+        raise ConversationNotFoundError
+    if conversation.user_id != user_id:
+        raise ConversationForbiddenError
+    assistant_message = await session.get(Message, message_id)
+    if (
+        assistant_message is None
+        or assistant_message.conversation_id != conversation_id
+        or assistant_message.role != MessageRole.ASSISTANT
+    ):
+        raise ConversationNotFoundError
+    if assistant_message.status == MessageStatus.COMPLETE:
+        yield ChatEvent(
+            "message_start",
+            {
+                "user_message_id": "",
+                "assistant_message_id": str(assistant_message.id),
+            },
+        )
+        if assistant_message.content:
+            yield ChatEvent("text_delta", {"delta": assistant_message.content})
+        yield ChatEvent(
+            "done",
+            {
+                "conversation_id": str(conversation.id),
+                "message_id": str(assistant_message.id),
+            },
+        )
+        return
+    if assistant_message.status not in {
+        MessageStatus.INTERRUPTED,
+        MessageStatus.FAILED,
+    }:
+        raise ConversationStateConflictError
+
+    user_message = await session.scalar(
+        select(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.role == MessageRole.USER,
+            Message.created_at <= assistant_message.created_at,
+        )
+        .order_by(Message.created_at.desc(), Message.id.desc())
+        .limit(1)
+    )
+    if user_message is None:
+        raise ConversationStateConflictError
+
+    assistant_message.status = MessageStatus.STREAMING
+    await session.commit()
+    yield ChatEvent(
+        "message_start",
+        {
+            "user_message_id": str(user_message.id),
+            "assistant_message_id": str(assistant_message.id),
+        },
+    )
+
+    collected = [assistant_message.content]
+    try:
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "Continue the existing ECHO teaching answer without repeating the "
+                    "already produced text. Keep the same language, teaching policy, "
+                    "course grounding, and citation markers. Return only the continuation."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"STUDENT QUESTION:\n{user_message.content}\n\n"
+                    f"PARTIAL ANSWER:\n{assistant_message.content}"
+                ),
+            },
+        ]
+        async for delta in chat_provider.stream(prompt):
+            if not delta:
+                continue
+            collected.append(delta)
+            assistant_message.content = "".join(collected)
+            if len(collected) % 20 == 0:
+                await session.commit()
+            yield ChatEvent("text_delta", {"delta": delta})
+    except asyncio.CancelledError:
+        assistant_message.content = "".join(collected)
+        assistant_message.status = MessageStatus.INTERRUPTED
+        await session.commit()
+        raise
+    except Exception as exc:
+        assistant_message.content = "".join(collected)
+        assistant_message.status = MessageStatus.FAILED
+        await session.commit()
+        yield ChatEvent("error", {"detail": str(exc)})
+        return
+
+    blocks = list(assistant_message.blocks)
+    markdown_index = next(
+        (
+            index
+            for index, block in enumerate(blocks)
+            if isinstance(block, dict) and block.get("type") == "markdown"
+        ),
+        None,
+    )
+    markdown_block = {"type": "markdown", "markdown": assistant_message.content}
+    if markdown_index is None:
+        blocks.insert(0, markdown_block)
+    else:
+        blocks[markdown_index] = markdown_block
+    assistant_message.blocks = blocks
+    assistant_message.status = MessageStatus.COMPLETE
+    conversation.updated_at = datetime.now(UTC)
+    await session.commit()
+    yield ChatEvent(
+        "done",
+        {
+            "conversation_id": str(conversation.id),
+            "message_id": str(assistant_message.id),
+        },
+    )
+
+
+async def continue_chat_response(
+    session: AsyncSession,
+    chat_provider: ChatProvider,
+    conversation_id: UUID,
+    message_id: UUID,
+    user_id: UUID,
+) -> AsyncIterator[ChatEvent]:
+    try:
+        async for event in _stream_continuation_contents(
+            session,
+            chat_provider,
+            conversation_id,
+            message_id,
+            user_id,
+        ):
+            yield event
+    except Exception as exc:
+        await session.rollback()
+        yield ChatEvent("error", {"detail": str(exc)})
+
+
 async def stream_chat_response(
     session: AsyncSession,
     embedding_provider: EmbeddingProvider,
@@ -454,6 +791,8 @@ async def stream_chat_response(
     conversation_id: UUID,
     user_id: UUID,
     content: str,
+    client_request_id: str | None,
+    knowledge_point_id: UUID | None,
     retrieval_limit: int,
 ) -> AsyncIterator[ChatEvent]:
     try:
@@ -464,6 +803,8 @@ async def stream_chat_response(
             conversation_id,
             user_id,
             content,
+            client_request_id,
+            knowledge_point_id,
             retrieval_limit,
         ):
             yield event

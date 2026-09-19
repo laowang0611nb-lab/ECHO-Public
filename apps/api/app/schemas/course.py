@@ -115,5 +115,6 @@ class CourseMemberResponse(BaseModel):
     user_id: UUID
     email: str
     display_name: str
+    avatar_url: str | None
     role: UserRole
     joined_at: datetime

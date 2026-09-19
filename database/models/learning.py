@@ -5,12 +5,14 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
     Float,
     ForeignKey,
     Integer,
+    String,
     Text,
     UniqueConstraint,
     Uuid,
@@ -183,6 +185,66 @@ class StudentKnowledgeState(Base):
     course: Mapped["Course"] = relationship()
     user: Mapped["User"] = relationship()
     knowledge_point: Mapped["KnowledgePoint"] = relationship()
+
+
+class QuickCheckAttempt(Base):
+    __tablename__ = "quick_check_attempts"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "attempt_id",
+            name="uq_quick_check_attempts_user_attempt",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
+    course_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    knowledge_point_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("knowledge_points.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    question_item_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("question_items.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    message_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    attempt_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    selected_option_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    response_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class MasterySnapshot(Base):

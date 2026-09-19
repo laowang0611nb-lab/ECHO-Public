@@ -16,6 +16,8 @@ class ChunkSearchRequest(BaseModel):
 class ChunkSearchResult(BaseModel):
     chunk_id: UUID
     document_id: UUID
+    document_name: str | None = None
+    chapter_title: str | None = None
     page_start: int
     page_end: int
     content: str

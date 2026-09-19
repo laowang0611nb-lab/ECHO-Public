@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import ChatProviderDep, CurrentUser, DBSession, EmbeddingProviderDep
 from app.schemas.chat import (
+    ChatContinueRequest,
     ChatStreamRequest,
     ConversationCreate,
     ConversationResponse,
@@ -15,6 +16,7 @@ from app.services.chat import (
     ConversationForbiddenError,
     ConversationNotFoundError,
     StudentConversationTargetNotFoundError,
+    continue_chat_response,
     create_conversation,
     list_conversation_messages_for_teacher,
     list_conversations,
@@ -211,7 +213,51 @@ async def stream_message(
             conversation_id,
             current_user.id,
             payload.content,
+            payload.client_request_id,
+            payload.knowledge_point_id,
             payload.retrieval_limit,
+        ):
+            yield event.encode()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/conversations/{conversation_id}/messages/{message_id}/continue")
+async def continue_message(
+    conversation_id: UUID,
+    message_id: UUID,
+    payload: ChatContinueRequest,
+    current_user: CurrentUser,
+    session: DBSession,
+    chat_provider: ChatProviderDep,
+):
+    try:
+        await list_messages(session, conversation_id, current_user.id)
+    except ConversationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found",
+        ) from exc
+    except ConversationForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Conversation access denied",
+        ) from exc
+
+    async def event_stream():
+        async for event in continue_chat_response(
+            session,
+            chat_provider,
+            conversation_id,
+            message_id,
+            current_user.id,
         ):
             yield event.encode()
 

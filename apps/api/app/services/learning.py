@@ -29,7 +29,7 @@ from app.services.course import get_course_for_member
 
 EVENT_SCORE_DELTAS: dict[LearningEventType, float] = {
     LearningEventType.QUESTION_ASKED: 0.0,
-    LearningEventType.HINT_REQUESTED: -1.0,
+    LearningEventType.HINT_REQUESTED: 0.0,
     LearningEventType.QUIZ_CORRECT: 8.0,
     LearningEventType.QUIZ_WRONG: -6.0,
     LearningEventType.CONCEPT_CONFUSION: -5.0,

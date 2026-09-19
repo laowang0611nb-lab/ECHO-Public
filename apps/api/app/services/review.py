@@ -4,6 +4,7 @@ from uuid import UUID
 
 from database.models.chat import Conversation, Message, MessageRole
 from database.models.course import CourseMember
+from database.models.notification import NotificationSeverity, NotificationType
 from database.models.review import (
     AIReviewFlag,
     ReviewAnswerVersion,
@@ -26,6 +27,7 @@ from app.schemas.review import (
     ReviewFlagResponse,
 )
 from app.services.learning import LearningEventForbiddenError, ensure_course_teacher
+from app.services.notifications import create_notification
 
 FOLLOW_UP_MARKERS = (
     "没解决",
@@ -257,6 +259,30 @@ async def attach_auto_review_flags(
         )
         session.add(flag)
         flags.append(flag)
+        await session.flush()
+        if severity == ReviewSeverity.HIGH:
+            teacher_ids = list(
+                await session.scalars(
+                    select(CourseMember.user_id).where(
+                        CourseMember.course_id == course_id,
+                        CourseMember.role == UserRole.TEACHER,
+                    )
+                )
+            )
+            for teacher_id in teacher_ids:
+                await create_notification(
+                    session,
+                    user_id=teacher_id,
+                    actor_id=student_id,
+                    course_id=course_id,
+                    type=NotificationType.AI_HIGH_RISK,
+                    severity=NotificationSeverity.CRITICAL,
+                    title="AI 回答需要高风险审核",
+                    body=question[:500],
+                    action_url=f"/review-flags/{flag.id}",
+                    payload_json={"review_flag_id": str(flag.id)},
+                    dedupe_key=f"review-high-risk:{assistant_message.id}:{reason.value}",
+                )
     return flags
 
 

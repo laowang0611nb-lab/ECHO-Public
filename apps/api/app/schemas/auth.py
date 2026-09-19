@@ -39,6 +39,7 @@ class TeacherProfileResponse(BaseModel):
     email: EmailStr
     display_name: str
     role: UserRole
+    avatar_url: str | None
     school_name: str | None
     department: str | None
     employee_no: str | None
@@ -103,7 +104,12 @@ class UserResponse(BaseModel):
     email: EmailStr
     display_name: str
     role: UserRole
+    avatar_url: str | None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AvatarResponse(BaseModel):
+    avatar_url: str

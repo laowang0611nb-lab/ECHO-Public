@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -70,7 +71,12 @@ export function CourseStudentsTab({ course, members }: { course: Course; members
               <TableBody>
                 {students.map((member) => (
                   <TableRow key={member.id}>
-                    <TableCell className="px-5 font-medium">{member.display_name}</TableCell>
+                    <TableCell className="px-5 font-medium">
+                      <div className="flex items-center gap-3">
+                        <UserAvatar avatarUrl={member.avatar_url} name={member.display_name} />
+                        <span>{member.display_name}</span>
+                      </div>
+                    </TableCell>
 <TableCell className="font-mono text-xs text-muted-foreground">{member.user_id.slice(0, 8)}</TableCell>
                     <TableCell>{formatDate(member.joined_at)}</TableCell>
                     <TableCell><StatusBadge tone="info">学生</StatusBadge></TableCell>

@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from database.models.course import Course, CourseMember, CourseStatus
+from database.models.notification import NotificationSeverity, NotificationType
 from database.models.user import User, UserRole
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +16,7 @@ from app.schemas.course import (
     CourseMemberResponse,
     CourseUpdate,
 )
+from app.services.notifications import create_notification
 
 COURSE_CODE_LENGTH = 8
 COURSE_CODE_ALPHABET = string.ascii_uppercase + string.digits
@@ -232,6 +234,28 @@ async def join_course_by_code(
             role=UserRole.STUDENT,
         )
     )
+    teacher_ids = list(
+        await session.scalars(
+            select(CourseMember.user_id).where(
+                CourseMember.course_id == course_id,
+                CourseMember.role == UserRole.TEACHER,
+            )
+        )
+    )
+    for teacher_id in teacher_ids:
+        await create_notification(
+            session,
+            user_id=teacher_id,
+            actor_id=user_id,
+            course_id=course_id,
+            type=NotificationType.COURSE_MEMBER_CHANGE,
+            severity=NotificationSeverity.INFO,
+            title="有新学生加入课程",
+            body=f"{user.display_name} 已加入课程 {course.name}。",
+            action_url=f"/courses/{course.id}/students",
+            payload_json={"student_id": str(user.id), "course_id": str(course.id)},
+            dedupe_key=f"course-member-joined:{course.id}:{user.id}",
+        )
     try:
         await session.commit()
     except IntegrityError:
@@ -298,6 +322,7 @@ async def list_course_members(
             user_id=user.id,
             email=user.email,
             display_name=user.display_name,
+            avatar_url=user.avatar_url,
             role=membership.role,
             joined_at=membership.joined_at,
         )

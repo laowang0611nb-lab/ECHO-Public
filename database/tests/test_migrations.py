@@ -107,7 +107,7 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "e7f8a9b0c1d2 (head)" in current.stdout
+    assert "b0c1d2e3f4a5 (head)" in current.stdout
     connection = sqlite3.connect(tmp_path / "echo.db")
     course_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(courses)").fetchall()
@@ -118,6 +118,21 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
     }
     document_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(documents)").fetchall()
+    }
+    message_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(messages)").fetchall()
+    }
+    citation_columns = {
+        row[1]
+        for row in connection.execute(
+            "PRAGMA table_info(message_citations)"
+        ).fetchall()
+    }
+    quick_check_tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
     }
     connection.close()
     assert {
@@ -135,8 +150,15 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
         "publisher",
         "copyright",
     } <= document_columns
+    assert {
+        "client_request_id",
+        "status",
+        "blocks",
+    } <= message_columns
+    assert {"document_name", "chapter_title"} <= citation_columns
+    assert "quick_check_attempts" in quick_check_tables
 
     _run_alembic(database_url, "downgrade", "d9e0f1a2b3c4")
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "e7f8a9b0c1d2 (head)" in current.stdout
+    assert "b0c1d2e3f4a5 (head)" in current.stdout

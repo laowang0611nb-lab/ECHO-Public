@@ -119,6 +119,7 @@ export interface User {
   email: string;
   display_name: string;
   role: UserRole;
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -129,6 +130,7 @@ export interface TeacherProfile {
   display_name: string;
   role: "teacher";
   school_name: string | null;
+  avatar_url: string | null;
   department: string | null;
   employee_no: string | null;
   title: string | null;
@@ -155,6 +157,48 @@ export interface PasswordChangeRequest {
 export interface PasswordChangeResponse {
   changed_at: string;
   sessions_revoked: number;
+}
+
+export interface AvatarUploadResponse {
+  avatar_url: string;
+}
+
+export type NotificationType =
+  | "ai_high_risk"
+  | "student_abnormal"
+  | "course_member_change"
+  | "system_status";
+
+export type NotificationSeverity = "info" | "warning" | "critical";
+
+export interface Notification {
+  id: string;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  action_url: string | null;
+  payload_json: Record<string, unknown>;
+  course_id: string | null;
+  actor_id: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationPage {
+  items: Notification[];
+  total: number;
+  nextCursor: string | null;
+  unreadCount: number;
+}
+
+export interface NotificationUnreadCount {
+  unreadCount: number;
+}
+
+export interface NotificationMarkAllReadResponse {
+  updated: number;
+  unreadCount: number;
 }
 
 export interface DevelopmentLoginRequest {
@@ -205,6 +249,7 @@ export interface CourseMember {
   user_id: string;
   email: string;
   display_name: string;
+  avatar_url: string | null;
   role: UserRole;
   joined_at: string;
 }
@@ -586,10 +631,94 @@ export interface MessageCitation {
   citation_index: number;
   chunk_id: string | null;
   document_id: string | null;
+  document_name?: string | null;
+  chapter_title?: string | null;
   page_start: number;
   page_end: number;
   quote: string;
 }
+
+export type MessageStatus =
+  | "sending"
+  | "sent"
+  | "streaming"
+  | "complete"
+  | "interrupted"
+  | "failed";
+
+export interface TextBlock {
+  type: "text";
+  text: string;
+}
+
+export interface MarkdownBlock {
+  type: "markdown";
+  markdown: string;
+}
+
+export interface HintBlock {
+  type: "hint";
+  level: number;
+  title: string | null;
+  content: string;
+  can_request_more: boolean;
+}
+
+export interface QuickCheckOption {
+  id: string;
+  label: string;
+}
+
+export type QuickCheckStatus =
+  | "unanswered"
+  | "selected"
+  | "submitting"
+  | "locked"
+  | "correct"
+  | "wrong";
+
+export interface QuickCheckBlock {
+  type: "quick_check";
+  question_id: string;
+  title: string | null;
+  prompt: string;
+  options: QuickCheckOption[];
+  status: QuickCheckStatus;
+  selected_option_id: string | null;
+  attempts_remaining: number | null;
+  correct: boolean | null;
+  explanation: string | null;
+  hint: string | null;
+}
+
+export interface CitationBlock {
+  type: "citation";
+  citations: MessageCitation[];
+}
+
+export interface MasteryUpdateBlock {
+  type: "mastery_update";
+  knowledge_point_id: string;
+  knowledge_point_name: string | null;
+  before: number | null;
+  after: number;
+  reason: string;
+  evidence_id: string | null;
+}
+
+export interface WarningBlock {
+  type: "warning";
+  message: string;
+}
+
+export type AIMessageBlock =
+  | TextBlock
+  | MarkdownBlock
+  | HintBlock
+  | QuickCheckBlock
+  | CitationBlock
+  | MasteryUpdateBlock
+  | WarningBlock;
 
 export interface Message {
   id: string;
@@ -598,6 +727,9 @@ export interface Message {
   content: string;
   created_at: string;
   citations: MessageCitation[];
+  client_request_id?: string | null;
+  status?: MessageStatus;
+  blocks?: AIMessageBlock[];
 }
 
 
@@ -608,6 +740,12 @@ export interface TeacherMessage extends Message {
 
 export interface ChatStreamRequest {
   content: string;
+  client_request_id: string;
+  knowledge_point_id?: string | null;
+  retrieval_limit?: number;
+}
+
+export interface ChatContinueRequest {
   retrieval_limit?: number;
 }
 
@@ -1335,6 +1473,15 @@ export interface WeeklyPlanGeneration {
 export type ChatStreamEvent =
   | { event: "text_delta"; data: { delta: string } }
   | {
+      event: "message_start";
+      data: { user_message_id: string; assistant_message_id: string };
+    }
+  | { event: "block"; data: { block: AIMessageBlock } }
+  | {
+      event: "interrupted";
+      data: { message_id: string; content: string };
+    }
+  | {
       event: "citation";
       data: {
         index: number;
@@ -1350,3 +1497,30 @@ export type ChatStreamEvent =
       data: { conversation_id: string; message_id: string };
     }
   | { event: "component" | "learning_event"; data: Record<string, unknown> };
+
+export interface QuickCheckAttemptRequest {
+  attempt_id: string;
+  question_id: string;
+  selected_option_id: string;
+  conversation_id?: string | null;
+  message_id?: string | null;
+}
+
+export interface QuickCheckAttemptResponse {
+  attempt_id: string;
+  question_id: string;
+  correct: boolean;
+  locked: boolean;
+  explanation: string | null;
+  hint: string | null;
+  mastery_update: MasteryUpdateBlock | null;
+}
+
+export interface HintRequest {
+  level?: number | null;
+}
+
+export interface HintResponse {
+  message_id: string;
+  hint: HintBlock;
+}

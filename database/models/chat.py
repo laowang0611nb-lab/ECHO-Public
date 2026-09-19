@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
     Enum,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
     func,
 )
@@ -29,6 +31,15 @@ class MessageRole(StrEnum):
     USER = "user"
     ASSISTANT = "assistant"
     SYSTEM = "system"
+
+
+class MessageStatus(StrEnum):
+    SENDING = "sending"
+    SENT = "sent"
+    STREAMING = "streaming"
+    COMPLETE = "complete"
+    INTERRUPTED = "interrupted"
+    FAILED = "failed"
 
 
 class TeachingPolicy(Base):
@@ -105,6 +116,13 @@ class Conversation(Base):
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "client_request_id",
+            name="uq_messages_conversation_client_request_id",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid4
@@ -115,6 +133,7 @@ class Message(Base):
         index=True,
         nullable=False,
     )
+    client_request_id: Mapped[str | None] = mapped_column(String(128))
     role: Mapped[MessageRole] = mapped_column(
         Enum(
             MessageRole,
@@ -126,7 +145,23 @@ class Message(Base):
         ),
         nullable=False,
     )
+    status: Mapped[MessageStatus] = mapped_column(
+        Enum(
+            MessageStatus,
+            name="message_status",
+            native_enum=False,
+            length=16,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        default=MessageStatus.COMPLETE,
+        server_default=MessageStatus.COMPLETE.value,
+        nullable=False,
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    blocks: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -172,6 +207,8 @@ class MessageCitation(Base):
     )
     page_start: Mapped[int] = mapped_column(Integer, nullable=False)
     page_end: Mapped[int] = mapped_column(Integer, nullable=False)
+    document_name: Mapped[str | None] = mapped_column(String(512))
+    chapter_title: Mapped[str | None] = mapped_column(String(255))
     quote: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

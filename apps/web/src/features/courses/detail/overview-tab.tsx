@@ -204,7 +204,7 @@ export function CourseOverviewTab({
           </CardContent>
         </Card>
 
-        <Card className="gap-4 border-blue-100 bg-blue-50/35 py-5">
+        <Card className="gap-4 border-2 border-blue-200 bg-blue-50/35 py-5">
           <CardHeader className="px-5">
             <CardTitle className="flex items-center gap-2">
               <Sparkles className="size-4 text-primary" />

@@ -60,6 +60,8 @@ def _citation_payload(citations: list[MessageCitation]) -> list[dict[str, object
             "page_start": citation.page_start,
             "page_end": citation.page_end,
             "quote": citation.quote,
+            "document_name": citation.document_name,
+            "chapter_title": citation.chapter_title,
         }
         for citation in citations
     ]

@@ -8,6 +8,7 @@ from uuid import UUID, uuid5
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload
 
 from database.config import PROJECT_ROOT
 from database.db.base import Base
@@ -45,6 +46,11 @@ from database.models.planning import (
     plan_task_target_students,
     strategy_target_knowledge_points,
     strategy_target_students,
+)
+from database.models.resource import (
+    QuestionDifficulty,
+    QuestionItem,
+    QuestionType,
 )
 from database.models.review import (
     AIReviewFlag,
@@ -118,6 +124,77 @@ CONVERSATION_TITLES = (
     "黑盒测试与白盒测试的区别",
     "等价类划分和边界值分析",
     "软件测试流程复盘",
+)
+
+QUICK_CHECK_DEFINITIONS = (
+    (
+        "black_box",
+        "快速检测：黑盒测试",
+        "以下哪项更适合用黑盒测试发现？",
+        [
+            {"id": "a", "label": "代码中的空指针异常"},
+            {"id": "b", "label": "功能不符合需求"},
+            {"id": "c", "label": "未覆盖的条件分支"},
+            {"id": "d", "label": "循环边界错误"},
+        ],
+        "b",
+        "黑盒测试不依赖内部代码结构，主要根据输入和输出行为发现功能不符合需求的问题。",
+        [
+            "先想一想：黑盒测试是否需要阅读程序内部代码？",
+            "排除必须查看代码结构才能判断的选项，再看哪一个体现外部功能行为。",
+        ],
+    ),
+    (
+        "white_box",
+        "快速检测：白盒测试",
+        "白盒测试最直接的依据是什么？",
+        [
+            {"id": "a", "label": "程序的内部结构和执行路径"},
+            {"id": "b", "label": "用户是否满意"},
+            {"id": "c", "label": "页面颜色是否统一"},
+            {"id": "d", "label": "需求文档的排版"},
+        ],
+        "a",
+        "白盒测试围绕代码结构、分支和路径设计测试用例。",
+        [
+            "回忆白盒测试为什么叫“白盒”。",
+            "它关注的是代码内部还是软件外部表现？",
+        ],
+    ),
+    (
+        "equivalence_partition",
+        "快速检测：等价类划分",
+        "等价类划分的主要目的是什么？",
+        [
+            {"id": "a", "label": "把所有输入都一一穷举"},
+            {"id": "b", "label": "用少量代表值覆盖输入集合"},
+            {"id": "c", "label": "只测试最大值"},
+            {"id": "d", "label": "只检查代码格式"},
+        ],
+        "b",
+        "等价类划分把输入域分成若干类，并从每类选择具有代表性的值。",
+        [
+            "先想：等价类划分是为了减少还是增加测试输入数量？",
+            "它强调代表值，还是穷举所有值？",
+        ],
+    ),
+    (
+        "boundary_value",
+        "快速检测：边界值分析",
+        "边界值分析通常重点测试什么？",
+        [
+            {"id": "a", "label": "任意随机输入"},
+            {"id": "b", "label": "最小值、最大值及其邻近值"},
+            {"id": "c", "label": "代码注释数量"},
+            {"id": "d", "label": "界面字体大小"},
+        ],
+        "b",
+        "边界值分析关注输入范围的边界以及边界附近的取值。",
+        [
+            "想一想：输入范围最容易出现什么问题？",
+            "优先检查最小值、最大值以及它们相邻的取值。",
+        ],
+    ),
 )
 
 
@@ -527,6 +604,73 @@ async def _create_structure(
             points.append(point)
     await session.flush()
     return chapters, points
+
+
+async def _create_quick_check_items(
+    session: AsyncSession,
+    course: Course,
+    teacher: User,
+    points: list[KnowledgePoint],
+) -> list[QuestionItem]:
+    points_by_key = {point.name: point for point in points}
+    key_to_name = {
+        "black_box": "黑盒测试",
+        "white_box": "白盒测试",
+        "equivalence_partition": "等价类划分",
+        "boundary_value": "边界值分析",
+    }
+    items: list[QuestionItem] = []
+    for (
+        point_key,
+        title,
+        prompt,
+        options,
+        correct_option_id,
+        explanation,
+        hints,
+    ) in QUICK_CHECK_DEFINITIONS:
+        point = points_by_key.get(key_to_name[point_key])
+        if point is None:
+            continue
+        item_id = _scoped_id(course.id, "question", point_key)
+        item = await session.scalar(
+            select(QuestionItem)
+            .options(selectinload(QuestionItem.knowledge_points))
+            .where(QuestionItem.id == item_id)
+        )
+        metadata = {
+            "options": options,
+            "correct_option_id": correct_option_id,
+            "hint_levels": hints,
+            "max_attempts": 2,
+            "generated": False,
+            "knowledge_point_id": str(point.id),
+        }
+        if item is None:
+            item = QuestionItem(
+                id=item_id,
+                course_id=course.id,
+                type=QuestionType.SINGLE_CHOICE,
+                difficulty=QuestionDifficulty.EASY,
+                title=title,
+                content=prompt,
+                answer=correct_option_id,
+                explanation=explanation,
+                metadata_json=metadata,
+                created_by=teacher.id,
+            )
+            session.add(item)
+        else:
+            item.title = title
+            item.content = prompt
+            item.answer = correct_option_id
+            item.explanation = explanation
+            item.metadata_json = metadata
+            item.trashed_at = None
+        item.knowledge_points = [point]
+        items.append(item)
+    await session.flush()
+    return items
 
 
 def _event_types_for_student(index: int) -> list[LearningEventType]:
@@ -1079,6 +1223,12 @@ async def seed_teacher_student_analytics(
     )
     document, chunks = await _create_resource(session, course, teacher)
     chapters, points = await _create_structure(session, course, document)
+    quick_check_items = await _create_quick_check_items(
+        session,
+        course,
+        teacher,
+        points,
+    )
     now = datetime.now(UTC)
     conversation_data = await _create_conversations_and_messages(
         session,
@@ -1140,6 +1290,7 @@ async def seed_teacher_student_analytics(
         "knowledgePointIds": [str(point_id) for point_id in knowledge_point_ids],
         "resourceIds": [str(resource_id) for resource_id in resource_ids],
         "chunkIds": [str(chunk_id) for chunk_id in chunk_ids],
+        "quickCheckQuestionIds": [str(item.id) for item in quick_check_items],
         "targetMessageId": str(_target_message_id(course.id)),
         "strategyId": str(strategy.id),
         "planId": str(plan.id),

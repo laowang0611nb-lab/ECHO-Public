@@ -2,11 +2,12 @@
 
 import { ApiClientError } from "@echo/api-client";
 import type { TeacherProfile, TeacherProfileUpdateRequest } from "@echo/shared-types";
-import { BookOpen, Building2, CalendarDays, KeyRound, LayoutDashboard, Mail, Pencil, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Sparkles, User, Users, Waypoints, X } from "lucide-react";
+import { BookOpen, Building2, CalendarDays, Camera, KeyRound, LayoutDashboard, Mail, Pencil, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Sparkles, Trash2, User, Users, Waypoints, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { LoadingState } from "@/components/common/loading-state";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { useDemoMode } from "@/features/demo/demo-provider";
 import { useDemoStatus } from "@/features/demo/queries";
 import { LegalLinks } from "@/features/dashboard/components/legal-links";
 import { useKnowledgeBaseData } from "@/features/knowledge/queries";
-import { useChangePassword, useTeacherProfile, useUpdateTeacherProfile } from "@/features/me/queries";
+import { useChangePassword, useDeleteAvatar, useTeacherProfile, useUpdateTeacherProfile, useUploadAvatar } from "@/features/me/queries";
 import { useServerHealth, useSystemStatus } from "@/features/server-settings/queries";
 import { serviceStateLabel } from "@/features/server-settings/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
@@ -228,9 +229,12 @@ function ProfileTab({
       <div className="space-y-5">
         <Card className="gap-5 py-5">
           <CardContent className="flex flex-col gap-5 px-5 sm:flex-row sm:items-start">
-            <div className="flex size-24 shrink-0 items-center justify-center rounded-full bg-sidebar text-3xl font-semibold text-white">
-              {user.display_name.slice(0, 1)}
-            </div>
+            <UserAvatar
+              avatarUrl={user.avatar_url ?? profile?.avatar_url}
+              className="size-24"
+              fallbackClassName="bg-sidebar text-3xl font-semibold text-white"
+              name={user.display_name}
+            />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-semibold">{user.display_name}</h2>
@@ -592,9 +596,43 @@ function ProfileDrawer({
   user: NonNullable<ReturnType<typeof useTeacherSession>["user"]>;
 }) {
   const updateProfile = useUpdateTeacherProfile();
+  const uploadAvatar = useUploadAvatar();
+  const deleteAvatar = useDeleteAvatar();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState<TeacherProfileForm>(() => profileForm(profile, user));
   const [fieldDraft, setFieldDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
+
+  function uploadAvatarFile(file: File) {
+    setAvatarNotice(null);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("头像仅支持 JPEG、PNG 或 WebP。");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError("头像文件不能超过 2 MB。");
+      return;
+    }
+    uploadAvatar.mutate(file, {
+      onSuccess: () => {
+        setError(null);
+        setAvatarNotice("头像已更新。");
+      },
+      onError: (requestError) => setError(requestError.message || "头像上传失败。"),
+    });
+  }
+
+  function removeAvatar() {
+    setAvatarNotice(null);
+    deleteAvatar.mutate(undefined, {
+      onSuccess: () => {
+        setError(null);
+        setAvatarNotice("头像已删除。");
+      },
+      onError: (requestError) => setError(requestError.message || "头像删除失败。"),
+    });
+  }
 
   function updateField<Key extends keyof TeacherProfileForm>(key: Key, value: TeacherProfileForm[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -644,6 +682,35 @@ function ProfileDrawer({
       <DrawerContent>
         <DrawerHeader><DrawerTitle>编辑教师资料</DrawerTitle><DrawerDescription>资料会保存到当前教师账号，用于个人页、Header 与后续教学上下文。</DrawerDescription></DrawerHeader>
         <div className="space-y-4 overflow-y-auto p-4">
+          <div className="rounded-xl border-2 border-border bg-muted/20 p-4">
+            <div className="flex items-center gap-4">
+              <UserAvatar avatarUrl={user.avatar_url ?? profile?.avatar_url} className="size-16" name={form.displayName || user.display_name} />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">教师头像</p>
+                <p className="mt-1 text-xs text-muted-foreground">支持 JPEG、PNG、WebP，最大 2 MB。</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button disabled={uploadAvatar.isPending || deleteAvatar.isPending} onClick={() => avatarInputRef.current?.click()} size="sm" type="button" variant="outline">
+                    <Camera data-icon="inline-start" />
+                    {uploadAvatar.isPending ? "正在上传..." : "上传头像"}
+                  </Button>
+                  {user.avatar_url ?? profile?.avatar_url ? (
+                    <Button disabled={uploadAvatar.isPending || deleteAvatar.isPending} onClick={removeAvatar} size="sm" type="button" variant="ghost">
+                      <Trash2 data-icon="inline-start" />
+                      {deleteAvatar.isPending ? "正在删除..." : "删除头像"}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <input
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={(event) => { const file = event.target.files?.[0]; if (file) uploadAvatarFile(file); event.target.value = ""; }}
+                ref={avatarInputRef}
+                type="file"
+              />
+            </div>
+            {avatarNotice ? <p className="mt-3 text-xs text-emerald-700">{avatarNotice}</p> : null}
+          </div>
           <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">显示名称</span><Input maxLength={120} onChange={(event) => updateField("displayName", event.target.value)} value={form.displayName} /></label>
           <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">邮箱</span><Input disabled value={profile?.email ?? user.email} /></label>
           <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">学校</span><Input maxLength={200} onChange={(event) => updateField("schoolName", event.target.value)} value={form.schoolName} /></label>

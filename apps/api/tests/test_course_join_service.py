@@ -13,6 +13,7 @@ class ExpiringUser:
     def __init__(self) -> None:
         self._id = uuid4()
         self.role = UserRole.STUDENT
+        self.display_name = "Student"
         self.expired = False
 
     @property
@@ -37,6 +38,12 @@ class FakeSession:
             return None
         return uuid4()
 
+    async def scalars(self, _: object) -> list[UUID]:
+        return [uuid4()]
+
+    async def flush(self) -> None:
+        return None
+
     def add(self, value: object) -> None:
         self.added.append(value)
 
@@ -57,6 +64,7 @@ async def test_join_race_rolls_back_without_accessing_expired_user() -> None:
         id=uuid4(),
         code="ABCDEFGH",
         status=CourseStatus.PUBLISHED,
+        name="Course",
     )
     user = ExpiringUser()
     session = FakeSession(course, user)

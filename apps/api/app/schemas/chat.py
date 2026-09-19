@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from database.models.chat import MessageRole
+from database.models.chat import MessageRole, MessageStatus
 from database.models.review import ReviewStatus
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,6 +25,8 @@ class CitationResponse(BaseModel):
     citation_index: int
     chunk_id: UUID | None
     document_id: UUID | None
+    document_name: str | None = None
+    chapter_title: str | None = None
     page_start: int
     page_end: int
     quote: str
@@ -37,6 +39,9 @@ class MessageResponse(BaseModel):
     conversation_id: UUID
     role: MessageRole
     content: str
+    client_request_id: str | None
+    status: MessageStatus
+    blocks: list[dict[str, object]] = Field(default_factory=list)
     created_at: datetime
     citations: list[CitationResponse] = Field(default_factory=list)
 
@@ -55,4 +60,11 @@ class TeacherMessageResponse(MessageResponse):
 
 class ChatStreamRequest(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
+    client_request_id: str | None = Field(default=None, max_length=128)
+    knowledge_point_id: UUID | None = None
+    retrieval_limit: int = Field(default=5, ge=1, le=10)
+
+
+class ChatContinueRequest(BaseModel):
+    client_request_id: str | None = Field(default=None, max_length=128)
     retrieval_limit: int = Field(default=5, ge=1, le=10)
