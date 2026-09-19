@@ -42,11 +42,13 @@ export function DashboardPage() {
 
   if (!selectedCourseId || !selectedCourse) {
     return (
-      <EmptyState
-        action={<Link className={buttonVariants()} href="/courses/new">创建课程</Link>}
-        description="创建或加入课程后，Dashboard 会展示教学总览。"
-        title="还没有可用课程"
-      />
+      <div className="mx-auto w-full max-w-2xl">
+        <EmptyState
+          action={<Link className={buttonVariants()} href="/courses/new">创建课程</Link>}
+          description="创建或加入课程后，Dashboard 会展示教学总览。"
+          title="还没有可用课程"
+        />
+      </div>
     );
   }
 
