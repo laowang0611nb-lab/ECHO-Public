@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { localizeInsightSummary } from "@/features/dashboard/view-model";
 
 export function EchoInsightCard({
   insight,
@@ -26,7 +27,7 @@ export function EchoInsightCard({
           </div>
           <StatusBadge tone={tone}>{insight.risk_level === "high" ? "高风险" : insight.risk_level === "medium" ? "需关注" : "正常"}</StatusBadge>
         </div>
-        <CardTitle className="mt-3 text-lg leading-7">{insight.summary}</CardTitle>
+        <CardTitle className="mt-3 text-lg leading-7">{localizeInsightSummary(insight.summary)}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 px-5">
         <div className="space-y-2">

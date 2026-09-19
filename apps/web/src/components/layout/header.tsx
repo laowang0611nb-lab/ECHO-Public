@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { apiClient } from "@/lib/api";
 import { useDemoMode } from "@/features/demo/demo-provider";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
@@ -38,6 +39,11 @@ export function Header() {
   const selectableCourses = courses.filter((course) => course.status !== "archived");
   const selectedCourse = selectableCourses.find((course) => course.id === selectedCourseId);
   const serverHealthy = healthQuery.isSuccess && !healthQuery.isError;
+  const serverStatusText = serverHealthy
+    ? `Local Server 已连接 · ${healthQuery.data?.latencyMs ?? 1} ms`
+    : healthQuery.isError
+      ? "Local Server 未连接"
+      : "Local Server 状态检查中";
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center border-b border-border bg-card/95 px-4 backdrop-blur lg:px-6">
@@ -66,15 +72,17 @@ export function Header() {
       </div>
 
       <div className="ml-4 flex shrink-0 items-center gap-3">
-        <p className="hidden items-center gap-2 text-xs text-muted-foreground xl:flex">
-          <span className={serverHealthy ? "size-2 rounded-full bg-emerald-500" : "size-2 rounded-full bg-orange-400"} />
-          {serverHealthy
-            ? `Local Server 已连接 · ${healthQuery.data?.latencyMs ?? 1} ms`
-            : "Local Server 状态检查中"}
-        </p>
+        <TooltipProvider delay={150}>
+          <Tooltip>
+            <TooltipTrigger render={<span aria-label={serverStatusText} className="hidden size-5 items-center justify-center rounded-full outline-none xl:inline-flex" tabIndex={0} />}>
+              <span className={serverHealthy ? "size-2 rounded-full bg-emerald-500" : "size-2 rounded-full bg-orange-400"} />
+            </TooltipTrigger>
+            <TooltipContent>{serverStatusText}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         {demo.active ? <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700">DEMO · 演示数据</span> : null}
-        <span title="通知功能暂未开放">
-          <Button aria-label="通知功能暂未开放" disabled size="icon" type="button" variant="ghost">
+        <span title="通知中心待接入：需要后端提供通知列表、未读数和已读接口">
+          <Button aria-label="通知中心待接入，后端通知接口尚未提供" disabled size="icon" type="button" variant="ghost">
             <Bell data-icon="inline-start" />
           </Button>
         </span>

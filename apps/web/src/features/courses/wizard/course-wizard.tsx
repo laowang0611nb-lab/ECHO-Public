@@ -317,7 +317,7 @@ export function CourseWizard() {
         <WizardAside currentStep={step} />
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-card/95 px-4 py-3 backdrop-blur lg:left-[258px]">
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-border bg-card/95 px-4 py-3 backdrop-blur transition-[left] duration-200 lg:left-[var(--sidebar-width)]">
         <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-3">
           <Button onClick={handleCancel} type="button" variant="ghost">取消</Button>
           <div className="flex items-center gap-2">

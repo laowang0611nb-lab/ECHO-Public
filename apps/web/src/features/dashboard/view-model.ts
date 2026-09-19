@@ -29,3 +29,18 @@ export function formatDashboardDate(value: string) {
   const date = new Date(value);
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
+
+const insightSummaryTranslations: Record<string, string> = {
+  "No immediate teaching risks detected in the last seven days.": "过去七天未发现需要立即处理的教学风险。",
+};
+
+export function localizeInsightSummary(summary: string) {
+  const normalized = summary.trim();
+  const attentionSummary = normalized.match(
+    /^(\d+) knowledge points need attention and (\d+) AI answers await review\.$/,
+  );
+  if (attentionSummary) {
+    return `${attentionSummary[1]} 个知识点需要关注，${attentionSummary[2]} 条 AI 回答等待审核。`;
+  }
+  return insightSummaryTranslations[normalized] ?? summary;
+}

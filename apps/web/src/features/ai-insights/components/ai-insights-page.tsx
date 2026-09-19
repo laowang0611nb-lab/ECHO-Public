@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { useReviewSummary } from "@/features/ai-review/queries";
 import { reviewReasonLabels } from "@/features/ai-review/view-model";
 import { useTeacherDashboardOverview } from "@/features/dashboard/queries";
+import { localizeInsightSummary } from "@/features/dashboard/view-model";
 import { useKnowledgeBaseData } from "@/features/knowledge/queries";
 import { summarizeKnowledgeBase } from "@/features/knowledge/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
@@ -136,7 +137,7 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
           ) : null}
           <div className="rounded-lg border-2 border-border bg-card px-4 py-4 xl:col-span-2">
             <p className="text-xs font-semibold text-muted-foreground">后端课程洞察</p>
-            <p className="mt-2 text-sm leading-6">{overview.insight.summary}</p>
+            <p className="mt-2 text-sm leading-6">{localizeInsightSummary(overview.insight.summary)}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <StatusBadge tone={overview.insight.risk_level === "high" ? "danger" : overview.insight.risk_level === "medium" ? "warning" : "success"}>
                 {overview.insight.risk_level === "high" ? "高关注" : overview.insight.risk_level === "medium" ? "中关注" : "低关注"}

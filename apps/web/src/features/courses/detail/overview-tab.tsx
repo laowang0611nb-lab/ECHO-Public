@@ -21,6 +21,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { chapterStatus, masteryTone, referenceChapter, referenceProgress } from "@/features/courses/detail/utils";
+import { localizeInsightSummary } from "@/features/dashboard/view-model";
 import { cn } from "@/lib/utils";
 
 export function CourseOverviewTab({
@@ -213,7 +214,7 @@ export function CourseOverviewTab({
           </CardHeader>
           <CardContent className="space-y-3 px-5">
             <div className="rounded-lg border border-blue-100 bg-card/70 p-4 text-sm leading-6">
-              {overview.insight.summary}
+              {localizeInsightSummary(overview.insight.summary)}
             </div>
             {overview.learning_difficulties.slice(0, 3).map((difficulty) => (
               <Link className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm transition-colors hover:border-blue-200" href={`/knowledge/points/${difficulty.knowledge_point_id}?from=course&courseId=${course.id}`} key={difficulty.knowledge_point_id}>

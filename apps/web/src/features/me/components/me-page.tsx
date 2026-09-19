@@ -53,7 +53,7 @@ interface LocalPreferences {
 }
 
 const PREFERENCE_KEY = "echo.teacher.preferences";
-const TEACHER_WEB_VERSION = "0.0.93";
+const TEACHER_WEB_VERSION = "0.0.95";
 const defaultPreferences: LocalPreferences = {
   notifications: {
     highRiskReview: true,

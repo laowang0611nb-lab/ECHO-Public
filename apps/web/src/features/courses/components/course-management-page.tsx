@@ -71,6 +71,9 @@ export function CourseManagementPage() {
   }, [filter, items, search]);
 
   const summary = summarizeCourses(items);
+  const hasMasteryEvidence = items.some((item) => item.masteryValue !== null);
+  const attentionValue = hasMasteryEvidence ? summary.attentionCount : "无";
+  const attentionSupporting = hasMasteryEvidence ? "掌握度低于 70% 的课程" : "暂无可判断掌握度的课程";
 
   if (isLoading) {
     return (
@@ -128,9 +131,9 @@ export function CourseManagementPage() {
             <StatCard
               icon={Settings}
               label="待关注课程"
-              supporting="掌握度低于 70% 的课程"
+              supporting={attentionSupporting}
               tone="warning"
-              value={summary.attentionCount}
+              value={attentionValue}
             />
           </motion.section>
 

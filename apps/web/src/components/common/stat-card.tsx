@@ -13,7 +13,7 @@ export function StatCard({
   tone = "default",
 }: {
   label: string;
-  value: number | null;
+  value: number | string | null;
   suffix?: string;
   supporting: string;
   icon: LucideIcon;
@@ -27,7 +27,7 @@ export function StatCard({
       </CardHeader>
       <CardContent className="px-4">
         <p className="text-3xl font-semibold tracking-tight">
-          <AnimatedNumber suffix={suffix} value={value} />
+          {typeof value === "number" || value === null ? <AnimatedNumber suffix={suffix} value={value} /> : <span>{value}{suffix}</span>}
         </p>
         <p className={cn("mt-2 line-clamp-2 break-words text-xs", tone === "warning" ? "text-orange-700" : "text-muted-foreground")} title={supporting}>
           {supporting}
