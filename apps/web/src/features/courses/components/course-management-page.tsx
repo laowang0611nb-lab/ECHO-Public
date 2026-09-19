@@ -37,13 +37,21 @@ export function CourseManagementPage() {
   const { setSelectedCourseId } = useCourseWorkspace();
   const queryClient = useQueryClient();
   const { items, isLoading, isError, refetch } = useCourseManagementData();
-  const [filter, setFilter] = useState<"all" | "draft" | "published">("all");
+  const [filter, setFilter] = useState<"all" | "draft" | "published" | "archived">("all");
   const [search, setSearch] = useState("");
 
   const publishMutation = useMutation({
     mutationFn: (courseId: string) => apiClient.publishCourse(user!.id, courseId),
     onSuccess: (course) => {
       setSelectedCourseId(course.id);
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "course", course.id] });
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (courseId: string) => apiClient.restoreCourse(user!.id, courseId),
+    onSuccess: (course) => {
       void queryClient.invalidateQueries({ queryKey: ["teacher", "courses"] });
       void queryClient.invalidateQueries({ queryKey: ["teacher", "course", course.id] });
     },
@@ -138,6 +146,9 @@ export function CourseManagementPage() {
                     <TabsTrigger value="draft">
                       草稿 {items.filter((item) => item.course.status === "draft").length}
                     </TabsTrigger>
+                    <TabsTrigger value="archived">
+                      已归档 {items.filter((item) => item.course.status === "archived").length}
+                    </TabsTrigger>
                   </TabsList>
                 </Tabs>
                 <div className="relative w-full lg:w-72">
@@ -159,6 +170,8 @@ export function CourseManagementPage() {
                       key={item.course.id}
                       onPublish={(courseId) => publishMutation.mutate(courseId)}
                       publishing={publishMutation.isPending}
+                      onRestore={(courseId) => restoreMutation.mutate(courseId)}
+                      restoring={restoreMutation.isPending}
                     />
                   ))}
                 </div>

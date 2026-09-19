@@ -35,7 +35,8 @@ export function Header() {
     refetchInterval: 30_000,
   });
 
-  const selectedCourse = courses.find((course) => course.id === selectedCourseId);
+  const selectableCourses = courses.filter((course) => course.status !== "archived");
+  const selectedCourse = selectableCourses.find((course) => course.id === selectedCourseId);
   const serverHealthy = healthQuery.isSuccess && !healthQuery.isError;
 
   return (
@@ -43,7 +44,7 @@ export function Header() {
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <span className="hidden rounded bg-primary px-2 py-1 text-xs font-bold text-primary-foreground lg:inline-flex">ECHO</span>
         <Select
-          items={courses.map((course) => ({ value: course.id, label: course.name }))}
+          items={selectableCourses.map((course) => ({ value: course.id, label: course.name }))}
           onValueChange={(value) => value && setSelectedCourseId(value)}
           value={selectedCourseId ?? null}
         >
@@ -51,7 +52,7 @@ export function Header() {
             <SelectValue className="truncate" placeholder="选择课程" />
           </SelectTrigger>
           <SelectContent align="start">
-            {courses.map((course) => (
+            {selectableCourses.map((course) => (
               <SelectItem key={course.id} value={course.id}>
                 {course.name}
               </SelectItem>
@@ -72,9 +73,11 @@ export function Header() {
             : "Local Server 状态检查中"}
         </p>
         {demo.active ? <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700">DEMO · 演示数据</span> : null}
-        <Button aria-label="通知" size="icon" type="button" variant="ghost">
-          <Bell data-icon="inline-start" />
-        </Button>
+        <span title="通知功能暂未开放">
+          <Button aria-label="通知功能暂未开放" disabled size="icon" type="button" variant="ghost">
+            <Bell data-icon="inline-start" />
+          </Button>
+        </span>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={<Button className="h-auto gap-2 px-1.5 py-1" variant="ghost" />}

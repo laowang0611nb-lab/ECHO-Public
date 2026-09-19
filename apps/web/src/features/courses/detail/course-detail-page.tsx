@@ -134,7 +134,7 @@ export function CourseDetailPage({
           {activeTab === "students" ? <CourseStudentsTab course={course} members={detail.members} /> : null}
           {activeTab === "materials" ? <CourseMaterialsTab courseId={courseId} documents={detail.documents} /> : null}
           {activeTab === "strategy" ? <CourseStrategyTab course={course} policy={detail.policy} /> : null}
-          {activeTab === "settings" ? <CourseSettingsTab course={course} /> : null}
+          {activeTab === "settings" ? <CourseSettingsTab course={course} key={course.id} /> : null}
         </TabsContent>
       </Tabs>
     </div>

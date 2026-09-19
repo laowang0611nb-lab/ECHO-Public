@@ -72,6 +72,9 @@ export function CourseWizard() {
         name: info.name,
         description: info.description,
         term: info.term,
+        course_type: info.courseType,
+        target_audience: info.audience || undefined,
+        expected_student_count: info.expectedStudents ? Number(info.expectedStudents) : undefined,
       }),
     onSuccess: (created) => {
       setCourse(created);

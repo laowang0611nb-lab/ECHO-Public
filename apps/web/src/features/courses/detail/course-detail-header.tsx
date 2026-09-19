@@ -52,10 +52,12 @@ export function CourseDetailHeader({
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone={course.status === "published" ? "success" : "warning"}>
-                {course.status === "published" ? "已发布" : "草稿"}
+              <StatusBadge tone={course.status === "published" ? "success" : course.status === "archived" ? "neutral" : "warning"}>
+                {course.status === "published" ? "已发布" : course.status === "archived" ? "已归档" : "草稿"}
               </StatusBadge>
               <span className="text-xs text-muted-foreground">{course.term || "未设置学期"}</span>
+              {course.course_type ? <span className="text-xs text-muted-foreground">{course.course_type}</span> : null}
+              {course.target_audience ? <span className="text-xs text-muted-foreground">{course.target_audience}</span> : null}
             </div>
             <h2 className="mt-3 text-2xl font-semibold tracking-tight">{course.name}</h2>
             <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">
@@ -115,7 +117,8 @@ export function CourseDetailHeader({
             <Metric label="学生人数" value={overview ? String(overview.stats.student_count) : "--"} />
             <Metric label="活跃学生" value={overview ? String(overview.stats.active_student_count) : "--"} />
             <Metric label="待审核回答" value={overview ? String(overview.stats.pending_review_count) : "--"} />
-            <Metric label="课程状态" value={course.status === "published" ? "进行中" : "草稿"} />
+            <Metric label="预期人数" value={course.expected_student_count ? String(course.expected_student_count) : "未设置"} />
+            <Metric label="课程状态" value={course.status === "published" ? "进行中" : course.status === "archived" ? "已归档" : "草稿"} />
           </dl>
           <p className="mt-5 text-xs leading-5 text-muted-foreground">
             开始和结束日期暂未提供课程字段，当前显示真实课程状态与学习统计。

@@ -29,10 +29,14 @@ export function CourseCard({
   item,
   onPublish,
   publishing,
+  onRestore,
+  restoring,
 }: {
   item: CourseManagementItem;
   onPublish: (courseId: string) => void;
   publishing: boolean;
+  onRestore: (courseId: string) => void;
+  restoring: boolean;
 }) {
   const router = useRouter();
   const { course, dashboard, masteryValue, currentChapter } = item;
@@ -43,8 +47,8 @@ export function CourseCard({
       <div className="relative h-[124px]" style={coverStyles[coverIndex]}>
         <div className="absolute inset-0 opacity-25 [background-image:radial-gradient(circle_at_20%_25%,white_0,transparent_24%),linear-gradient(90deg,transparent_48%,rgba(255,255,255,.25)_49%,transparent_50%)] [background-size:100%_100%,42px_42px]" />
         <div className="absolute right-3 top-3">
-          <StatusBadge tone={course.status === "published" ? "success" : "warning"}>
-            {course.status === "published" ? "已发布" : "草稿"}
+          <StatusBadge tone={course.status === "published" ? "success" : course.status === "archived" ? "neutral" : "warning"}>
+            {course.status === "published" ? "已发布" : course.status === "archived" ? "已归档" : "草稿"}
           </StatusBadge>
         </div>
       </div>
@@ -106,6 +110,14 @@ export function CourseCard({
                   <DropdownMenuSeparator />
                   <DropdownMenuItem disabled={publishing} onClick={() => onPublish(course.id)}>
                     发布课程
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+              {course.status === "archived" ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem disabled={restoring} onClick={() => onRestore(course.id)}>
+                    恢复为草稿
                   </DropdownMenuItem>
                 </>
               ) : null}

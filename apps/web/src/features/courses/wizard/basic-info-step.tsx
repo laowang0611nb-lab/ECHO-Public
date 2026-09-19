@@ -66,7 +66,7 @@ export function BasicInfoStep({
             <Input inputMode="numeric" onChange={(event) => onChange({ ...value, expectedStudents: event.target.value })} placeholder="例如：50" value={value.expectedStudents} />
           </Field>
         </div>
-        <p className="lg:col-span-2 text-xs text-muted-foreground">课程类型、适用对象和预期人数当前作为向导草稿字段，后端暂未提供对应持久化字段。</p>
+        <p className="lg:col-span-2 text-xs text-muted-foreground">课程类型、适用对象和预期人数会随课程创建请求一并保存，并可在课程设置中继续修改。</p>
       </CardContent>
     </Card>
   );

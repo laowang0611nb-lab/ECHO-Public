@@ -2,6 +2,7 @@ import type {
   Chapter,
   Course,
   CourseDocument,
+  DocumentMetadataUpdateRequest,
   DocumentCitationPage,
   DocumentIndexStatus,
   DocumentPageEvidence,
@@ -15,7 +16,7 @@ import type {
   QuestionItemPage,
   ResourceListPage,
 } from "@echo/shared-types";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { buildResourceView } from "@/features/knowledge/view-model";
 import { apiClient } from "@/lib/api";
@@ -310,6 +311,22 @@ export function useDocumentFileBlob(courseId: string | null, documentId: string 
     queryFn: () => apiClient.getDocumentFileBlob(userId!, courseId!, documentId!),
     enabled: Boolean(userId && courseId && documentId),
     staleTime: 60_000,
+  });
+}
+
+export function useUpdateDocumentMetadata(courseId: string | null, documentId: string | null) {
+  const queryClient = useQueryClient();
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useMutation({
+    mutationFn: (payload: DocumentMetadataUpdateRequest) =>
+      apiClient.updateDocumentMetadata(userId!, courseId!, documentId!, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["teacher", "knowledge"] });
+      if (courseId) {
+        void queryClient.invalidateQueries({ queryKey: ["teacher", "course", courseId] });
+      }
+    },
   });
 }
 

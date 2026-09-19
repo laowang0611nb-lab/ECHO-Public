@@ -42,18 +42,19 @@ export function CourseWorkspaceProvider({ children }: { children: ReactNode }) {
   const { isError, isPending, refetch } = coursesQuery;
 
   const selectedCourseId = useMemo(() => {
-    if (!courses.length) {
+    const selectableCourses = courses.filter((course) => course.status !== "archived");
+    if (!selectableCourses.length) {
       return null;
     }
-    if (requestedCourseId && courses.some((course) => course.id === requestedCourseId)) {
+    if (requestedCourseId && selectableCourses.some((course) => course.id === requestedCourseId)) {
       return requestedCourseId;
     }
 
     const stored = typeof window === "undefined" ? null : window.localStorage.getItem(COURSE_KEY);
-    if (stored && courses.some((course) => course.id === stored)) {
+    if (stored && selectableCourses.some((course) => course.id === stored)) {
       return stored;
     }
-    return courses[0].id;
+    return selectableCourses[0].id;
   }, [courses, requestedCourseId]);
 
   const setSelectedCourseId = useCallback((courseId: string) => {

@@ -1,14 +1,17 @@
 "use client";
 
-import { BookOpen, Building2, CalendarDays, Info, KeyRound, LayoutDashboard, Mail, RefreshCw, ServerCog, ShieldCheck, Sparkles, User, Users, Waypoints } from "lucide-react";
+import { ApiClientError } from "@echo/api-client";
+import type { TeacherProfile, TeacherProfileUpdateRequest } from "@echo/shared-types";
+import { BookOpen, Building2, CalendarDays, KeyRound, LayoutDashboard, Mail, Pencil, Plus, RefreshCw, Save, ServerCog, ShieldCheck, Sparkles, User, Users, Waypoints, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { LoadingState } from "@/components/common/loading-state";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -16,7 +19,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTeacherDashboardOverview } from "@/features/dashboard/queries";
 import { useDemoMode } from "@/features/demo/demo-provider";
 import { useDemoStatus } from "@/features/demo/queries";
+import { LegalLinks } from "@/features/dashboard/components/legal-links";
 import { useKnowledgeBaseData } from "@/features/knowledge/queries";
+import { useChangePassword, useTeacherProfile, useUpdateTeacherProfile } from "@/features/me/queries";
 import { useServerHealth, useSystemStatus } from "@/features/server-settings/queries";
 import { serviceStateLabel } from "@/features/server-settings/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
@@ -48,6 +53,7 @@ interface LocalPreferences {
 }
 
 const PREFERENCE_KEY = "echo.teacher.preferences";
+const TEACHER_WEB_VERSION = "0.0.92";
 const defaultPreferences: LocalPreferences = {
   notifications: {
     highRiskReview: true,
@@ -63,7 +69,7 @@ const defaultPreferences: LocalPreferences = {
 
 export function MePage({ initialTab }: { initialTab: MeTab }) {
   const { user } = useTeacherSession();
-  const { courses, selectedCourseId, selectedCourse, setSelectedCourseId } = useCourseWorkspace();
+  const { courses, selectedCourseId, setSelectedCourseId } = useCourseWorkspace();
   const dashboard = useTeacherDashboardOverview(user?.id, selectedCourseId);
   const students = useStudentAnalytics(selectedCourseId);
   const knowledge = useKnowledgeBaseData(selectedCourseId);
@@ -71,9 +77,11 @@ export function MePage({ initialTab }: { initialTab: MeTab }) {
   const system = useSystemStatus();
   const demoStatus = useDemoStatus();
   const demo = useDemoMode();
+  const profile = useTeacherProfile();
   const [activeTab, setActiveTab] = useState<MeTab>(initialTab);
   const [preferences, setPreferences] = useState<LocalPreferences>(defaultPreferences);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileNotice, setProfileNotice] = useState<string | null>(null);
   const [deviceLabel, setDeviceLabel] = useState("当前浏览器会话");
 
 
@@ -105,13 +113,7 @@ export function MePage({ initialTab }: { initialTab: MeTab }) {
     window.history.replaceState(null, "", `/me?${params.toString()}`);
   }
 
-  const teacherFields = useMemo(
-    () => [
-      selectedCourse?.name,
-      ...courses.map((course) => course.term ?? "").filter(Boolean).slice(0, 2),
-    ].filter((value): value is string => Boolean(value)),
-    [courses, selectedCourse?.name],
-  );
+  const teacherFields = profile.data?.teaching_fields ?? [];
 
   if (!user) return <LoadingState label="正在读取教师账号..." />;
 
@@ -148,6 +150,9 @@ export function MePage({ initialTab }: { initialTab: MeTab }) {
             courses={courses}
             fields={teacherFields}
             onEdit={() => setProfileOpen(true)}
+            profile={profile.data ?? null}
+            profileLoading={profile.isLoading}
+            profileNotice={profileNotice}
             selectedCourseId={selectedCourseId}
             stats={stats}
             user={user}
@@ -178,11 +183,19 @@ export function MePage({ initialTab }: { initialTab: MeTab }) {
         </TabsContent>
 
         <TabsContent className="mt-5" value="about">
-          <AboutTab version={health.data?.version} />
+          <AboutTab apiVersion={health.data?.version} demoActive={demo.active} />
         </TabsContent>
       </Tabs>
 
-      <ProfileDrawer onOpenChange={setProfileOpen} open={profileOpen} user={user} />
+      {profileOpen ? (
+        <ProfileDrawer
+          onOpenChange={setProfileOpen}
+          onSaved={() => setProfileNotice("教师资料已保存，Header 与当前个人资料已同步更新。")}
+          open
+          profile={profile.data ?? null}
+          user={user}
+        />
+      ) : null}
     </div>
   );
 }
@@ -195,10 +208,16 @@ function ProfileTab({
   selectedCourseId,
   setSelectedCourseId,
   onEdit,
+  profile,
+  profileLoading,
+  profileNotice,
 }: {
   user: NonNullable<ReturnType<typeof useTeacherSession>["user"]>;
   stats: { courses: number; students: number; interactions: number; resources: number };
   fields: string[];
+  profile: TeacherProfile | null;
+  profileLoading: boolean;
+  profileNotice: string | null;
   courses: ReturnType<typeof useCourseWorkspace>["courses"];
   selectedCourseId: string | null;
   setSelectedCourseId: (courseId: string) => void;
@@ -219,7 +238,11 @@ function ProfileTab({
               </div>
               <p className="mt-3 text-sm font-medium">教育创造更多可能</p>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">用技术连接教学证据、AI 辅助与教师判断，让每一次教学行动都可追踪。</p>
-              <Button className="mt-4" onClick={onEdit} type="button" variant="outline">查看资料边界</Button>
+              <Button className="mt-4" onClick={onEdit} type="button" variant="outline">
+                <Pencil data-icon="inline-start" />
+                编辑教师资料
+              </Button>
+              {profileNotice ? <p className="mt-3 rounded-lg border-2 border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{profileNotice}</p> : null}
             </div>
           </CardContent>
         </Card>
@@ -229,17 +252,20 @@ function ProfileTab({
           <CardContent className="divide-y divide-border px-0">
             <ProfileRow icon={User} label="姓名" value={user.display_name} />
             <ProfileRow icon={Mail} label="邮箱" value={user.email} />
-            <ProfileRow icon={Building2} label="所属院系" value="未配置" />
-            <ProfileRow icon={KeyRound} label="工号" value="未配置" />
+            <ProfileRow icon={Building2} label="学校" value={profile?.school_name || "未配置"} />
+            <ProfileRow icon={Building2} label="所属院系" value={profile?.department || "未配置"} />
+            <ProfileRow icon={KeyRound} label="工号" value={profile?.employee_no || "未配置"} />
+            <ProfileRow icon={ShieldCheck} label="职称" value={profile?.title || "未配置"} />
             <ProfileRow icon={CalendarDays} label="加入时间" value={user.created_at.slice(0, 10)} />
+            {profileLoading ? <p className="px-5 py-3 text-xs text-muted-foreground">正在读取教师资料...</p> : null}
           </CardContent>
         </Card>
 
         <Card className="gap-4 py-5">
           <CardHeader className="px-5"><CardTitle>教学领域</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-2 px-5">
-            {fields.length ? fields.map((field) => <span className="rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-primary" key={field}>{field}</span>) : <p className="text-sm text-muted-foreground">暂无可识别教学领域。</p>}
-            <p className="w-full text-xs text-muted-foreground">教学领域编辑接口尚未提供，当前仅展示课程中可识别的真实领域。</p>
+            {fields.length ? fields.map((field) => <span className="rounded-full border-2 border-blue-100 bg-secondary px-3 py-1.5 text-xs font-medium text-primary" key={field}>{field}</span>) : <p className="text-sm text-muted-foreground">暂未配置教学领域，可在教师资料中新增。</p>}
+            <p className="w-full text-xs text-muted-foreground">教学领域通过教师资料接口保存，修改后会同步到当前账号与后续 AI 教学上下文。</p>
           </CardContent>
         </Card>
       </div>
@@ -291,25 +317,111 @@ function ProfileTab({
   );
 }
 
+function passwordErrorMessage(error: unknown) {
+  if (error instanceof ApiClientError) {
+    const detail = typeof error.detail === "string" ? error.detail : "";
+    if (error.status === 409 || detail.includes("not configured")) {
+      return "当前账号尚未配置密码，无法在教师端修改。";
+    }
+    if (error.status === 400 || detail.includes("invalid")) {
+      return "当前密码不正确。";
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : "密码修改失败，请稍后重试。";
+}
+
 function SecurityTab({ user, deviceLabel }: { user: NonNullable<ReturnType<typeof useTeacherSession>["user"]>; deviceLabel: string }) {
+  const changePassword = useChangePassword();
+  const [open, setOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function closeDialog(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setError(null);
+    }
+  }
+
+  function submitPassword() {
+    if (!currentPassword) {
+      setError("请输入当前密码。");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("新密码至少需要 8 位。");
+      return;
+    }
+    if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      setError("新密码必须同时包含字母和数字。");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("两次输入的新密码不一致。");
+      return;
+    }
+
+    changePassword.mutate(
+      { current_password: currentPassword, new_password: newPassword },
+      {
+        onSuccess: (result) => {
+          setNotice(`密码已修改，已撤销 ${result.sessions_revoked} 个旧 Refresh Session。`);
+          setOpen(false);
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmPassword("");
+          setError(null);
+        },
+        onError: (requestError) => setError(passwordErrorMessage(requestError)),
+      },
+    );
+  }
+
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <Card className="gap-0 overflow-hidden py-0">
+      <Card className="gap-0 overflow-hidden border-2 py-0">
         <CardHeader className="border-b px-5 py-4"><CardTitle>登录账号</CardTitle></CardHeader>
         <CardContent className="divide-y divide-border px-0">
           <ProfileRow icon={Mail} label="登录邮箱" value={user.email} />
           <ProfileRow icon={ShieldCheck} label="身份" value="教师" />
-          <ProfileRow icon={KeyRound} label="密码" value="后端未提供密码接口" />
+          <ProfileRow icon={KeyRound} label="密码" value="可通过修改密码接口更新" />
         </CardContent>
       </Card>
-      <Card className="gap-4 py-5">
-        <CardHeader className="px-5"><CardTitle>当前登录设备</CardTitle></CardHeader>
+      <Card className="gap-4 border-2 py-5">
+        <CardHeader className="px-5"><CardTitle>账号安全</CardTitle></CardHeader>
         <CardContent className="space-y-3 px-5 text-sm text-muted-foreground">
           <p>{deviceLabel}</p>
-          <p>当前使用开发认证 Session，登录设备历史与安全日志接口尚未提供。</p>
-          <Button disabled type="button" variant="outline">修改密码（未提供）</Button>
+          <p>修改密码会验证当前密码，并使用 Argon2id 更新凭证；旧 Refresh Session 会立即撤销。</p>
+          {notice ? <p className="rounded-lg border-2 border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">{notice}</p> : null}
+          <Button onClick={() => setOpen(true)} type="button" variant="outline">修改密码</Button>
         </CardContent>
       </Card>
+
+      <Dialog onOpenChange={closeDialog} open={open}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>修改登录密码</DialogTitle>
+            <DialogDescription>新密码至少 8 位，并同时包含字母和数字。开发演示账号若未配置密码，后端会返回对应错误。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">当前密码</span><Input autoComplete="current-password" onChange={(event) => setCurrentPassword(event.target.value)} type="password" value={currentPassword} /></label>
+            <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">新密码</span><Input autoComplete="new-password" onChange={(event) => setNewPassword(event.target.value)} type="password" value={newPassword} /></label>
+            <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">确认新密码</span><Input autoComplete="new-password" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} /></label>
+            {error ? <p className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
+          </div>
+          <DialogFooter>
+            <Button disabled={changePassword.isPending} onClick={() => closeDialog(false)} type="button" variant="outline">取消</Button>
+            <Button disabled={changePassword.isPending} onClick={submitPassword} type="button">{changePassword.isPending ? "正在修改..." : "确认修改"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -398,22 +510,32 @@ function AppearanceTab({ preferences, update }: { preferences: LocalPreferences;
   );
 }
 
-function AboutTab({ version }: { version?: string }) {
-  const links = ["隐私政策", "使用条款", "帮助中心", "开源许可", "系统信息"];
+function AboutTab({ apiVersion, demoActive }: { apiVersion?: string; demoActive: boolean }) {
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <Card className="gap-5 py-5">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <Card className="gap-5 border-2 py-5">
         <CardHeader className="px-5"><CardTitle>ECHO</CardTitle><p className="text-xs text-muted-foreground">Educational Intelligence</p></CardHeader>
         <CardContent className="space-y-4 px-5 text-sm leading-6 text-muted-foreground">
           <p>ECHO 是面向高校教学场景的教育智能体系统，连接学生学习交互、课程知识、AI 教学与教师反馈。</p>
-          <p>当前版本：{version ?? "读取中"} · 本地部署教师端</p>
+          <div className="grid gap-3 rounded-lg border-2 border-border bg-muted/20 p-4 sm:grid-cols-2">
+            <SettingLine label="教师端 Web" value={`v${TEACHER_WEB_VERSION}`} />
+            <SettingLine label="后端 API" value={apiVersion ? `v${apiVersion}` : "读取中"} />
+            <SettingLine label="运行环境" value={process.env.NODE_ENV === "development" ? "开发环境" : "生产环境"} />
+            <SettingLine label="Demo 状态" value={demoActive ? "运行中" : "未开启"} />
+          </div>
         </CardContent>
       </Card>
-      <Card className="gap-3 py-5">
-        <CardHeader className="px-5"><CardTitle>系统入口</CardTitle></CardHeader>
-        <CardContent className="space-y-2 px-5">
-          {links.map((label) => <button className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2.5 text-left text-sm text-muted-foreground" disabled key={label} type="button">{label}<span className="text-xs">未提供</span></button>)}
-          <button className={buttonVariants({ variant: "outline" })} disabled type="button"><Info data-icon="inline-start" />系统信息（后端未提供）</button>
+      <Card className="gap-4 border-2 py-5">
+        <CardHeader className="px-5"><CardTitle>政策与许可</CardTitle></CardHeader>
+        <CardContent className="space-y-3 px-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border-2 border-border px-3 py-3">
+            <span className="text-sm">隐私与使用条款</span>
+            <LegalLinks />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg border-2 border-border px-3 py-3 text-sm">
+            <span>开源许可</span>
+            <span className="text-xs text-muted-foreground">发布包生成时提供清单</span>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -436,17 +558,121 @@ function SettingLine({ label, value }: { label: string; value: string }) {
   return <div className="flex items-center justify-between gap-4"><span className="text-muted-foreground">{label}</span><span className="font-medium">{value}</span></div>;
 }
 
-function ProfileDrawer({ open, onOpenChange, user }: { open: boolean; onOpenChange: (open: boolean) => void; user: NonNullable<ReturnType<typeof useTeacherSession>["user"]> }) {
+interface TeacherProfileForm {
+  displayName: string;
+  schoolName: string;
+  department: string;
+  employeeNo: string;
+  title: string;
+  teachingFields: string[];
+}
+
+function profileForm(profile: TeacherProfile | null, user: NonNullable<ReturnType<typeof useTeacherSession>["user"]>): TeacherProfileForm {
+  return {
+    displayName: profile?.display_name ?? user.display_name,
+    schoolName: profile?.school_name ?? "",
+    department: profile?.department ?? "",
+    employeeNo: profile?.employee_no ?? "",
+    title: profile?.title ?? "",
+    teachingFields: profile?.teaching_fields ?? [],
+  };
+}
+
+function ProfileDrawer({
+  open,
+  onOpenChange,
+  onSaved,
+  profile,
+  user,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+  profile: TeacherProfile | null;
+  user: NonNullable<ReturnType<typeof useTeacherSession>["user"]>;
+}) {
+  const updateProfile = useUpdateTeacherProfile();
+  const [form, setForm] = useState<TeacherProfileForm>(() => profileForm(profile, user));
+  const [fieldDraft, setFieldDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function updateField<Key extends keyof TeacherProfileForm>(key: Key, value: TeacherProfileForm[Key]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  }
+
+  function addTeachingField() {
+    const value = fieldDraft.trim();
+    if (!value) return;
+    if (form.teachingFields.includes(value)) {
+      setFieldDraft("");
+      return;
+    }
+    if (form.teachingFields.length >= 50) {
+      setError("教学领域最多添加 50 项。");
+      return;
+    }
+    updateField("teachingFields", [...form.teachingFields, value]);
+    setFieldDraft("");
+  }
+
+  function saveProfile() {
+    const displayName = form.displayName.trim();
+    if (!displayName) {
+      setError("显示名称不能为空。");
+      return;
+    }
+    const payload: TeacherProfileUpdateRequest = {
+      display_name: displayName,
+      school_name: form.schoolName.trim() || null,
+      department: form.department.trim() || null,
+      employee_no: form.employeeNo.trim() || null,
+      title: form.title.trim() || null,
+      teaching_fields: form.teachingFields,
+    };
+    updateProfile.mutate(payload, {
+      onSuccess: () => {
+        onSaved();
+        onOpenChange(false);
+      },
+      onError: (requestError) => setError(requestError.message || "教师资料保存失败。"),
+    });
+  }
+
   return (
     <Drawer onOpenChange={onOpenChange} open={open} swipeDirection="right">
       <DrawerContent>
-        <DrawerHeader><DrawerTitle>教师资料</DrawerTitle><DrawerDescription>当前后端只有开发认证的用户字段，完整教师资料编辑接口尚未提供。</DrawerDescription></DrawerHeader>
+        <DrawerHeader><DrawerTitle>编辑教师资料</DrawerTitle><DrawerDescription>资料会保存到当前教师账号，用于个人页、Header 与后续教学上下文。</DrawerDescription></DrawerHeader>
         <div className="space-y-4 overflow-y-auto p-4">
-          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">显示名称</span><Input disabled value={user.display_name} /></label>
-          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">邮箱</span><Input disabled value={user.email} /></label>
-          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">院系 / 工号 / 教学领域</span><Input disabled value="后端未提供" /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">显示名称</span><Input maxLength={120} onChange={(event) => updateField("displayName", event.target.value)} value={form.displayName} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">邮箱</span><Input disabled value={profile?.email ?? user.email} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">学校</span><Input maxLength={200} onChange={(event) => updateField("schoolName", event.target.value)} value={form.schoolName} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">院系</span><Input maxLength={200} onChange={(event) => updateField("department", event.target.value)} value={form.department} /></label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">工号</span><Input maxLength={100} onChange={(event) => updateField("employeeNo", event.target.value)} value={form.employeeNo} /></label>
+            <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">职称</span><Input maxLength={100} onChange={(event) => updateField("title", event.target.value)} value={form.title} /></label>
+          </div>
+          <div>
+            <span className="mb-1.5 block text-xs text-muted-foreground">教学领域</span>
+            <div className="flex flex-wrap gap-2">
+              {form.teachingFields.map((field) => (
+                <span className="inline-flex items-center gap-1 rounded-full border-2 border-blue-100 bg-blue-50 px-2.5 py-1 text-xs text-blue-900" key={field}>
+                  {field}
+                  <button aria-label={`删除教学领域 ${field}`} className="rounded-full p-0.5 hover:bg-blue-100" onClick={() => updateField("teachingFields", form.teachingFields.filter((item) => item !== field))} type="button"><X className="size-3" /></button>
+                </span>
+              ))}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <Input onChange={(event) => setFieldDraft(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addTeachingField(); } }} placeholder="例如：软件测试" value={fieldDraft} />
+              <Button onClick={addTeachingField} type="button" variant="outline"><Plus data-icon="inline-start" />添加</Button>
+            </div>
+          </div>
+          {error ? <p className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{error}</p> : null}
         </div>
-        <DrawerFooter><Button onClick={() => onOpenChange(false)} type="button">关闭</Button></DrawerFooter>
+        <DrawerFooter>
+          <Button disabled={updateProfile.isPending} onClick={() => onOpenChange(false)} type="button" variant="outline">取消</Button>
+          <Button disabled={updateProfile.isPending} onClick={saveProfile} type="button"><Save data-icon="inline-start" />{updateProfile.isPending ? "正在保存..." : "保存资料"}</Button>
+        </DrawerFooter>
       </DrawerContent>
     </Drawer>
   );

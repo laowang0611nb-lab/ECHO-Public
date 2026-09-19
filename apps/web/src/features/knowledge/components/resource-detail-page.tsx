@@ -1,5 +1,5 @@
 "use client";
-import type { Chapter } from "@echo/shared-types";
+import type { Chapter, CourseDocument } from "@echo/shared-types";
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,8 +8,10 @@ import {
   Download,
   ExternalLink,
   Layers3,
+  Pencil,
   ScanText,
   Sparkles,
+  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -22,13 +24,16 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChapterTree } from "@/features/knowledge/components/chapter-tree";
 import { KnowledgeStructureEditor } from "@/features/knowledge/components/knowledge-structure-editor";
 import { ParseStatusPanel } from "@/features/knowledge/components/parse-status-panel";
 import { ResourceKindIcon } from "@/features/knowledge/components/resource-kind-icon";
-import { useDocumentCitations, useDocumentFileBlob, useDocumentIndexStatus, useDocumentPageEvidence, useKnowledgeResourceData } from "@/features/knowledge/queries";
+import { useDocumentCitations, useDocumentFileBlob, useDocumentIndexStatus, useDocumentPageEvidence, useKnowledgeResourceData, useUpdateDocumentMetadata } from "@/features/knowledge/queries";
 import type { ResourceDetailTab } from "@/features/knowledge/types";
 import { buildPointHref, buildSourceHref, resourcePageCount } from "@/features/knowledge/view-model";
 import { formatBytes, formatDate } from "@/features/courses/detail/utils";
@@ -42,6 +47,10 @@ const tabs = [
   { value: "citations", label: "引用情况" },
   { value: "related", label: "相关资源" },
 ] as const;
+
+function resourceDisplayName(document: CourseDocument) {
+  return document.display_name?.trim() || document.original_name;
+}
 
 export function KnowledgeResourceDetailPage({
   resourceId,
@@ -88,8 +97,8 @@ export function KnowledgeResourceDetailPage({
   }
 
   const breadcrumbs = from === "course"
-    ? [{ label: "课程管理", href: "/courses" }, { label: course.name, href: `/courses/${course.id}?tab=materials` }, { label: resource.document.original_name }]
-    : [{ label: "知识库", href: "/knowledge" }, { label: "资源详情" }, { label: resource.document.original_name }];
+    ? [{ label: "课程管理", href: "/courses" }, { label: course.name, href: `/courses/${course.id}?tab=materials` }, { label: resourceDisplayName(resource.document) }]
+    : [{ label: "知识库", href: "/knowledge" }, { label: "资源详情" }, { label: resourceDisplayName(resource.document) }];
 
   return (
     <div className="space-y-5">
@@ -104,10 +113,10 @@ export function KnowledgeResourceDetailPage({
         }
         breadcrumbs={breadcrumbs}
         description="文件详情、AI 解析状态和课程知识来源处理中心。"
-        title={resource.document.original_name}
+        title={resourceDisplayName(resource.document)}
       />
 
-      <ResourceHeader resource={resource} />
+      <ResourceHeader onMetadataChanged={data.refetch} resource={resource} />
 
       <Tabs onValueChange={handleTabChange} value={activeTab}>
         <TabsList className="grid h-auto w-full grid-cols-2 rounded-none border-b border-border px-0 sm:grid-cols-4 xl:grid-cols-7" variant="line">
@@ -125,7 +134,7 @@ export function KnowledgeResourceDetailPage({
                 onChanged={data.refetch}
               />
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
-                <DocumentPreviewPanel courseId={course.id} documentId={resource.document.id} page={page} pageCount={pageCount} setPage={setPage} title={resource.document.original_name} />
+                <DocumentPreviewPanel courseId={course.id} documentId={resource.document.id} page={page} pageCount={pageCount} setPage={setPage} title={resourceDisplayName(resource.document)} />
                 <ChapterAndPointPreview courseId={course.id} resourceId={resourceId} chapters={chapterTree} />
               </div>
             </div>
@@ -149,7 +158,13 @@ export function KnowledgeResourceDetailPage({
   );
 }
 
-function ResourceHeader({ resource }: { resource: NonNullable<ReturnType<typeof useKnowledgeResourceData>["resource"]> }) {
+function ResourceHeader({
+  resource,
+  onMetadataChanged,
+}: {
+  resource: NonNullable<ReturnType<typeof useKnowledgeResourceData>["resource"]>;
+  onMetadataChanged: () => void;
+}) {
   return (
     <section className="rounded-xl border border-border bg-card">
       <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -161,11 +176,15 @@ function ResourceHeader({ resource }: { resource: NonNullable<ReturnType<typeof 
             </div>
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone={resource.statusTone}>{resource.statusLabel}</StatusBadge>
-              <StatusBadge tone="info">{resource.kind}</StatusBadge>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge tone={resource.statusTone}>{resource.statusLabel}</StatusBadge>
+                <StatusBadge tone="info">{resource.kind}</StatusBadge>
+              </div>
+              <ResourceMetadataDialog document={resource.document} onChanged={onMetadataChanged} />
             </div>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight">{resource.document.original_name}</h2>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight">{resourceDisplayName(resource.document)}</h2>
+            {resource.document.display_name && resource.document.display_name !== resource.document.original_name ? <p className="mt-1 text-xs text-muted-foreground">原始文件：{resource.document.original_name}</p> : null}
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
               <span>{formatBytes(resource.document.size_bytes)}</span>
               <span>{resource.document.page_count ? `${resource.document.page_count} 页` : "页数未知"}</span>
@@ -183,16 +202,109 @@ function ResourceHeader({ resource }: { resource: NonNullable<ReturnType<typeof 
         <div className="border-t border-border bg-blue-50/35 p-5 xl:border-l xl:border-t-0 xl:p-6">
           <div className="flex items-center gap-2 text-sm font-medium text-primary"><Sparkles className="size-4" />ECHO 资源摘要</div>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            {resource.document.status === "ready"
+            {resource.document.summary || (resource.document.status === "ready"
               ? `资料已进入课程知识结构，当前包含 ${resource.chapters.length} 个章节和 ${resource.knowledgePointCount} 个知识点。`
               : resource.document.status === "failed"
                 ? "资料解析失败，请查看解析状态并重新执行，当前不会作为可用 AI 来源。"
-                : "资料已上传，等待教师执行文档解析、章节抽取、文本切分和向量索引。"}
+                : "资料已上传，等待教师执行文档解析、章节抽取、文本切分和向量索引。")}
           </p>
-          <p className="mt-3 text-xs text-muted-foreground">资源处理状态来自后端 Document.status，未确认的索引阶段不会标记为完成。</p>
+          <p className="mt-3 text-xs text-muted-foreground">资源处理状态来自后端 Document.status；摘要和版权元数据可独立编辑，不会触发重新解析。</p>
         </div>
       </div>
     </section>
+  );
+}
+
+interface ResourceMetadataForm {
+  displayName: string;
+  summary: string;
+  keywords: string;
+  author: string;
+  publisher: string;
+  copyright: string;
+}
+
+function metadataForm(document: CourseDocument): ResourceMetadataForm {
+  return {
+    displayName: document.display_name ?? document.original_name,
+    summary: document.summary ?? "",
+    keywords: document.keywords.join(", "),
+    author: document.author ?? "",
+    publisher: document.publisher ?? "",
+    copyright: document.copyright ?? "",
+  };
+}
+
+function ResourceMetadataDialog({ document, onChanged }: { document: CourseDocument; onChanged: () => void }) {
+  const mutation = useUpdateDocumentMetadata(document.course_id, document.id);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<ResourceMetadataForm>(() => metadataForm(document));
+  const [error, setError] = useState<string | null>(null);
+
+  function openMetadataDialog() {
+    setForm(metadataForm(document));
+    setError(null);
+    setOpen(true);
+  }
+
+  function updateField<Key extends keyof ResourceMetadataForm>(key: Key, value: ResourceMetadataForm[Key]) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setError(null);
+  }
+
+  function saveMetadata() {
+    const keywords = Array.from(
+      new Set(form.keywords.split(/[,，\n]/).map((value) => value.trim()).filter(Boolean)),
+    );
+    if (keywords.length > 50) {
+      setError("关键词最多保留 50 项。");
+      return;
+    }
+    mutation.mutate(
+      {
+        display_name: form.displayName.trim() || null,
+        summary: form.summary.trim() || null,
+        keywords,
+        author: form.author.trim() || null,
+        publisher: form.publisher.trim() || null,
+        copyright: form.copyright.trim() || null,
+      },
+      {
+        onSuccess: () => {
+          setOpen(false);
+          onChanged();
+        },
+        onError: (requestError) => setError(requestError.message || "资源元数据保存失败。"),
+      },
+    );
+  }
+
+  return (
+    <Dialog onOpenChange={setOpen} open={open}>
+      <Button onClick={openMetadataDialog} type="button" variant="outline">
+        <Pencil data-icon="inline-start" />
+        编辑元数据
+      </Button>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>编辑资源元数据</DialogTitle>
+          <DialogDescription>只更新展示信息，不重新解析文件，也不会改动页面、Chunk、Embedding 或引用。</DialogDescription>
+        </DialogHeader>
+        <div className="grid max-h-[65vh] gap-4 overflow-y-auto py-2 pr-1 sm:grid-cols-2">
+          <label className="block sm:col-span-2"><span className="mb-1.5 block text-xs text-muted-foreground">展示名称</span><Input maxLength={255} onChange={(event) => updateField("displayName", event.target.value)} value={form.displayName} /></label>
+          <label className="block sm:col-span-2"><span className="mb-1.5 block text-xs text-muted-foreground">摘要</span><Textarea className="min-h-24 resize-y" maxLength={5000} onChange={(event) => updateField("summary", event.target.value)} value={form.summary} /></label>
+          <label className="block sm:col-span-2"><span className="mb-1.5 block text-xs text-muted-foreground">关键词</span><Input onChange={(event) => updateField("keywords", event.target.value)} placeholder="用逗号分隔，例如：软件测试, 边界值" value={form.keywords} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">作者</span><Input maxLength={255} onChange={(event) => updateField("author", event.target.value)} value={form.author} /></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-muted-foreground">出版社</span><Input maxLength={255} onChange={(event) => updateField("publisher", event.target.value)} value={form.publisher} /></label>
+          <label className="block sm:col-span-2"><span className="mb-1.5 block text-xs text-muted-foreground">版权说明</span><Input maxLength={255} onChange={(event) => updateField("copyright", event.target.value)} value={form.copyright} /></label>
+          {error ? <p className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive sm:col-span-2">{error}</p> : null}
+        </div>
+        <DialogFooter>
+          <Button disabled={mutation.isPending} onClick={() => setOpen(false)} type="button" variant="outline">取消</Button>
+          <Button disabled={mutation.isPending} onClick={saveMetadata} type="button">{mutation.isPending ? "正在保存..." : "保存元数据"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -286,10 +398,17 @@ function OverviewTab({ resource }: { resource: NonNullable<ReturnType<typeof use
       <Card className="gap-4 py-5">
         <CardHeader className="px-5"><CardTitle>内容概览</CardTitle></CardHeader>
         <CardContent className="space-y-4 px-5 text-sm leading-7 text-muted-foreground">
-          <p>该资源当前被识别为“{resource.kind}”，后端未提供版权、作者、出版社、摘要和关键词字段。</p>
+          <p>该资源当前被识别为“{resource.kind}”，展示名称、摘要、关键词、作者、出版社和版权说明均可通过元数据接口维护。</p>
+          <div className="grid gap-3 rounded-lg border-2 border-border bg-muted/20 p-4 text-sm sm:grid-cols-2">
+            <Info label="展示名称" value={resourceDisplayName(resource.document)} />
+            <Info label="作者" value={resource.document.author || "未填写"} />
+            <Info label="出版社" value={resource.document.publisher || "未填写"} />
+            <Info label="版权" value={resource.document.copyright || "未填写"} />
+          </div>
+          <p>{resource.document.summary || "当前资源尚未填写摘要。"}</p>
+          {resource.document.keywords.length ? <div className="flex flex-wrap gap-2">{resource.document.keywords.map((keyword) => <span className="inline-flex items-center gap-1 rounded-full border-2 border-blue-100 bg-blue-50 px-2.5 py-1 text-xs text-blue-900" key={keyword}><Tag className="size-3" />{keyword}</span>)}</div> : <p>当前资源尚未填写关键词。</p>}
           <p>当前版本暂不支持替换已解析文件。如需更新教材，请上传一份新资源，避免覆盖已有章节、引用和学习证据。</p>
           <p>已有解析结果包含 {resource.chapters.length} 个章节、{resource.knowledgePointCount} 个知识点，最后章节为“{lastChapter?.title ?? "暂无"}”。</p>
-          <p>当前页面只展示可验证的文档元数据和课程结构，不补写教材摘要。</p>
         </CardContent>
       </Card>
       <Card className="gap-4 py-5">
@@ -394,7 +513,8 @@ function ResourceAside({
       <Card className="gap-4 py-5">
         <CardHeader className="px-5"><CardTitle>资源信息</CardTitle></CardHeader>
         <CardContent className="space-y-3 px-5 text-sm">
-          <Info label="文件名" value={resource.document.original_name} />
+          <Info label="展示名称" value={resourceDisplayName(resource.document)} />
+          <Info label="原始文件" value={resource.document.original_name} />
           <Info label="文件大小" value={formatBytes(resource.document.size_bytes)} />
           <Info label="文件类型" value={resource.document.content_type || "PDF"} />
           <Info label="上传时间" value={formatDate(resource.document.created_at)} />
@@ -410,9 +530,10 @@ function ResourceAside({
         </CardContent>
       </Card>
       <Card className="gap-4 py-5">
-        <CardHeader className="px-5"><CardTitle>后端缺口</CardTitle></CardHeader>
+        <CardHeader className="px-5"><CardTitle>能力边界</CardTitle></CardHeader>
         <CardContent className="space-y-2 px-5 text-sm leading-6 text-muted-foreground">
-          <p>作者/出版社/版权元数据、资源标签、替换已解析文件以及扩展摘要字段尚未提供。</p>
+          <p>元数据编辑已接入，不会触发重新解析。替换已解析文件仍保留为后续能力，当前请上传新资源。</p>
+          <p>相关资源推荐尚未提供独立相似度接口，因此不生成无依据的关联。</p>
         </CardContent>
       </Card>
     </section>

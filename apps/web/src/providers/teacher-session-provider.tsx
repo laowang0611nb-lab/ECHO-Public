@@ -20,6 +20,7 @@ interface TeacherSessionContextValue {
   user: User | null;
   login: (payload: DevelopmentLoginRequest) => Promise<User>;
   establishSession: (user: User) => void;
+  updateUser: (patch: Partial<User>) => void;
   logout: () => void;
 }
 
@@ -68,6 +69,10 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
     setUser(currentUser);
   }, []);
 
+  const updateUser = useCallback((patch: Partial<User>) => {
+    setUser((current) => (current ? { ...current, ...patch, id: current.id } : current));
+  }, []);
+
   const login = useCallback(async (payload: DevelopmentLoginRequest) => {
     const currentUser = await apiClient.login(payload);
     window.localStorage.setItem(SESSION_KEY, currentUser.id);
@@ -81,8 +86,8 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ ready, user, login, establishSession, logout }),
-    [establishSession, login, logout, ready, user],
+    () => ({ ready, user, login, establishSession, updateUser, logout }),
+    [establishSession, login, logout, ready, updateUser, user],
   );
 
   return <TeacherSessionContext.Provider value={value}>{children}</TeacherSessionContext.Provider>;

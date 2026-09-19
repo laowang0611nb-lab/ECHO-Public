@@ -304,7 +304,7 @@ export function StudentConversationPage({
           </Card>
 
           <Card className="gap-3 py-5">
-            <CardHeader className="px-5"><CardTitle>最近 LearningEvent</CardTitle><p className="text-xs text-muted-foreground">学生级最近事件；当前接口未提供会话级过滤。</p></CardHeader>
+            <CardHeader className="px-5"><CardTitle>最近学习事件</CardTitle><p className="text-xs text-muted-foreground">学生级最近事件；当前接口未提供会话级过滤，不表示由当前对话产生。</p></CardHeader>
             <CardContent className="space-y-3 px-5">
               {data.recentEvidence.slice(0, 5).map((event) => (
                 <div className="flex items-start gap-3" key={event.event_id}>
