@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, LoaderCircle, Play } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,8 +19,27 @@ export function AnalysisStep({
   onStart: () => void;
   onContinue: () => void;
 }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const startedAtRef = useRef<number | null>(null);
   const currentIndex = stageOrder.indexOf(analysis.stage as (typeof stageOrder)[number]);
   const progress = analysis.stage === "done" ? 100 : analysis.stage === "idle" ? 0 : Math.max(10, (currentIndex + 1) * 25);
+  const running = ["parsing", "structuring", "chunking", "embedding"].includes(analysis.stage);
+
+  useEffect(() => {
+    if (!running) {
+      startedAtRef.current = null;
+      return;
+    }
+    if (startedAtRef.current === null) {
+      startedAtRef.current = Date.now();
+    }
+    const timer = window.setInterval(() => {
+      if (startedAtRef.current !== null) {
+        setElapsedSeconds(Math.floor((Date.now() - startedAtRef.current) / 1000));
+      }
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   return (
     <Card className="gap-5 py-6">
@@ -29,6 +49,12 @@ export function AnalysisStep({
       </CardHeader>
       <CardContent className="space-y-6 px-6">
         <Progress value={progress} />
+        {running ? (
+          <div className="rounded-lg border-2 border-blue-200 bg-blue-50/55 px-4 py-3 text-sm text-blue-900">
+            <p className="font-medium">AI 正在读取教材并生成章节结构，大文件通常需要 30 到 90 秒。</p>
+            <p className="mt-1 text-xs leading-5 text-blue-800">已等待 {elapsedSeconds} 秒。请保持页面打开，不要重复点击“开始解析”或刷新页面。</p>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-4">
           {stages.map((label, index) => {
             const done = analysis.stage === "done" || (currentIndex >= 0 && index < currentIndex);

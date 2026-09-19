@@ -70,7 +70,7 @@ export function PublishStep({
           </div>
         </div>
 
-        {error ? <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
+        {error ? <p className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error} 服务恢复后可直接再次点击发布，不会重复创建课程。</p> : null}
         <div className="flex justify-end gap-2">
           <Button onClick={onBack} type="button" variant="outline">返回修改</Button>
           <Button disabled={pending || !course} onClick={onPublish} type="button"><CheckCircle2 data-icon="inline-start" />{pending ? "正在发布..." : "发布课程"}</Button>

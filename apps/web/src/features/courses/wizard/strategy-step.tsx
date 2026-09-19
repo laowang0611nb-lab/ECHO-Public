@@ -24,7 +24,7 @@ export function StrategyStep({
     <Card className="gap-5 py-6">
       <CardHeader className="px-6">
         <CardTitle>4 教学策略</CardTitle>
-        <p className="text-sm text-muted-foreground">选择模板并编辑自然语言规则，发布后会作为课程级教学策略保存。</p>
+        <p className="text-sm text-muted-foreground">选择模板并编辑自然语言规则。点击底部“保存并进入发布”，保存成功后才能进入第 5 步确认发布。</p>
       </CardHeader>
       <CardContent className="space-y-5 px-6">
         <div className="grid gap-3 md:grid-cols-2">
@@ -39,9 +39,9 @@ export function StrategyStep({
           <span className="mb-1.5 block text-sm font-medium">AI 教学规则</span>
           <Textarea className="min-h-52 resize-y" onChange={(event) => onChange(event.target.value)} value={value} />
         </label>
-        {pending ? <p className="text-sm text-muted-foreground">正在保存教学策略...</p> : null}
-        {error ? <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p> : null}
-        <p className="text-xs text-muted-foreground">教学策略保存失败时不会继续发布，可返回修改后重试。</p>
+        {pending ? <p className="text-sm text-muted-foreground">正在保存教学策略，请稍候，不要重复提交...</p> : null}
+        {error ? <p className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">{error} 修改后可直接再次点击，不会重复创建课程。</p> : null}
+        <p className="text-xs text-muted-foreground">保存失败时不会进入发布步骤；请确认 API 服务和教师会话正常后重试。</p>
       </CardContent>
     </Card>
   );

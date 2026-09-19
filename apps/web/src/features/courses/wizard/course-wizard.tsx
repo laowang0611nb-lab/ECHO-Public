@@ -34,6 +34,25 @@ import { useTeacherSession } from "@/providers/teacher-session-provider";
 const defaultPolicy =
   "课程知识优先。\n概念问题可以直接讲解。\n习题优先引导，不直接给出最终答案。\n超出课程资料时明确标记为课程外补充。";
 
+function wizardErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiClientError) {
+    if (error.status === 401) {
+      return "教师会话已失效，请返回登录页重新登录后再继续。";
+    }
+    if (error.status === 404) {
+      return "课程或教材不存在，可能已被删除；请返回课程管理重新创建。";
+    }
+    if (error.status === 409) {
+      return "课程状态已变化，请刷新页面后重试。";
+    }
+    if (error.status >= 500) {
+      return "后端服务暂时不可用，请确认 API 正常运行后重试。";
+    }
+    return error.message;
+  }
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function CourseWizard() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -94,7 +113,7 @@ export function CourseWizard() {
       setUploadError(null);
     },
     onError: (error) => {
-      setUploadError(error instanceof Error ? error.message : "教材上传失败");
+      setUploadError(wizardErrorMessage(error, "教材上传失败，请稍后重试。"));
     },
   });
 
@@ -106,7 +125,7 @@ export function CourseWizard() {
       setStep(5);
     },
     onError: (error) => {
-      setPolicyError(error instanceof Error ? error.message : "教学策略保存失败");
+      setPolicyError(wizardErrorMessage(error, "教学策略保存失败，请稍后重试。"));
     },
   });
 
@@ -118,7 +137,7 @@ export function CourseWizard() {
       router.push(`/courses/${published.id}`);
     },
     onError: (error) => {
-      setPublishError(error instanceof Error ? error.message : "课程发布失败");
+      setPublishError(wizardErrorMessage(error, "课程发布失败，请稍后重试。"));
     },
   });
 
@@ -168,6 +187,10 @@ export function CourseWizard() {
     }
 
     if (step === 4) {
+      if (!course) {
+        setPolicyError("课程尚未创建成功，请返回第一步重新检查。");
+        return;
+      }
       if (!effectivePolicy.trim()) {
         setPolicyError("教学策略不能为空");
         return;
@@ -176,6 +199,10 @@ export function CourseWizard() {
       return;
     }
 
+    if (!course) {
+      setPublishError("课程尚未保存成功，请返回修改后重试。");
+      return;
+    }
     publishMutation.mutate();
   }
 
@@ -205,7 +232,7 @@ export function CourseWizard() {
       setAnalysis((current) => ({
         ...current,
         stage: "error",
-        error: error instanceof Error ? error.message : "AI 解析失败，请重试。",
+        error: wizardErrorMessage(error, "AI 解析失败，请重试。"),
       }));
     }
   }
@@ -297,7 +324,7 @@ export function CourseWizard() {
             <Button disabled={step === 1} onClick={() => setStep((current) => Math.max(1, current - 1) as WizardStep)} type="button" variant="outline">上一步</Button>
             {step < 5 ? (
               <Button disabled={nextDisabled} onClick={handleNext} type="button">
-                {createCourseMutation.isPending ? "正在创建..." : step === 4 ? "保存并继续" : "下一步"}
+                {createCourseMutation.isPending ? "正在创建..." : step === 4 ? "保存并进入发布" : "下一步"}
               </Button>
             ) : (
               <Button disabled={nextDisabled} onClick={handleNext} type="button">
