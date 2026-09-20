@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 import { Header } from "@/components/layout/header";
+import { PageMotion } from "@/components/layout/page-motion";
 import { Sidebar } from "@/components/layout/sidebar";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -19,7 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className={sidebarCollapsed ? "min-h-screen transition-[padding] duration-200 lg:pl-20" : "min-h-screen transition-[padding] duration-200 lg:pl-[258px]"}>
         <Header />
         <main className="mx-auto w-full max-w-[1680px] px-4 py-6 lg:px-6">
-          <div className="page-enter" key={pathname}>{children}</div>
+          {pathname === "/dashboard" ? children : <PageMotion key={pathname}>{children}</PageMotion>}
         </main>
         <GuidedDemoBar />
       </div>

@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/common/error-state";
 import { LoadingState } from "@/components/common/loading-state";
 import { StatCard } from "@/components/common/stat-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { pageContainerVariants as containerVariants, pageItemVariants as itemVariants } from "@/components/layout/page-motion";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DashboardFooter } from "@/features/dashboard/components/dashboard-footer";
@@ -21,15 +22,6 @@ import { buildDashboardViewModel } from "@/features/dashboard/view-model";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
-const containerVariants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.06 } },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 6 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.24 } },
-};
 
 export function DashboardPage() {
   const { user } = useTeacherSession();

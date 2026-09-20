@@ -1,4 +1,5 @@
 import { ShieldCheck } from "lucide-react";
+import { PageMotion } from "@/components/layout/page-motion";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -16,7 +17,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             教师端认证
           </span>
         </header>
-        {children}
+        <PageMotion>{children}</PageMotion>
         <p className="text-center text-xs leading-5 text-muted-foreground">
           认证请求仅通过 ECHO API 发出；验证码和验证票据不会写入浏览器存储。
         </p>
