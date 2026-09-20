@@ -1,5 +1,7 @@
 # Local scratch files
 tmp/
+artifacts/
+dist-*/
 
 # Python
 __pycache__/
