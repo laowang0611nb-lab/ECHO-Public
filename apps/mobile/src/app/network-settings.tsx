@@ -19,6 +19,8 @@ import {
   clearAuthSession,
   getCachedAuthSession,
 } from "@/services/auth-session-storage";
+import { clearPasswordResetChallenge } from "@/services/password-reset-storage";
+import { clearPendingCourseCode } from "@/services/pending-course-storage";
 import {
   getApiBaseUrlSync,
   getDefaultApiBaseUrl,
@@ -86,6 +88,12 @@ export default function NetworkSettingsScreen() {
     if (changed && hadSession) {
       await clearAuthSession();
     }
+    if (changed) {
+      await Promise.allSettled([
+        clearPasswordResetChallenge(),
+        clearPendingCourseCode(),
+      ]);
+    }
     queryClient.clear();
     setCurrentUrl(normalized);
     setValue(normalized);
@@ -122,6 +130,12 @@ export default function NetworkSettingsScreen() {
       const defaultUrl = await resetApiBaseUrl();
       setMode(defaultUrl === ADB_URL ? "adb" : "lan");
       await applySavedUrl(defaultUrl, "已恢复构建时默认地址。");
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "恢复默认地址失败，请稍后重试。",
+      );
     } finally {
       setPending(false);
     }

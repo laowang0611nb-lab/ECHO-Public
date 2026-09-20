@@ -13,8 +13,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { PENDING_COURSE_CODE_KEY, studentReadableAuthError } from "@/services/student-auth";
-import { studentStorage } from "@/services/student-storage";
+import { studentReadableAuthError } from "@/services/student-auth";
+import {
+  clearPendingCourseCode,
+  savePendingCourseCode,
+} from "@/services/pending-course-storage";
 import { studentTheme } from "@/constants/student-theme";
 import { useCurrentCourse } from "@/providers/current-course-provider";
 import { useStudentSession } from "@/providers/student-session-provider";
@@ -30,20 +33,20 @@ export default function JoinCourseScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const normalizedCode = code.trim().toUpperCase();
-  const valid = normalizedCode.length === 8;
+  const valid = /^[A-Z0-9]{8}$/.test(normalizedCode);
 
   async function confirmJoin() {
     setPending(true);
     setError(null);
     try {
       if (!user) {
-        await studentStorage.setItem(PENDING_COURSE_CODE_KEY, normalizedCode);
+        await savePendingCourseCode(normalizedCode);
         setConfirmVisible(false);
         router.replace("/login");
         return;
       }
       await joinCourse(normalizedCode);
-      await studentStorage.removeItem(PENDING_COURSE_CODE_KEY);
+      await clearPendingCourseCode();
       setConfirmVisible(false);
       router.replace("/(tabs)/ai");
     } catch (requestError) {

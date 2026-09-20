@@ -20,11 +20,10 @@ import { studentTheme } from "@/constants/student-theme";
 import {
   isMainlandPhone,
   normalizePhone,
-  PENDING_COURSE_CODE_KEY,
   studentAuthService,
   studentReadableAuthError,
 } from "@/services/student-auth";
-import { studentStorage } from "@/services/student-storage";
+import { loadPendingCourseCode } from "@/services/pending-course-storage";
 import { useStudentSession } from "@/providers/student-session-provider";
 
 export default function RegisterScreen() {
@@ -111,9 +110,7 @@ export default function RegisterScreen() {
         verificationToken: verification.verification_token,
         deviceName: "ECHO Android",
       });
-      const pendingCourseCode = await studentStorage.getItem(
-        PENDING_COURSE_CODE_KEY,
-      );
+      const pendingCourseCode = await loadPendingCourseCode();
       if (pendingCourseCode) {
         router.replace({
           pathname: "/join-course",

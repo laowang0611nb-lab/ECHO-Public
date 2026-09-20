@@ -10,10 +10,9 @@ import {
   PasswordField,
 } from "@/components/student/auth-ui";
 import {
-  PENDING_COURSE_CODE_KEY,
   studentReadableAuthError,
 } from "@/services/student-auth";
-import { studentStorage } from "@/services/student-storage";
+import { loadPendingCourseCode } from "@/services/pending-course-storage";
 import { useStudentSession } from "@/providers/student-session-provider";
 
 export default function LoginScreen() {
@@ -39,9 +38,7 @@ export default function LoginScreen() {
     setError(null);
     try {
       await login({ account: normalizedAccount, password });
-      const pendingCourseCode = await studentStorage.getItem(
-        PENDING_COURSE_CODE_KEY,
-      );
+      const pendingCourseCode = await loadPendingCourseCode();
       if (pendingCourseCode) {
         router.replace({
           pathname: "/join-course",

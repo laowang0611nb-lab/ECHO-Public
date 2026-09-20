@@ -240,8 +240,15 @@ async def test_password_change_verifies_and_revokes_sessions(
         headers=auth_headers(teacher),
         json={"current_password": old_password, "new_password": "short"},
     )
+    unchanged = await client.post(
+        "/api/v1/auth/change-password",
+        headers=auth_headers(teacher),
+        json={"current_password": old_password, "new_password": old_password},
+    )
     assert wrong_current.status_code == 400
     assert invalid_new.status_code == 422
+    assert unchanged.status_code == 400
+    assert unchanged.json()["detail"]["code"] == "AUTH_NEW_PASSWORD_UNCHANGED"
 
     changed = await client.post(
         "/api/v1/auth/change-password",

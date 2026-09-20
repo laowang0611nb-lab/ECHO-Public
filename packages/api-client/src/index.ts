@@ -143,6 +143,7 @@ export interface ApiClientOptions {
   fetchImpl?: typeof fetch;
   getAccessToken?: () => string | null | undefined;
   getRefreshToken?: () => string | null | undefined;
+  requestTimeoutMs?: number;
   onAuthSessionUpdate?: (
     session: AuthSessionResponse,
   ) => Promise<void> | void;
@@ -157,6 +158,15 @@ export class ApiClientError extends Error {
   ) {
     super(message);
     this.name = "ApiClientError";
+  }
+}
+
+export class ApiClientTimeoutError extends Error {
+  readonly status = 408;
+
+  constructor(readonly timeoutMs: number) {
+    super(`ECHO API request timed out after ${timeoutMs}ms`);
+    this.name = "ApiClientTimeoutError";
   }
 }
 
@@ -255,10 +265,44 @@ export function createApiClient({
   fetchImpl = fetch,
   getAccessToken,
   getRefreshToken,
+  requestTimeoutMs = 60_000,
   onAuthSessionUpdate,
   onAuthSessionExpired,
 }: ApiClientOptions) {
   const fallbackRoot = baseUrl?.replace(/\/$/, "") ?? "";
+  const requestTimeout = Math.max(0, requestTimeoutMs);
+
+  async function fetchWithTimeout(
+    input: string,
+    init?: RequestInit,
+    timeoutMs = requestTimeout,
+  ): Promise<Response> {
+    if (timeoutMs <= 0) return fetchImpl(input, init);
+
+    const controller = new AbortController();
+    const sourceSignal = init?.signal;
+    let timedOut = false;
+    const abortFromSource = () => controller.abort();
+    if (sourceSignal?.aborted) {
+      controller.abort();
+    } else {
+      sourceSignal?.addEventListener("abort", abortFromSource, { once: true });
+    }
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      return await fetchImpl(input, {...init, signal: controller.signal});
+    } catch (error) {
+      if (timedOut) throw new ApiClientTimeoutError(timeoutMs);
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      sourceSignal?.removeEventListener("abort", abortFromSource);
+    }
+  }
 
   function resolveRoot(): string {
     const configured = getBaseUrl?.()?.trim() || fallbackRoot;
@@ -290,7 +334,7 @@ export function createApiClient({
         return null;
       }
       try {
-        const response = await fetchImpl(`${root}/api/v1/auth/refresh`, {
+        const response = await fetchWithTimeout(`${root}/api/v1/auth/refresh`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ refresh_token: refreshToken }),
@@ -335,7 +379,7 @@ export function createApiClient({
       headers.set("X-User-Id", userId);
     }
 
-    let response = await fetchImpl(`${root}${path}`, {
+    let response = await fetchWithTimeout(`${root}${path}`, {
       ...init,
       headers,
     });
@@ -345,7 +389,7 @@ export function createApiClient({
       if (accessToken) {
         headers.set("Authorization", `Bearer ${accessToken}`);
         headers.delete("X-User-Id");
-        response = await fetchImpl(`${root}${path}`, {
+        response = await fetchWithTimeout(`${root}${path}`, {
           ...init,
           headers,
         });

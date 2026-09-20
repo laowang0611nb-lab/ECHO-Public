@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import {
@@ -26,6 +26,7 @@ export default function ForgotPasswordScreen() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const verifyLockRef = useRef(false);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -53,6 +54,7 @@ export default function ForgotPasswordScreen() {
   }
 
   async function verifyAndContinue() {
+    if (pending || verifyLockRef.current) return;
     const normalized = normalizePhone(phone);
     if (!isMainlandPhone(normalized)) {
       setFieldError("请输入正确的 11 位手机号。");
@@ -63,6 +65,7 @@ export default function ForgotPasswordScreen() {
       return;
     }
     setPending(true);
+    verifyLockRef.current = true;
     setError(null);
     try {
       const verification = await studentAuthService.verifySmsCode(
@@ -81,6 +84,7 @@ export default function ForgotPasswordScreen() {
     } catch (requestError) {
       setError(studentReadableAuthError(requestError));
     } finally {
+      verifyLockRef.current = false;
       setPending(false);
     }
   }

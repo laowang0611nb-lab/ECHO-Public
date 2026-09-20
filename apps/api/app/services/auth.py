@@ -34,6 +34,10 @@ class CurrentPasswordInvalidError(Exception):
     pass
 
 
+class NewPasswordUnchangedError(Exception):
+    pass
+
+
 class UserRoleConflictError(Exception):
     def __init__(self, requested_role: UserRole, existing_role: UserRole) -> None:
         self.requested_role = requested_role
@@ -131,7 +135,7 @@ async def change_password(
     if not verify_password(payload.current_password, credential.password_hash):
         raise CurrentPasswordInvalidError
     if verify_password(payload.new_password, credential.password_hash):
-        raise CurrentPasswordInvalidError
+        raise NewPasswordUnchangedError
 
     changed_at = datetime.now(UTC)
     password_hash, algorithm = hash_password(payload.new_password)

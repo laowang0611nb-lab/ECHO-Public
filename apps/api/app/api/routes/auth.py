@@ -39,6 +39,7 @@ from app.services.aliyun_pnvs import (
 )
 from app.services.auth import (
     CurrentPasswordInvalidError,
+    NewPasswordUnchangedError,
     PasswordNotConfiguredError,
     TeacherProfileConflictError,
     TeacherProfileForbiddenError,
@@ -387,6 +388,14 @@ async def change_current_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is invalid",
+        ) from exc
+    except NewPasswordUnchangedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "AUTH_NEW_PASSWORD_UNCHANGED",
+                "message": "New password must differ from the current password",
+            },
         ) from exc
 
 

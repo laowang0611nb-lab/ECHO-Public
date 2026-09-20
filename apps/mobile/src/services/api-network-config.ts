@@ -81,8 +81,16 @@ export async function testApiBaseUrl(value: string): Promise<{
   message: string;
 }> {
   const normalized = normalizeApiBaseUrl(value);
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 5_000);
   try {
-    const response = await expoFetch(`${normalized}/api/v1/health`);
+    const response = await expoFetch(`${normalized}/api/v1/health`, {
+      signal: controller.signal,
+    });
     if (!response.ok) {
       return {
         ok: false,
@@ -107,7 +115,11 @@ export async function testApiBaseUrl(value: string): Promise<{
       ok: false,
       baseUrl: normalized,
       version: null,
-      message: "无法连接，请检查热点、监听地址和 Windows 防火墙。",
+      message: timedOut
+        ? "连接超时，请检查服务器是否可达。"
+        : "无法连接，请检查热点、监听地址和 Windows 防火墙。",
     };
+  } finally {
+    clearTimeout(timer);
   }
 }

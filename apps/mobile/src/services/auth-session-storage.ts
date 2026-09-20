@@ -12,8 +12,19 @@ interface StoredAuthSession {
 }
 
 let cachedSession: AuthSessionResponse | null = null;
+let sessionVersion = 0;
+let storageQueue: Promise<void> = Promise.resolve();
 
 const expiredListeners = new Set<() => void>();
+
+function enqueueSessionStorage<T>(task: () => Promise<T>): Promise<T> {
+  const result = storageQueue.then(task, task);
+  storageQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
 
 function isAuthSession(value: unknown): value is AuthSessionResponse {
   if (!value || typeof value !== "object") return false;
@@ -53,6 +64,7 @@ export async function hydrateAuthSession(): Promise<AuthSessionResponse | null> 
   const stored = await studentStorage.getItem(AUTH_SESSION_STORAGE_KEY);
   if (!stored) {
     cachedSession = null;
+    sessionVersion += 1;
     return null;
   }
   try {
@@ -62,6 +74,7 @@ export async function hydrateAuthSession(): Promise<AuthSessionResponse | null> 
     if (!session) {
       await studentStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
       cachedSession = null;
+      sessionVersion += 1;
       return null;
     }
     const currentApiBaseUrl = getApiBaseUrlSync();
@@ -70,6 +83,7 @@ export async function hydrateAuthSession(): Promise<AuthSessionResponse | null> 
       return null;
     }
     cachedSession = session;
+    sessionVersion += 1;
     if (!storedSession) {
       await persistAuthSession(session);
     }
@@ -77,6 +91,7 @@ export async function hydrateAuthSession(): Promise<AuthSessionResponse | null> 
   } catch {
     await studentStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
     cachedSession = null;
+    sessionVersion += 1;
     return null;
   }
 }
@@ -84,22 +99,33 @@ export async function hydrateAuthSession(): Promise<AuthSessionResponse | null> 
 export async function persistAuthSession(
   session: AuthSessionResponse,
 ): Promise<void> {
+  const version = sessionVersion + 1;
+  sessionVersion = version;
   cachedSession = session;
   const stored: StoredAuthSession = {
     version: 1,
     apiBaseUrl: getApiBaseUrlSync(),
     session,
   };
-  await studentStorage.setItem(
-    AUTH_SESSION_STORAGE_KEY,
-    JSON.stringify(stored),
-  );
+  await enqueueSessionStorage(async () => {
+    if (version !== sessionVersion) return;
+    await studentStorage.setItem(
+      AUTH_SESSION_STORAGE_KEY,
+      JSON.stringify(stored),
+    );
+  });
 }
 
 export async function clearAuthSession(): Promise<void> {
+  sessionVersion += 1;
   cachedSession = null;
-  await studentStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
-  for (const listener of expiredListeners) listener();
+  try {
+    await enqueueSessionStorage(() =>
+      studentStorage.removeItem(AUTH_SESSION_STORAGE_KEY),
+    );
+  } finally {
+    for (const listener of expiredListeners) listener();
+  }
 }
 
 export function subscribeAuthSessionExpired(listener: () => void): () => void {

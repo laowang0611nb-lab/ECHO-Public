@@ -1,4 +1,7 @@
-import { ApiClientError } from "@echo/api-client";
+import {
+  ApiClientError,
+  ApiClientTimeoutError,
+} from "@echo/api-client";
 import type {
   AuthSessionResponse,
   DevelopmentLoginRequest,
@@ -13,7 +16,6 @@ import type {
 
 import { apiClient } from "@/lib/api-client";
 
-export const PENDING_COURSE_CODE_KEY = "echo.student.pending-course-code";
 
 export interface StudentLoginInput {
   account: string;
@@ -120,6 +122,9 @@ function plainDetailMessage(error: ApiClientError): string | null {
 export function studentReadableAuthError(error: unknown): string {
   if (error instanceof AuthInputError) return error.message;
   if (error instanceof BackendCapabilityMissingError) return error.capability;
+  if (error instanceof ApiClientTimeoutError) {
+    return "连接超时，请检查网络后重试。";
+  }
   if (error instanceof ApiClientError) {
     const detail = errorDetail(error);
     const code = detail?.code ?? "";
@@ -130,6 +135,9 @@ export function studentReadableAuthError(error: unknown): string {
     }
     if (code === "AUTH_PHONE_NOT_REGISTERED") {
       return "该手机号尚未注册，请确认手机号或先注册账号。";
+    }
+    if (code === "AUTH_NEW_PASSWORD_UNCHANGED") {
+      return "新密码不能与当前密码相同。";
     }
     if (code === "AUTH_INVALID_PASSWORD" || error.status === 401) {
       return "密码不正确，请重新输入。";

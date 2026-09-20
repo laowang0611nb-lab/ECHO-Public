@@ -22,11 +22,11 @@ import {
 import { clearPasswordResetChallenge } from "@/services/password-reset-storage";
 import {
   isDevelopmentAuth,
-  PENDING_COURSE_CODE_KEY,
   studentAuthService,
   type StudentLoginInput,
   type StudentRegisterInput,
 } from "@/services/student-auth";
+import { clearPendingCourseCode } from "@/services/pending-course-storage";
 import {
   studentCourseStorageKey,
   studentStorage,
@@ -146,17 +146,15 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   async function logout() {
     const refreshToken = getRefreshTokenSync();
     if (refreshToken) {
-      try {
-        await apiClient.logout(refreshToken);
-      } catch {
+      void apiClient.logout(refreshToken).catch(() => {
         // Local logout must still succeed if the server is unavailable.
-      }
+      });
     }
     await Promise.allSettled([
       clearAuthSession(),
       clearPasswordResetChallenge(),
+      clearPendingCourseCode(),
       studentStorage.removeItem(LEGACY_SESSION_USER_KEY),
-      studentStorage.removeItem(PENDING_COURSE_CODE_KEY),
       user
         ? studentStorage.removeItem(studentCourseStorageKey(user.id))
         : Promise.resolve(),
