@@ -101,7 +101,6 @@ export function DashboardPage() {
           icon={TriangleAlert}
           label="待关注知识点"
           supporting={`${overview.learning_difficulties.filter((item) => item.average_score < 50).length} 个高风险`}
-          tone="warning"
           value={overview.stats.attention_knowledge_point_count}
         />
       </motion.section>
