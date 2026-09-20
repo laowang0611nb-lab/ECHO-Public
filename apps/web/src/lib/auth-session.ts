@@ -1,6 +1,7 @@
 import type { AuthSessionResponse } from "@echo/shared-types";
 
 const AUTH_SESSION_KEY = "echo.teacher.auth.session";
+export const AUTH_SESSION_EXPIRED_EVENT = "echo:auth-session-expired";
 
 export interface StoredAuthSession {
   userId: string;
@@ -77,4 +78,11 @@ export function storeAuthSession(response: AuthSessionResponse): StoredAuthSessi
 
 export function clearAuthSession() {
   persistStoredSession(null);
+}
+
+export function expireAuthSession() {
+  clearAuthSession();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
+  }
 }

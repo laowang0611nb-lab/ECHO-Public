@@ -1,11 +1,13 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
@@ -16,7 +18,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((current) => !current)} />
       <div className={sidebarCollapsed ? "min-h-screen transition-[padding] duration-200 lg:pl-20" : "min-h-screen transition-[padding] duration-200 lg:pl-[258px]"}>
         <Header />
-        <main className="mx-auto w-full max-w-[1680px] px-4 py-6 lg:px-6">{children}</main>
+        <main className="mx-auto w-full max-w-[1680px] px-4 py-6 lg:px-6">
+          <div className="page-enter" key={pathname}>{children}</div>
+        </main>
         <GuidedDemoBar />
       </div>
     </div>

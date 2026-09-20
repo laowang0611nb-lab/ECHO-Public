@@ -21,7 +21,7 @@ import {
 } from "react";
 
 import { apiClient } from "@/lib/api";
-import { clearAuthSession, getStoredAuthSession, storeAuthSession } from "@/lib/auth-session";
+import { AUTH_SESSION_EXPIRED_EVENT, clearAuthSession, getStoredAuthSession, storeAuthSession } from "@/lib/auth-session";
 
 const SESSION_KEY = "echo.teacher.user-id";
 const ACCESS_TOKEN_REFRESH_LEEWAY_MS = 60_000;
@@ -85,6 +85,15 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
       refreshingRef.current = null;
     }
   }, [applyAuthSession]);
+
+  useEffect(() => {
+    const handleExpiredSession = () => {
+      queryClient.clear();
+      setUser(null);
+    };
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, handleExpiredSession);
+    return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, handleExpiredSession);
+  }, [queryClient]);
 
   useEffect(() => {
     let cancelled = false;

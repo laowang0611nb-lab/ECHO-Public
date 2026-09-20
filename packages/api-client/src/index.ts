@@ -141,6 +141,11 @@ export interface ApiClientOptions {
   baseUrl: string;
   fetchImpl?: typeof fetch;
   getAccessToken?: () => string | null | undefined;
+  getRefreshToken?: () => string | null | undefined;
+  onAuthSessionUpdate?: (
+    session: AuthSessionResponse,
+  ) => Promise<void> | void;
+  onAuthSessionExpired?: () => Promise<void> | void;
 }
 
 export class ApiClientError extends Error {
@@ -247,8 +252,54 @@ export function createApiClient({
   baseUrl,
   fetchImpl = fetch,
   getAccessToken,
+  getRefreshToken,
+  onAuthSessionUpdate,
+  onAuthSessionExpired,
 }: ApiClientOptions) {
   const root = baseUrl.replace(/\/$/, "");
+  let refreshPromise: Promise<string | null> | null = null;
+
+  function canRefresh(path: string): boolean {
+    return ![
+      "/api/v1/auth/sms/",
+      "/api/v1/auth/register/",
+      "/api/v1/auth/login/",
+      "/api/v1/auth/password/reset",
+      "/api/v1/auth/refresh",
+      "/api/v1/auth/logout",
+    ].some((prefix) => path.startsWith(prefix));
+  }
+
+  async function refreshAccessToken(): Promise<string | null> {
+    if (!getRefreshToken || !onAuthSessionUpdate) return null;
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = (async () => {
+      const refreshToken = getRefreshToken();
+      if (!refreshToken) {
+        await onAuthSessionExpired?.();
+        return null;
+      }
+      try {
+        const response = await fetchImpl(`${root}/api/v1/auth/refresh`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+        if (!response.ok) {
+          await onAuthSessionExpired?.();
+          return null;
+        }
+        const session = (await response.json()) as AuthSessionResponse;
+        await onAuthSessionUpdate(session);
+        return session.access_token;
+      } catch {
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+    return refreshPromise;
+  }
 
   async function request<T>(path: string, init?: RequestInit, userId?: string): Promise<T> {
     const headers = new Headers(init?.headers);
@@ -256,19 +307,36 @@ export function createApiClient({
     if (init?.body !== undefined && !isFormData && !headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
-    const accessToken = getAccessToken?.();
+    let accessToken = getAccessToken?.();
     if (accessToken) {
       headers.set("Authorization", `Bearer ${accessToken}`);
     } else if (userId) {
       headers.set("X-User-Id", userId);
     }
 
-    const response = await fetchImpl(`${root}${path}`, {
+    let response = await fetchImpl(`${root}${path}`, {
       ...init,
       headers,
     });
 
+    if (response.status === 401 && canRefresh(path)) {
+      accessToken = await refreshAccessToken();
+      if (accessToken) {
+        headers.set("Authorization", `Bearer ${accessToken}`);
+        headers.delete("X-User-Id");
+        response = await fetchImpl(`${root}${path}`, {
+          ...init,
+          headers,
+        });
+      } else {
+        await onAuthSessionExpired?.();
+      }
+    }
+
     if (!response.ok) {
+      if (response.status === 401) {
+        await onAuthSessionExpired?.();
+      }
       throw await readError(response);
     }
 
