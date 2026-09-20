@@ -42,6 +42,9 @@ function wizardErrorMessage(error: unknown, fallback: string) {
     if (error.status === 404) {
       return "课程或教材不存在，可能已被删除；请返回课程管理重新创建。";
     }
+    if (error.status === 408) {
+      return "解析等待超过 4 分钟仍未完成，请稍后重试；不要重复点击提交。";
+    }
     if (error.status === 409) {
       return "课程状态已变化，请刷新页面后重试。";
     }

@@ -11,6 +11,7 @@ export function resolveApiUrl(value: string | null | undefined) {
 }
 
 export const apiClient = createApiClient({
+  requestTimeoutMs: 240_000,
   baseUrl: apiBaseUrl,
   getAccessToken,
   getRefreshToken: () => getStoredAuthSession()?.refreshToken ?? null,
