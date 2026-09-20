@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <main className="min-h-screen bg-muted/25 px-4 py-8 sm:px-6 sm:py-12">
+    <main className="min-h-screen bg-transparent px-4 py-8 sm:px-6 sm:py-12">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-5">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <Link className="flex items-center gap-2 text-foreground" href="/login">

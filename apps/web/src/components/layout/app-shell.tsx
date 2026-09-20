@@ -13,7 +13,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="min-h-screen bg-background"
+      className="min-h-screen bg-transparent"
       style={{ "--sidebar-width": sidebarCollapsed ? "5rem" : "258px" } as CSSProperties}
     >
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((current) => !current)} />
