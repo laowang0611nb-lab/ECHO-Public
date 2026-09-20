@@ -19,6 +19,7 @@ import {
   persistAuthSession,
   subscribeAuthSessionExpired,
 } from "@/services/auth-session-storage";
+import { clearPasswordResetChallenge } from "@/services/password-reset-storage";
 import {
   isDevelopmentAuth,
   PENDING_COURSE_CODE_KEY,
@@ -72,7 +73,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
             await persistAuthSession({ ...latestSession, user: freshUser });
           } catch (error) {
             const unauthorized =
-              error instanceof ApiClientError && error.status === 401;
+              error instanceof ApiClientError &&
+              (error.status === 401 || error.status === 403);
             if (unauthorized) {
               await clearAuthSession();
             } else if (!cancelled) {
@@ -152,6 +154,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     }
     await Promise.allSettled([
       clearAuthSession(),
+      clearPasswordResetChallenge(),
       studentStorage.removeItem(LEGACY_SESSION_USER_KEY),
       studentStorage.removeItem(PENDING_COURSE_CODE_KEY),
       user

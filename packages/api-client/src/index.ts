@@ -299,6 +299,12 @@ export function createApiClient({
           return null;
         }
         const session = (await response.json()) as AuthSessionResponse;
+        if (
+          resolveRoot() !== root ||
+          getRefreshToken() !== refreshToken
+        ) {
+          return null;
+        }
         await onAuthSessionUpdate(session);
         return session.access_token;
       } catch {

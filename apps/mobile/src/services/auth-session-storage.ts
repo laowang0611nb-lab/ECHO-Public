@@ -1,8 +1,15 @@
 import type { AuthSessionResponse } from "@echo/shared-types";
 
+import { getApiBaseUrlSync } from "@/services/api-network-config";
 import { studentStorage } from "@/services/student-storage";
 
 export const AUTH_SESSION_STORAGE_KEY = "echo.student.auth.session.v1";
+
+interface StoredAuthSession {
+  version: 1;
+  apiBaseUrl: string;
+  session: AuthSessionResponse;
+}
 
 let cachedSession: AuthSessionResponse | null = null;
 
@@ -17,6 +24,16 @@ function isAuthSession(value: unknown): value is AuthSessionResponse {
     typeof candidate.session_id === "string" &&
     typeof candidate.refresh_expires_at === "string" &&
     Boolean(candidate.user)
+  );
+}
+
+function isStoredAuthSession(value: unknown): value is StoredAuthSession {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<StoredAuthSession>;
+  return (
+    candidate.version === 1 &&
+    typeof candidate.apiBaseUrl === "string" &&
+    isAuthSession(candidate.session)
   );
 }
 
@@ -40,13 +57,23 @@ export async function hydrateAuthSession(): Promise<AuthSessionResponse | null> 
   }
   try {
     const parsed: unknown = JSON.parse(stored);
-    if (!isAuthSession(parsed)) {
+    const storedSession = isStoredAuthSession(parsed) ? parsed : null;
+    const session = storedSession?.session ?? (isAuthSession(parsed) ? parsed : null);
+    if (!session) {
       await studentStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
       cachedSession = null;
       return null;
     }
-    cachedSession = parsed;
-    return parsed;
+    const currentApiBaseUrl = getApiBaseUrlSync();
+    if (storedSession && storedSession.apiBaseUrl !== currentApiBaseUrl) {
+      await clearAuthSession();
+      return null;
+    }
+    cachedSession = session;
+    if (!storedSession) {
+      await persistAuthSession(session);
+    }
+    return session;
   } catch {
     await studentStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
     cachedSession = null;
@@ -58,9 +85,14 @@ export async function persistAuthSession(
   session: AuthSessionResponse,
 ): Promise<void> {
   cachedSession = session;
+  const stored: StoredAuthSession = {
+    version: 1,
+    apiBaseUrl: getApiBaseUrlSync(),
+    session,
+  };
   await studentStorage.setItem(
     AUTH_SESSION_STORAGE_KEY,
-    JSON.stringify(session),
+    JSON.stringify(stored),
   );
 }
 
