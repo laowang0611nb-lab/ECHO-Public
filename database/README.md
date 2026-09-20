@@ -11,6 +11,7 @@ been removed so there is one source of truth.
 - `db/`: base metadata, async engine, and session factory
 - `alembic/`: the complete migration history plus DB V1 account migrations
 - `auth/`: password hashing, access JWT, refresh-token, and session helpers
+- `scripts/`: SQLite-to-PostgreSQL migration and verification tooling
 - `seeds/`: repeatable demo seed scripts copied from the backend
 - `tests/`: isolated model, auth-helper, and migration tests
 - `config.py`: database-owned settings entry point
@@ -20,7 +21,7 @@ been removed so there is one source of truth.
 ## Current Schema
 
 - Existing history head: `d9e0f1a2b3c4`
-- Current workflow head: `c5d6e7f8a9b0`
+- Current workflow head: `e3f4a5b6c7d8`
 - Added models: `UserCredential`, `AuthSession`, `TeacherProfile`,
   `StudentProfile`, `ReviewAnswerVersion`, `ReviewRegenerationRun`,
   `ReviewHistoryEntry`, `QuestionItem`, `ExternalResource`
@@ -49,9 +50,26 @@ apps\api\.venv\Scripts\python.exe -m alembic -c database\alembic.ini downgrade d
 apps\api\.venv\Scripts\python.exe -m alembic -c database\alembic.ini upgrade head
 ```
 
-SQLite is used only for fast unit and migration checks. The production target
-remains PostgreSQL with `pgvector`; a real PostgreSQL run is still required
-before this package is accepted as the integrated backend database layer.
+SQLite remains the fast test database. The local production target has also
+been validated with native PostgreSQL 17.6 and pgvector 0.8.0, including the
+`vector(1024)` column, HNSW cosine index, full data import, and API health
+endpoint checks.
+
+## Windows Runtime Deployment
+
+The local Windows-native database is centralized as follows:
+
+```text
+PostgreSQL software: <postgres>\pgsql
+PostgreSQL downloads: <postgres>\downloads
+Project data:        database/runtime/postgresql/data
+Project logs:        database/runtime/postgresql/logs
+Project backups:     database/runtime/postgresql/backups
+Credentials:         database/runtime/postgresql/config/credentials.json
+```
+
+A user logon task named `ECHO PostgreSQL` starts the server. Manual operations
+are documented in `scripts/database/README.md`.
 
 ## Integration Status
 
