@@ -1,8 +1,9 @@
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from database.auth.tokens import decode_phone_verification_token
 from database.models.auth import PhoneVerificationClaim, UserCredential
-from database.models.user import User, UserRole
+from database.models.user import User, UserRole, UserStatus
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -152,6 +153,143 @@ async def test_password_login_works_with_generated_email(client: AsyncClient) ->
 
     assert response.status_code == 200
     assert response.json()["user"]["id"] == registered["user"]["id"]
+
+
+async def test_sms_login_creates_session_and_consumes_login_token(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    registered = await register_teacher(client)
+    token = await issue_token(client, purpose="login")
+    payload = decode_phone_verification_token(token, purpose="login")
+
+    response = await client.post(
+        "/api/v1/auth/login/sms",
+        json={
+            "phone": "+86 138-0013-8000",
+            "verification_token": token,
+            "device_name": "ECHO Teacher Web",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["user"]["id"] == registered["user"]["id"]
+    assert body["user"]["phone"] == PHONE
+    assert body["user"]["email"] == f"phone-{PHONE}@echo.example"
+    assert body["token_type"] == "bearer"
+    assert body["access_token"]
+    assert body["refresh_token"]
+
+    me = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {body['access_token']}"},
+    )
+    assert me.status_code == 200
+    assert me.json()["id"] == body["user"]["id"]
+
+    async with session_factory() as session:
+        claim = await session.get(PhoneVerificationClaim, str(payload["jti"]))
+        assert claim is not None
+        assert claim.consumed_at is not None
+
+    reused = await client.post(
+        "/api/v1/auth/login/sms",
+        json={"phone": PHONE, "verification_token": token},
+    )
+    assert reused.status_code == 400
+    assert reused.json()["detail"]["code"] == "AUTH_VERIFICATION_TOKEN_INVALID"
+
+
+async def test_sms_login_rejects_unregistered_phone(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    phone = "13900139000"
+    token = await issue_token(client, phone=phone, purpose="login")
+    payload = decode_phone_verification_token(token, purpose="login")
+
+    response = await client.post(
+        "/api/v1/auth/login/sms",
+        json={"phone": phone, "verification_token": token},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "AUTH_PHONE_NOT_REGISTERED"
+
+    async with session_factory() as session:
+        claim = await session.get(PhoneVerificationClaim, str(payload["jti"]))
+        assert claim is not None
+        assert claim.consumed_at is None
+
+
+async def test_sms_login_rejects_wrong_purpose_and_verified_field(
+    client: AsyncClient,
+) -> None:
+    await register_teacher(client)
+    register_token = await issue_token(client, purpose="register")
+
+    wrong_purpose = await client.post(
+        "/api/v1/auth/login/sms",
+        json={"phone": PHONE, "verification_token": register_token},
+    )
+    assert wrong_purpose.status_code == 400
+    assert wrong_purpose.json()["detail"]["code"] == "AUTH_VERIFICATION_TOKEN_INVALID"
+
+    login_token = await issue_token(client, purpose="login")
+    extra_field = await client.post(
+        "/api/v1/auth/login/sms",
+        json={
+            "phone": PHONE,
+            "verification_token": login_token,
+            "verified": True,
+        },
+    )
+    assert extra_field.status_code == 422
+
+
+async def test_sms_login_rejects_disabled_account(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await register_teacher(client)
+    async with session_factory() as session:
+        user = await session.scalar(select(User).where(User.phone == PHONE))
+        assert user is not None
+        user.status = UserStatus.DISABLED
+        await session.commit()
+
+    token = await issue_token(client, purpose="login")
+    response = await client.post(
+        "/api/v1/auth/login/sms",
+        json={"phone": PHONE, "verification_token": token},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "AUTH_ACCOUNT_DISABLED"
+
+
+async def test_sms_login_maps_database_expired_token_to_invalid(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    await register_teacher(client)
+    token = await issue_token(client, purpose="login")
+    payload = decode_phone_verification_token(token, purpose="login")
+
+    async with session_factory() as session:
+        claim = await session.get(PhoneVerificationClaim, str(payload["jti"]))
+        assert claim is not None
+        claim.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        await session.commit()
+
+    response = await client.post(
+        "/api/v1/auth/login/sms",
+        json={"phone": PHONE, "verification_token": token},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "AUTH_VERIFICATION_TOKEN_INVALID"
 
 
 async def test_password_reset_consumes_token_and_revokes_sessions(

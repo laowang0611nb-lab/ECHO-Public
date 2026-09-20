@@ -207,6 +207,12 @@ export interface SmsRegistrationRequest {
   device_name?: string | null;
 }
 
+export interface SmsLoginRequest {
+  phone: string;
+  verification_token: string;
+  device_name?: string | null;
+}
+
 export interface PasswordLoginRequest {
   email?: string;
   phone?: string;

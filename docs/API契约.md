@@ -38,6 +38,7 @@
 | POST | `/auth/sms/verify` | 公开 | 校验 PNVS 验证码，成功后返回 5 分钟手机验证票据 |
 | POST | `/auth/register/sms` | 公开 | 消费验证票据，创建手机号教师账号并返回正式会话 |
 | POST | `/auth/login/password` | 公开 | 使用邮箱或手机号加密码登录，返回正式会话 |
+| POST | `/auth/login/sms` | 公开 | 消费 `login` 用途验证票据，按手机号登录并返回正式会话 |
 | POST | `/auth/password/reset` | 公开 | 消费验证票据，重置手机号账号密码并撤销旧会话 |
 | POST | `/auth/refresh` | 公开 | 轮换 Refresh Token 并签发新 Access Token |
 | POST | `/auth/logout` | 公开 | 撤销指定 Refresh Session |
@@ -603,9 +604,11 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 
 ### 10.5 正式手机号认证
 
-`User` 新增可空且唯一的 `phone` 字段；手机号注册使用内部保留邮箱占位，后续支持绑定真实邮箱。验证票据的 `jti` 会写入 `phone_verification_claims`，消费时采用原子更新，保证一次性使用。`purpose` 为必填，注册只接受 `register`，重置只接受 `password_reset`；`login` 预留给后续短信登录接口。
+`User` 新增可空且唯一的 `phone` 字段；手机号注册使用内部保留邮箱占位，后续支持绑定真实邮箱。验证票据的 `jti` 会写入 `phone_verification_claims`，消费时采用原子更新，保证一次性使用。`purpose` 为必填，注册只接受 `register`，重置只接受 `password_reset`，短信登录只接受 `login`。
 
 `POST /auth/register/sms` 请求包含 `phone`、`verification_token`、`display_name`、`password`，可选 `email`、`role` 和 `device_name`。成功后返回 `user`、`session_id`、`access_token`、`refresh_token`、`token_type`、`expires_in_seconds` 和 `refresh_expires_at`。
+
+`POST /auth/login/sms` 请求包含 `phone`、`verification_token` 和可选 `device_name`。服务端只接受 `purpose=login` 的一次性票据，原子消费成功后按规范化手机号查找已有用户并创建正式 `AuthSession`。未注册返回 `404 AUTH_PHONE_NOT_REGISTERED`，票据错误或过期返回 `400 AUTH_VERIFICATION_TOKEN_INVALID`，账号停用返回 `403 AUTH_ACCOUNT_DISABLED`；请求中的额外 `verified` 字段会被拒绝。
 
 `POST /auth/login/password` 支持 `email` 或 `phone` 二选一，请求还要包含 `password`。错误码包括 `AUTH_ACCOUNT_NOT_FOUND`、`AUTH_INVALID_PASSWORD`、`AUTH_ACCOUNT_LOCKED` 和 `AUTH_ACCOUNT_DISABLED`；连续 5 次失败锁定 15 分钟。
 

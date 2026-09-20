@@ -59,17 +59,20 @@ refresh-session foundation:
 
 ```text
 POST /api/v1/auth/register/sms
+POST /api/v1/auth/login/sms
 POST /api/v1/auth/login/password
 POST /api/v1/auth/password/reset
 POST /api/v1/auth/refresh
 POST /api/v1/auth/logout
 ```
 
-Registration and password reset consume the short-lived phone verification
-token issued by `/auth/sms/verify`. Password login accepts either `email` or
-`phone`. Successful login or registration returns an Access JWT and a rotating
-Refresh Token. Phone-only accounts use a reserved internal email address until
-a real email-binding flow is implemented.
+Registration, SMS login, and password reset consume the short-lived phone
+verification token issued by `/auth/sms/verify`. SMS login accepts only a
+`login` token and creates a real session for an existing phone account.
+Password login accepts either `email` or `phone`. Successful login or
+registration returns an Access JWT and a rotating Refresh Token. Phone-only
+accounts use a reserved internal email address until a real email-binding
+flow is implemented.
 
 Protected endpoints accept `Authorization: Bearer <access_token>`. The
 development-only `X-User-Id` fallback remains available only while

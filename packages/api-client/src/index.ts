@@ -124,6 +124,7 @@ import type {
   ReviewStatus,
   ReviewVersion,
   SmsSendRequest,
+  SmsLoginRequest,
   SmsRegistrationRequest,
   SmsSendResponse,
   SmsVerifyRequest,
@@ -456,6 +457,11 @@ export function createApiClient({
       }),
     registerWithSms: (payload: SmsRegistrationRequest) =>
       request<AuthSessionResponse>("/api/v1/auth/register/sms", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    loginWithSms: (payload: SmsLoginRequest) =>
+      request<AuthSessionResponse>("/api/v1/auth/login/sms", {
         method: "POST",
         body: JSON.stringify(payload),
       }),

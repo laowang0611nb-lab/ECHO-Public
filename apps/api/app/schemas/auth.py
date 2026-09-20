@@ -219,6 +219,19 @@ class SmsRegistrationRequest(BaseModel):
         return _validate_password(value)
 
 
+class SmsLoginRequest(BaseModel):
+    phone: str = Field(min_length=11, max_length=11, pattern=r"^1[3-9]\d{9}$")
+    verification_token: str = Field(min_length=20, max_length=4096)
+    device_name: str | None = Field(default=None, max_length=100)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone(cls, value: object) -> object:
+        return _normalize_phone(value)
+
+
 class PasswordLoginRequest(BaseModel):
     email: EmailStr | None = None
     phone: str | None = Field(default=None, pattern=r"^1[3-9]\d{9}$")

@@ -18,6 +18,7 @@ from app.schemas.auth import (
     SessionLogoutRequest,
     SessionRefreshRequest,
     SmsErrorResponse,
+    SmsLoginRequest,
     SmsRegistrationRequest,
     SmsSendRequest,
     SmsSendResponse,
@@ -67,6 +68,7 @@ from app.services.phone_auth import (
     SessionInvalidError,
     issue_phone_verification_token,
     login_with_password,
+    login_with_sms,
     logout_refresh_session,
     refresh_auth_session,
     register_with_sms,
@@ -213,6 +215,30 @@ async def register_sms_account(
 ) -> AuthSessionResponse:
     try:
         return await register_with_sms(
+            session,
+            payload,
+            user_agent=request.headers.get("user-agent"),
+        )
+    except AuthFlowError as exc:
+        raise _auth_http_exception(exc) from exc
+
+
+@router.post(
+    "/login/sms",
+    response_model=AuthSessionResponse,
+    responses={
+        400: {"model": AuthErrorResponse, "description": "Invalid verification token"},
+        403: {"model": AuthErrorResponse, "description": "Account disabled"},
+        404: {"model": AuthErrorResponse, "description": "Phone account not found"},
+    },
+)
+async def sms_login(
+    payload: SmsLoginRequest,
+    request: Request,
+    session: DBSession,
+) -> AuthSessionResponse:
+    try:
+        return await login_with_sms(
             session,
             payload,
             user_agent=request.headers.get("user-agent"),

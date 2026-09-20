@@ -25,6 +25,7 @@ from app.schemas.auth import (
     PasswordLoginRequest,
     PasswordResetRequest,
     PasswordResetResponse,
+    SmsLoginRequest,
     SmsRegistrationRequest,
     UserResponse,
 )
@@ -222,6 +223,40 @@ async def register_with_sms(
             raise EmailAlreadyRegisteredError from exc
         raise
 
+    await session.refresh(user)
+    return _auth_session_response(user, auth_session, refresh_token)
+
+
+async def login_with_sms(
+    session: AsyncSession,
+    payload: SmsLoginRequest,
+    *,
+    user_agent: str | None = None,
+) -> AuthSessionResponse:
+    try:
+        await consume_phone_verification_token(
+            session,
+            payload.phone,
+            payload.verification_token,
+            allowed_purposes={"login"},
+        )
+    except VerificationTokenExpiredError as exc:
+        raise VerificationTokenInvalidError from exc
+
+    user = await session.scalar(select(User).where(User.phone == payload.phone))
+    if user is None:
+        raise PhoneNotRegisteredError
+    if user.status != UserStatus.ACTIVE:
+        raise AccountDisabledError
+
+    user.last_login_at = datetime.now(UTC)
+    auth_session, refresh_token = await create_auth_session(
+        session,
+        user.id,
+        device_name=payload.device_name,
+        user_agent=user_agent,
+    )
+    await session.commit()
     await session.refresh(user)
     return _auth_session_response(user, auth_session, refresh_token)
 
