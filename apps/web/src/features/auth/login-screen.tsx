@@ -1,7 +1,7 @@
 "use client";
 
 import { ApiClientError } from "@echo/api-client";
-import { AlertTriangle, ArrowRight, KeyRound, LoaderCircle, Mail, Smartphone } from "lucide-react";
+import { ArrowRight, CheckCircle2, KeyRound, LoaderCircle, Mail, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -28,13 +28,15 @@ function developmentLoginError(error: unknown) {
 
 export function LoginScreen() {
   const router = useRouter();
-  const { login, loginWithPassword } = useTeacherSession();
+  const { login, loginWithPassword, loginWithSms } = useTeacherSession();
   const sms = useSmsCodeFlow("login");
   const [mode, setMode] = useState<"password" | "sms">("password");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [smsLoginPending, setSmsLoginPending] = useState(false);
+  const [smsLoginError, setSmsLoginError] = useState<string | null>(null);
   const [developmentEmail, setDevelopmentEmail] = useState("teacher@example.com");
   const [developmentName, setDevelopmentName] = useState("演示教师");
   const [developmentPending, setDevelopmentPending] = useState(false);
@@ -73,6 +75,28 @@ export function LoginScreen() {
     }
   }
 
+  async function submitSmsLogin() {
+    if (!sms.verified || !sms.verificationToken) {
+      setSmsLoginError("请先完成手机号验证。");
+      return;
+    }
+
+    setSmsLoginPending(true);
+    setSmsLoginError(null);
+    try {
+      await loginWithSms({
+        phone: sms.phone,
+        verification_token: sms.verificationToken,
+        device_name: "ECHO Teacher Web",
+      });
+      router.replace("/dashboard");
+    } catch (requestError) {
+      setSmsLoginError(mapAuthError(requestError));
+    } finally {
+      setSmsLoginPending(false);
+    }
+  }
+
   async function submitDevelopmentLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setDevelopmentPending(true);
@@ -93,7 +117,7 @@ export function LoginScreen() {
 
   return (
     <AuthPanel
-      description="使用教师账号登录 ECHO。账号密码登录已接入正式接口；短信验证码可以真实校验，但短信登录换会话接口仍需后端补齐。"
+      description="使用教师账号登录 ECHO。支持手机号或邮箱密码登录，也支持已注册教师手机号验证码登录。"
       title="登录教师工作台"
     >
       <Tabs onValueChange={(value) => setMode(value === "sms" ? "sms" : "password")} value={mode}>
@@ -136,14 +160,9 @@ export function LoginScreen() {
         </TabsContent>
 
         <TabsContent className="mt-5" value="sms">
-          <div className="rounded-lg border-2 border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
-            <p className="flex items-start gap-2 font-medium">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              手机号验证码登录接口待接入
-            </p>
-            <p className="mt-1.5 pl-6 text-xs leading-5 text-amber-800">
-              短信发送和验证码校验是真实请求；验证码通过后不会建立教师会话，也不会进入工作台。
-            </p>
+          <div className="rounded-lg border-2 border-blue-200 bg-blue-50/50 px-3 py-3 text-sm text-blue-900">
+            <p className="font-medium">使用已注册教师手机号接收验证码</p>
+            <p className="mt-1 text-xs leading-5 text-blue-800">验证码通过后，将使用登录用途的一次性票据建立正式教师会话。</p>
           </div>
           <div className="mt-5">
             <PhoneVerificationFields
@@ -161,16 +180,16 @@ export function LoginScreen() {
           </div>
           {sms.error ? <p className="mt-4 rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{sms.error}</p> : null}
           {sms.notice ? <p className="mt-4 rounded-lg border-2 border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{sms.notice}</p> : null}
+          {smsLoginError ? <p className="mt-4 rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">{smsLoginError}</p> : null}
           {sms.verified ? (
             <div className="mt-4 rounded-lg border-2 border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
-              <p className="font-medium">手机号验证已通过</p>
-              <p className="mt-1 text-xs leading-5 text-emerald-800">
-                当前只有登录用途验证票据，后端尚未提供消费该票据的手机号登录接口。
-              </p>
+              <p className="flex items-center gap-2 font-medium"><CheckCircle2 className="size-4" />手机号验证已通过</p>
+              <p className="mt-1 text-xs leading-5 text-emerald-800">验证票据只保留在当前登录流程内存中，点击下方按钮建立正式会话。</p>
             </div>
           ) : null}
-          <Button className="mt-5 h-10 w-full" disabled type="button" variant="outline">
-            手机号登录接口待接入
+          <Button className="mt-5 h-10 w-full" disabled={!sms.verified || smsLoginPending} onClick={() => void submitSmsLogin()} type="button">
+            {smsLoginPending ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}
+            {smsLoginPending ? "正在登录..." : sms.verified ? "登录教师工作台" : "请先验证手机号"}
           </Button>
         </TabsContent>
       </Tabs>

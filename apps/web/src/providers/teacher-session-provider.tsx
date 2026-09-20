@@ -6,6 +6,7 @@ import type {
   AuthSessionResponse,
   DevelopmentLoginRequest,
   PasswordLoginRequest,
+  SmsLoginRequest,
   SmsRegistrationRequest,
   User,
 } from "@echo/shared-types";
@@ -41,6 +42,7 @@ interface TeacherSessionContextValue {
   user: User | null;
   login: (payload: DevelopmentLoginRequest) => Promise<User>;
   loginWithPassword: (payload: PasswordLoginRequest) => Promise<User>;
+  loginWithSms: (payload: SmsLoginRequest) => Promise<User>;
   registerWithSms: (payload: SmsRegistrationRequest) => Promise<User>;
   establishSession: (user: User) => void;
   updateUser: (patch: Partial<User>) => void;
@@ -200,6 +202,12 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
     return applyAuthSession(session);
   }, [applyAuthSession, queryClient]);
 
+  const loginWithSms = useCallback(async (payload: SmsLoginRequest) => {
+    const session = await apiClient.loginWithSms(payload);
+    queryClient.clear();
+    return applyAuthSession(session);
+  }, [applyAuthSession, queryClient]);
+
   const registerWithSms = useCallback(async (payload: SmsRegistrationRequest) => {
     const session = await apiClient.registerWithSms(payload);
     queryClient.clear();
@@ -228,6 +236,7 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
       user,
       login,
       loginWithPassword,
+      loginWithSms,
       registerWithSms,
       establishSession,
       updateUser,
@@ -237,6 +246,7 @@ export function TeacherSessionProvider({ children }: { children: ReactNode }) {
       establishSession,
       login,
       loginWithPassword,
+      loginWithSms,
       logout,
       ready,
       registerWithSms,
