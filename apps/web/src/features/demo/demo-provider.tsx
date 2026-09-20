@@ -6,9 +6,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+
+import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 export type DemoMode = "stable" | "live";
 
@@ -45,6 +48,7 @@ interface DemoContextValue extends DemoState {
 }
 
 const DEMO_STORAGE_KEY = "echo.teacher.demo-state";
+const DEMO_TEACHER_EMAIL = "demo.teacher@example.com";
 
 const initialState: DemoState = {
   active: false,
@@ -57,6 +61,8 @@ const initialState: DemoState = {
 const DemoContext = createContext<DemoContextValue | null>(null);
 
 export function DemoProvider({ children }: { children: ReactNode }) {
+  const { ready: sessionReady, user, login } = useTeacherSession();
+  const switchingSessionRef = useRef(false);
   const [state, setState] = useState<DemoState>(initialState);
 
   useEffect(() => {
@@ -96,6 +102,21 @@ export function DemoProvider({ children }: { children: ReactNode }) {
   const stopDemo = useCallback(() => {
     persist(initialState);
   }, [persist]);
+
+  useEffect(() => {
+    if (!state.active || !sessionReady || !user || user.email === DEMO_TEACHER_EMAIL) return;
+    if (switchingSessionRef.current) return;
+    switchingSessionRef.current = true;
+    void login({
+      email: DEMO_TEACHER_EMAIL,
+      display_name: "演示教师",
+      role: "teacher",
+    })
+      .catch(() => stopDemo())
+      .finally(() => {
+        switchingSessionRef.current = false;
+      });
+  }, [login, sessionReady, state.active, stopDemo, user]);
 
   const setScenario = useCallback(
     (scenarioId: string, context: DemoRouteContext) => {
