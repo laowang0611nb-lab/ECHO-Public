@@ -318,13 +318,15 @@ export function QuickCheckCard({
         </View>
         <View style={styles.quickHeading}>
           <Text style={styles.quickTitle}>{block.title || "理解检查"}</Text>
-          <Text style={styles.quickBadge}>快速验证</Text>
+          <View style={styles.quickMetaRow}>
+            <Text style={styles.quickBadge}>快速验证</Text>
+            {block.attempts_remaining !== null ? (
+              <Text style={styles.attemptCount}>
+                还可尝试 {block.attempts_remaining} 次
+              </Text>
+            ) : null}
+          </View>
         </View>
-        {block.attempts_remaining !== null ? (
-          <Text style={styles.attemptCount}>
-            还可尝试 {block.attempts_remaining} 次
-          </Text>
-        ) : null}
       </View>
       <Text style={styles.quickPrompt}>{block.prompt}</Text>
       <View style={styles.optionList}>
@@ -1287,15 +1289,21 @@ const styles = StyleSheet.create({
     gap: 9,
   },
   quickHeading: {
-    alignItems: "center",
+    alignItems: "flex-start",
     flex: 1,
-    flexDirection: "row",
-    gap: 7,
+    gap: 6,
   },
   quickTitle: {
     color: studentTheme.color.text,
     fontSize: 14,
     fontWeight: "800",
+    lineHeight: 20,
+  },
+  quickMetaRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
   },
   quickBadge: {
     backgroundColor: "#ffffff",
@@ -1319,6 +1327,7 @@ const styles = StyleSheet.create({
     color: studentTheme.color.textMuted,
     fontSize: 10,
     fontWeight: "700",
+    lineHeight: 16,
   },
   quickPrompt: {
     color: studentTheme.color.text,
