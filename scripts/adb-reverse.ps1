@@ -1,8 +1,13 @@
 param(
     [int]$ApiPort = 8000,
+    [int]$HostApiPort = 0,
     [int]$MetroPort = 8081,
     [string]$AdbPath = "adb"
 )
+
+if ($HostApiPort -le 0) {
+    $HostApiPort = $ApiPort
+}
 
 $adb = Get-Command $AdbPath -ErrorAction SilentlyContinue
 if (-not $adb) {
@@ -19,6 +24,6 @@ if (-not $adb) {
 $adbExecutable = if ($adb.Source) { $adb.Source } else { $adb.FullName }
 
 & $adbExecutable start-server
-& $adbExecutable reverse "tcp:$ApiPort" "tcp:$ApiPort"
+& $adbExecutable reverse "tcp:$ApiPort" "tcp:$HostApiPort"
 & $adbExecutable reverse "tcp:$MetroPort" "tcp:$MetroPort"
 & $adbExecutable reverse --list

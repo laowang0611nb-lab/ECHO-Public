@@ -138,7 +138,8 @@ import type {
 } from "@echo/shared-types";
 
 export interface ApiClientOptions {
-  baseUrl: string;
+  baseUrl?: string;
+  getBaseUrl?: () => string | null | undefined;
   fetchImpl?: typeof fetch;
   getAccessToken?: () => string | null | undefined;
   getRefreshToken?: () => string | null | undefined;
@@ -250,13 +251,22 @@ async function* parseSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator
 
 export function createApiClient({
   baseUrl,
+  getBaseUrl,
   fetchImpl = fetch,
   getAccessToken,
   getRefreshToken,
   onAuthSessionUpdate,
   onAuthSessionExpired,
 }: ApiClientOptions) {
-  const root = baseUrl.replace(/\/$/, "");
+  const fallbackRoot = baseUrl?.replace(/\/$/, "") ?? "";
+
+  function resolveRoot(): string {
+    const configured = getBaseUrl?.()?.trim() || fallbackRoot;
+    if (!configured) {
+      throw new Error("ECHO API base URL is not configured");
+    }
+    return configured.replace(/\/$/, "");
+  }
   let refreshPromise: Promise<string | null> | null = null;
 
   function canRefresh(path: string): boolean {
@@ -273,10 +283,10 @@ export function createApiClient({
   async function refreshAccessToken(): Promise<string | null> {
     if (!getRefreshToken || !onAuthSessionUpdate) return null;
     if (refreshPromise) return refreshPromise;
+    const root = resolveRoot();
     refreshPromise = (async () => {
       const refreshToken = getRefreshToken();
       if (!refreshToken) {
-        await onAuthSessionExpired?.();
         return null;
       }
       try {
@@ -286,7 +296,6 @@ export function createApiClient({
           body: JSON.stringify({ refresh_token: refreshToken }),
         });
         if (!response.ok) {
-          await onAuthSessionExpired?.();
           return null;
         }
         const session = (await response.json()) as AuthSessionResponse;
@@ -301,9 +310,15 @@ export function createApiClient({
     return refreshPromise;
   }
 
-  async function request<T>(path: string, init?: RequestInit, userId?: string): Promise<T> {
+  async function authorizedFetch(
+    path: string,
+    init?: RequestInit,
+    userId?: string,
+  ): Promise<Response> {
+    const root = resolveRoot();
     const headers = new Headers(init?.headers);
-    const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+    const isFormData =
+      typeof FormData !== "undefined" && init?.body instanceof FormData;
     if (init?.body !== undefined && !isFormData && !headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
@@ -328,15 +343,18 @@ export function createApiClient({
           ...init,
           headers,
         });
-      } else {
-        await onAuthSessionExpired?.();
       }
     }
 
+    if (response.status === 401) {
+      await onAuthSessionExpired?.();
+    }
+    return response;
+  }
+
+  async function request<T>(path: string, init?: RequestInit, userId?: string): Promise<T> {
+    const response = await authorizedFetch(path, init, userId);
     if (!response.ok) {
-      if (response.status === 401) {
-        await onAuthSessionExpired?.();
-      }
       throw await readError(response);
     }
 
@@ -1372,10 +1390,10 @@ export function createApiClient({
         userId,
       ),
     getDocumentFileBlob: async (userId: string, courseId: string, documentId: string) => {
-      const headers = new Headers({ "X-User-Id": userId });
-      const response = await fetchImpl(
-        `${root}/api/v1/courses/${courseId}/documents/${documentId}/file`,
-        { headers },
+      const response = await authorizedFetch(
+        `/api/v1/courses/${courseId}/documents/${documentId}/file`,
+        undefined,
+        userId,
       );
       if (!response.ok) {
         throw await readError(response);
@@ -1503,14 +1521,15 @@ export function createApiClient({
       payload: ChatStreamRequest,
       options?: { signal?: AbortSignal },
     ) {
-      const headers = new Headers({ "content-type": "application/json" });
-      headers.set("X-User-Id", userId);
-      const response = await fetchImpl(`${root}/api/v1/conversations/${conversationId}/messages/stream`, {
-        method: "POST",
-        headers,
-        signal: options?.signal,
-        body: JSON.stringify(payload),
-      });
+      const response = await authorizedFetch(
+        `/api/v1/conversations/${conversationId}/messages/stream`,
+        {
+          method: "POST",
+          signal: options?.signal,
+          body: JSON.stringify(payload),
+        },
+        userId,
+      );
 
       if (!response.ok) {
         throw await readError(response);
@@ -1528,16 +1547,14 @@ export function createApiClient({
       payload: ChatContinueRequest = {},
       options?: { signal?: AbortSignal },
     ) {
-      const headers = new Headers({ "content-type": "application/json" });
-      headers.set("X-User-Id", userId);
-      const response = await fetchImpl(
-        `${root}/api/v1/conversations/${conversationId}/messages/${messageId}/continue`,
+      const response = await authorizedFetch(
+        `/api/v1/conversations/${conversationId}/messages/${messageId}/continue`,
         {
           method: "POST",
-          headers,
           signal: options?.signal,
           body: JSON.stringify(payload),
         },
+        userId,
       );
 
       if (!response.ok) {

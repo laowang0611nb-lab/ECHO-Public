@@ -1,9 +1,20 @@
 import { createApiClient } from "@echo/api-client";
 import { fetch as expoFetch } from "expo/fetch";
-const localApiUrl = "http://127.0.0.1:8000";
-const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? localApiUrl;
+import {
+  clearAuthSession,
+  getAccessTokenSync,
+  getRefreshTokenSync,
+  persistAuthSession,
+} from "@/services/auth-session-storage";
+import { getApiBaseUrlSync } from "@/services/api-network-config";
+const baseUrl = getApiBaseUrlSync();
 
 export const apiClient = createApiClient({
   baseUrl,
+  getBaseUrl: getApiBaseUrlSync,
   fetchImpl: expoFetch as unknown as typeof fetch,
+  getAccessToken: getAccessTokenSync,
+  getRefreshToken: getRefreshTokenSync,
+  onAuthSessionUpdate: persistAuthSession,
+  onAuthSessionExpired: clearAuthSession,
 });

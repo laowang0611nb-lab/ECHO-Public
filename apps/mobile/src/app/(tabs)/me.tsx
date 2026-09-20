@@ -10,6 +10,14 @@ export default function MeScreen() {
   const { user, logout } = useStudentSession();
   const { courses, selectedCourse } = useCurrentCourse();
 
+  function accountLabel() {
+    if (!user) return "";
+    if (user.phone) {
+      return user.phone.replace(/(\d{3})\d{4}(\d{4})/, "$1****$2");
+    }
+    return user.email;
+  }
+
   if (!user) {
     return null;
   }
@@ -40,7 +48,7 @@ export default function MeScreen() {
         />
         <View style={styles.profileCopy}>
           <Text style={styles.name}>{user.display_name}</Text>
-          <Text style={styles.meta}>学号待同步 · {user.email}</Text>
+          <Text style={styles.meta}>账号 {accountLabel()}</Text>
           <Text style={styles.meta}>{selectedCourse?.name ?? "尚未选择课程"}</Text>
         </View>
       </View>
@@ -54,6 +62,14 @@ export default function MeScreen() {
       <View style={styles.section}>
         <MenuRow label="学习记录" onPress={() => router.push("/learning-records")} />
         <MenuRow label="我的课程" onPress={() => router.replace("/(tabs)/courses")} />
+        <MenuRow
+          label="账号与安全"
+          onPress={() => router.push("/change-password")}
+        />
+        <MenuRow
+          label="网络与连接"
+          onPress={() => router.push("/network-settings" as never)}
+        />
         <MenuRow
           label="隐私与学习数据"
           onPress={() =>
