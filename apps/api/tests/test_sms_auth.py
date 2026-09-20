@@ -159,19 +159,21 @@ async def test_verify_sms_success_returns_phone_verification_token(
 ) -> None:
     response = await client.post(
         "/api/v1/auth/sms/verify",
-        json={"phone": PHONE, "code": "8043"},
+        json={"phone": PHONE, "code": "8043", "purpose": "register"},
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
     assert body["verified"] is True
+    assert body["purpose"] == "register"
     assert body["expires_in_seconds"] == 300
     payload = decode_phone_verification_token(
         body["verification_token"],
+        purpose="register",
     )
     assert payload["phone"] == PHONE
-    assert payload["purpose"] == "phone_verification"
+    assert payload["purpose"] == "register"
     assert pnvs_provider.verify_calls == [(PHONE, "8043")]
 
 
@@ -183,11 +185,20 @@ async def test_verify_sms_rejects_non_pass(
 
     response = await client.post(
         "/api/v1/auth/sms/verify",
-        json={"phone": PHONE, "code": "8043"},
+        json={"phone": PHONE, "code": "8043", "purpose": "password_reset"},
     )
 
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "SMS_CODE_INVALID_OR_EXPIRED"
+
+
+async def test_verify_sms_requires_purpose(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/sms/verify",
+        json={"phone": PHONE, "code": "8043"},
+    )
+
+    assert response.status_code == 422
 
 
 async def test_send_maps_sdk_code_ok_as_success_and_preserves_request_fields() -> None:

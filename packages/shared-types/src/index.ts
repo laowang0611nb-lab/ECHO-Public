@@ -179,7 +179,7 @@ export interface SmsSendResponse {
 }
 
 export interface SmsVerifyRequest {
-  purpose?: PhoneVerificationPurpose;
+  purpose: PhoneVerificationPurpose;
   phone: string;
   code: string;
 }
@@ -187,7 +187,7 @@ export interface SmsVerifyRequest {
 export interface SmsVerifyResponse {
   success: true;
   verified: true;
-  purpose: PhoneVerificationPurpose | null;
+  purpose: PhoneVerificationPurpose;
   verification_token: string;
   expires_in_seconds: number;
 }

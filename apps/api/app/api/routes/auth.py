@@ -184,11 +184,10 @@ async def verify_sms_code(
         await provider.check_verify_code(payload.phone, payload.code)
     except AliyunPnvsError as exc:
         raise _sms_http_exception(exc) from exc
-    purpose = payload.purpose or "phone_verification"
     verification_token = await issue_phone_verification_token(
         session,
         payload.phone,
-        purpose,
+        payload.purpose,
     )
     return SmsVerifyResponse(
         purpose=payload.purpose,

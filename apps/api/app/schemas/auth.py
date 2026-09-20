@@ -145,7 +145,7 @@ class SmsSendResponse(BaseModel):
 
 class SmsVerifyRequest(BaseModel):
     phone: str = Field(min_length=11, max_length=11, pattern=r"^1[3-9]\d{9}$")
-    purpose: PhoneVerificationPurpose | None = None
+    purpose: PhoneVerificationPurpose
     code: str = Field(min_length=4, max_length=8, pattern=r"^[A-Za-z0-9]+$")
 
     @field_validator("phone", mode="before")
@@ -169,7 +169,7 @@ class SmsVerifyRequest(BaseModel):
 class SmsVerifyResponse(BaseModel):
     success: Literal[True] = True
     verified: Literal[True] = True
-    purpose: PhoneVerificationPurpose | None = None
+    purpose: PhoneVerificationPurpose
     verification_token: str
     expires_in_seconds: int = Field(default=300, ge=1)
 

@@ -16,11 +16,9 @@ async def issue_token(
     client: AsyncClient,
     *,
     phone: str = PHONE,
-    purpose: str | None = None,
+    purpose: str = "register",
 ) -> str:
-    payload = {"phone": phone, "code": "8043"}
-    if purpose is not None:
-        payload["purpose"] = purpose
+    payload = {"phone": phone, "code": "8043", "purpose": purpose}
     response = await client.post("/api/v1/auth/sms/verify", json=payload)
     assert response.status_code == 200
     return response.json()["verification_token"]
@@ -241,6 +239,23 @@ async def test_logout_revokes_refresh_token(client: AsyncClient) -> None:
         json={"refresh_token": registered["refresh_token"]},
     )
     assert refresh.status_code == 401
+
+
+async def test_registration_rejects_password_reset_token(client: AsyncClient) -> None:
+    token = await issue_token(client, purpose="password_reset")
+    response = await client.post(
+        "/api/v1/auth/register/sms",
+        json={
+            "phone": PHONE,
+            "verification_token": token,
+            "display_name": "Wrong Purpose",
+            "password": PASSWORD,
+            "role": "teacher",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "AUTH_VERIFICATION_TOKEN_INVALID"
 
 
 async def test_registration_and_reset_tokens_cannot_cross_purposes(

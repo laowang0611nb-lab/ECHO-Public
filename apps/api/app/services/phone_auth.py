@@ -174,7 +174,7 @@ async def register_with_sms(
         session,
         payload.phone,
         payload.verification_token,
-        allowed_purposes={"register", "phone_verification"},
+        allowed_purposes={"register"},
     )
 
     existing_phone = await session.scalar(select(User).where(User.phone == payload.phone))
@@ -285,7 +285,7 @@ async def reset_password_with_sms(
         session,
         payload.phone,
         payload.verification_token,
-        allowed_purposes={"password_reset", "phone_verification"},
+        allowed_purposes={"password_reset"},
     )
 
     user = await session.scalar(select(User).where(User.phone == payload.phone))

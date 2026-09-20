@@ -91,6 +91,10 @@ client or stored in the ECHO database. A successful verify response includes a
 five-minute signed `verification_token` that a later registration or phone-login
 endpoint can consume.
 
+Verify requests must include `purpose` as `register`, `password_reset`, or the
+reserved `login` value. Registration only accepts a `register` token, and
+password reset only accepts a `password_reset` token.
+
 Required environment variables:
 
 ```env
@@ -113,7 +117,7 @@ curl.exe -X POST http://127.0.0.1:8000/api/v1/auth/sms/send `
 
 curl.exe -X POST http://127.0.0.1:8000/api/v1/auth/sms/verify `
   -H "Content-Type: application/json" `
-  -d '{"phone":"13800138000","code":"8043"}'
+  -d '{"phone":"13800138000","code":"8043","purpose":"register"}'
 ```
 
 ## Course management

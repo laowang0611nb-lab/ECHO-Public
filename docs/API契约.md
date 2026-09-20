@@ -1,6 +1,6 @@
 # ECHO API 契约
 
-> 冻结版本：`v0.0.111`
+> 冻结版本：`v0.0.118`
 > 基础路径：`/api/v1`  
 > 当前认证：正式 Bearer JWT + Refresh Session；开发环境保留 `X-User-Id` 兼容入口。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session、手机号验证和 Profile 基础，正式手机号注册、密码登录、密码重置、刷新和退出接口已进入本契约。
@@ -597,12 +597,13 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 `POST /auth/sms/send` 接受中国大陆手机号 `phone`，调用阿里云号码认证服务 `Dypnsapi` 的 `SendSmsVerifyCode`；`POST /auth/sms/verify` 接受 `phone` 和 `code`，调用 `CheckSmsVerifyCode`。只有 `VerifyResult == PASS` 才视为验证成功，`Success == true` 和 `Code == OK` 本身不代表验证码正确。
 
 验证成功后返回 `verification_token`，有效期 5 分钟，包含手机号、用途、jti 和过期时间。注册或手机号登录接口后续必须消费该票据，不得信任客户端自行提交的 `verified: true`。验证码由阿里云生成和管理，ECHO 不保存验证码明文。
+- `POST /auth/sms/verify` 必须显式传入 `purpose`：`register`、`password_reset` 或 `login`，不得省略或使用通用用途。注册只接受 `register`，重置只接受 `password_reset`，票据消费后不可跨用途复用。
 
 短信错误码包括 `SMS_TOO_FREQUENT`、`SMS_CODE_INVALID_OR_EXPIRED`、`SMS_PROVIDER_NOT_CONFIGURED`、`SMS_AUTH_FAILED`、`SMS_BILLING_UNAVAILABLE`、`SMS_SEND_FAILED`、`SMS_TIMEOUT` 和 `SMS_SERVICE_UNAVAILABLE`。响应不得包含 AccessKey、完整手机号、验证码、BizId 或 SDK traceback。
 
 ### 10.5 正式手机号认证
 
-`User` 新增可空且唯一的 `phone` 字段；手机号注册使用内部保留邮箱占位，后续支持绑定真实邮箱。验证票据的 `jti` 会写入 `phone_verification_claims`，消费时采用原子更新，保证一次性使用。支持 `register`、`password_reset`、`login` 和兼容旧前端的通用 `phone_verification` 用途。
+`User` 新增可空且唯一的 `phone` 字段；手机号注册使用内部保留邮箱占位，后续支持绑定真实邮箱。验证票据的 `jti` 会写入 `phone_verification_claims`，消费时采用原子更新，保证一次性使用。`purpose` 为必填，注册只接受 `register`，重置只接受 `password_reset`；`login` 预留给后续短信登录接口。
 
 `POST /auth/register/sms` 请求包含 `phone`、`verification_token`、`display_name`、`password`，可选 `email`、`role` 和 `device_name`。成功后返回 `user`、`session_id`、`access_token`、`refresh_token`、`token_type`、`expires_in_seconds` 和 `refresh_expires_at`。
 
