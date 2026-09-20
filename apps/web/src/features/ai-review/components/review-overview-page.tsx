@@ -116,7 +116,7 @@ export function ReviewOverviewPage({
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Inbox} label="待审核" supporting="首次审核与再次审核合计" value={summaryData.pending} />
-        <StatCard icon={AlertTriangle} label="高风险回答" supporting="系统标记为高优先级" tone="warning" value={summaryData.high_risk} />
+        <StatCard icon={AlertTriangle} label="高风险回答" supporting="系统标记为高优先级" value={summaryData.high_risk} />
         <StatCard icon={FileWarning} label="缺少课程依据" supporting="未检索到教材来源" value={summaryData.reasons.missing_course_basis} />
         <StatCard icon={ShieldCheck} label="学生未解决" supporting="学生主动标记或连续追问" value={summaryData.reasons.student_not_resolved} />
       </section>

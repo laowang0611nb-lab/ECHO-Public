@@ -66,7 +66,6 @@ export function CourseOverviewTab({
           icon={ClipboardCheck}
           label="活跃学生"
           supporting={`当前活跃度 ${activeRatio}%`}
-          tone={activeRatio < 40 ? "warning" : "default"}
           value={overview.stats.active_student_count}
         />
       </section>

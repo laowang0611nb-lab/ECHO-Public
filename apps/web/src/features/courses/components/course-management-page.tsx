@@ -165,7 +165,6 @@ export function CourseManagementPage() {
               icon={Settings}
               label="待关注课程"
               supporting={attentionSupporting}
-              tone="warning"
               value={attentionValue}
             />
           </motion.section>

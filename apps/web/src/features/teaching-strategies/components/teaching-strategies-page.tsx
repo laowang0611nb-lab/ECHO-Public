@@ -160,7 +160,7 @@ export function TeachingStrategiesPage({
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Target} label="策略建议总数" supporting="当前筛选范围内" value={stats.total} />
         <StatCard icon={CheckCircle2} label="已采纳 / 已计划" supporting="教师已确认的策略" value={stats.accepted} />
-        <StatCard icon={TrendingUp} label="高优先级" supporting="需要优先处理" tone="warning" value={stats.highPriority} />
+        <StatCard icon={TrendingUp} label="高优先级" supporting="需要优先处理" value={stats.highPriority} />
         <StatCard icon={Users} label="执行中计划" supporting="关联当前课程" value={stats.planning} />
       </section>
 

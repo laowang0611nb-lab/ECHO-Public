@@ -289,7 +289,7 @@ function Overview({ items, summary }: { items: ReturnType<typeof useStudentAnaly
         <StatCard icon={Users} label="学生总数" supporting="当前课程成员" value={summary.studentCount} />
         <StatCard icon={Activity} label="平均掌握度" suffix="%" supporting="有证据知识点的平均值" value={summary.averageMastery} />
         <StatCard icon={TrendingUp} label="近期活跃" supporting="最近 7 天有学习证据" value={summary.activeCount} />
-        <StatCard icon={AlertTriangle} label="需要关注" supporting="基于当前真实证据" tone="warning" value={summary.attentionCount} />
+        <StatCard icon={AlertTriangle} label="需要关注" supporting="基于当前真实证据" value={summary.attentionCount} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.65fr)]">

@@ -93,8 +93,8 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatCard icon={Users} label="活跃学生" supporting={`共 ${overview.stats.student_count} 名学生`} value={overview.stats.active_student_count} />
         <StatCard icon={BrainCircuit} label="平均掌握度" suffix="%" supporting="有证据知识点的平均值" value={overview.stats.average_mastery} />
-        <StatCard icon={AlertTriangle} label="待关注知识点" supporting="后端风险阈值统计" tone="warning" value={overview.stats.attention_knowledge_point_count} />
-        <StatCard icon={FileWarning} label="待审核回答" supporting={`其中高风险 ${highRiskReviews} 条`} tone="warning" value={pendingReviews} />
+        <StatCard icon={AlertTriangle} label="待关注知识点" supporting="后端风险阈值统计" value={overview.stats.attention_knowledge_point_count} />
+        <StatCard icon={FileWarning} label="待审核回答" supporting={`其中高风险 ${highRiskReviews} 条`} value={pendingReviews} />
       </section>
 
       <Card className="gap-4 border-blue-100 bg-blue-50/35 py-5">
