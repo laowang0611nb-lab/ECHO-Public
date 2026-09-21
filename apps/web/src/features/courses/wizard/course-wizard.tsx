@@ -45,6 +45,16 @@ function wizardErrorMessage(error: unknown, fallback: string) {
     if (error.status === 408) {
       return "解析等待超过 4 分钟仍未完成，请稍后重试；不要重复点击提交。";
     }
+    if (error.status === 422) {
+      const detail = typeof error.detail === "string" ? error.detail : "";
+      if (detail.includes("Generated structure is empty")) {
+        return "该 PDF 没有可提取文本，可能是扫描版或图片型 PDF。请改用文字版 PDF，或先完成 OCR 后再上传。";
+      }
+      if (detail.includes("context limit")) {
+        return "教材内容超过当前模型的单次上下文预算，请拆分教材后重试。";
+      }
+      return "教材解析结果无效，请检查 PDF 内容后重试。";
+    }
     if (error.status === 409) {
       return "课程状态已变化，请刷新页面后重试。";
     }
