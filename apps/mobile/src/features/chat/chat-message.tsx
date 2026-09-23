@@ -1,4 +1,5 @@
 import * as Clipboard from "expo-clipboard";
+import { Image as ExpoImage } from "expo-image";
 import { SymbolView, type AndroidSymbol } from "expo-symbols";
 import { useEffect, useState } from "react";
 import {
@@ -748,7 +749,8 @@ export function MessageBubble({
             <View style={styles.userAttachmentList}>
               {message.attachments.map((attachment) =>
                 attachment.kind === "image" && attachment.url ? (
-                  <Image
+                  <ExpoImage
+                    contentFit="cover"
                     key={attachment.id}
                     source={attachmentImageSource(attachment.url)}
                     style={styles.userAttachmentImage}

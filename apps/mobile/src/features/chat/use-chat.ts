@@ -8,7 +8,10 @@ import type {
   QuickCheckAttemptResponse,
   QuickCheckBlock,
 } from "@echo/shared-types";
-import type { ChatAttachmentDraft } from "@/features/chat/chat-attachment-draft";
+import {
+  createChatAttachmentUploadSource,
+  type ChatAttachmentDraft,
+} from "@/features/chat/chat-attachment-draft";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -470,11 +473,7 @@ export function useChatController({
           const uploaded = await apiClient.uploadChatAttachment(
             user.id,
             attachment.kind,
-            {
-              uri: attachment.uri,
-              name: attachment.fileName,
-              type: attachment.mimeType,
-            },
+            createChatAttachmentUploadSource(attachment),
             attachment.fileName,
           );
           uploadedAttachments.push(uploaded.attachment);
@@ -542,6 +541,7 @@ export function useChatController({
         blocksRef.current[localAssistantId] = nextBlocks;
         patchMessage(localAssistantId, { status, blocks: nextBlocks });
         if (!interrupted) {
+          patchMessage(localUserId, { status: "failed" });
           if (attachmentDrafts.length > 0) setAttachmentError(friendlyError(error));
           setFailedRequest({
             clientRequestId,

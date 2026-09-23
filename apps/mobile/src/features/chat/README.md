@@ -7,6 +7,8 @@
 - `chat-message.tsx`：Markdown、Citation、Hint、QuickCheck、MasteryUpdate、QuizResultSheet 和消息菜单。
 - `chat-attachment-draft.ts`：图片、音频和视频附件的本地草稿模型与临时标识。
 
+移动端上传源使用 `expo-file-system` 的 `bytes()` 适配 `expo/fetch` FormData，并显式保留图片、音频、视频的 MIME 类型；受保护附件缩略图使用 `expo-image` 携带 Bearer Token 加载。
+
 多模态附件最多 4 个；上传成功后使用完整 `ChatAttachment` 随消息发送，历史图片通过 Bearer Token 读取受保护文件接口。
 
 所有网络请求通过 `packages/api-client`，页面不直接 `fetch`。
