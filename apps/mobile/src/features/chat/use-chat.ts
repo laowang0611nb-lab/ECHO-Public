@@ -1,4 +1,5 @@
 import type {
+  ChatAttachment,
   AIMessageBlock,
   ChatStreamEvent,
   Conversation,
@@ -7,6 +8,7 @@ import type {
   QuickCheckAttemptResponse,
   QuickCheckBlock,
 } from "@echo/shared-types";
+import type { ChatAttachmentDraft } from "@/features/chat/chat-attachment-draft";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -26,6 +28,10 @@ export interface ChatController {
   activeConversationId: string | null;
   draft: string;
   setDraft: (value: string) => void;
+  attachments: ChatAttachmentDraft[];
+  attachmentError: string | null;
+  addAttachment: (attachment: ChatAttachmentDraft) => void;
+  removeAttachment: (localId: string) => void;
   isStreaming: boolean;
   offline: boolean;
   retryConnection: () => void;
@@ -59,7 +65,9 @@ interface PendingRequest {
   assistantId: string;
 }
 
-type MessageOverride = Partial<Pick<Message, "content" | "status" | "blocks" | "citations">>;
+type MessageOverride = Partial<
+  Pick<Message, "content" | "status" | "blocks" | "citations" | "attachments">
+>;
 
 function createClientId(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
@@ -69,6 +77,9 @@ function friendlyError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (isOfflineError(error)) {
     return "ECHO 服务暂时不可用，请检查连接后重试。";
+  }
+  if (/501|not implemented|NOT_IMPLEMENTED|multimodal|多模态/i.test(message)) {
+    return "多模态接口已预留，等待后端补全后即可发送。";
   }
   if (/401|403|permission|forbidden/i.test(message)) {
     return "当前课程或会话不可访问，请返回课程后重试。";
@@ -104,6 +115,8 @@ export function useChatController({
     conversationId,
   );
   const [draft, setDraftState] = useState(initialQuestion ?? "");
+  const [attachments, setAttachments] = useState<ChatAttachmentDraft[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]);
   const [messageOverrides, setMessageOverrides] = useState<
     Record<string, MessageOverride>
@@ -209,6 +222,24 @@ export function useChatController({
     }, 250);
     return () => clearTimeout(timer);
   }, [draft, draftKey]);
+
+  function addAttachment(attachment: ChatAttachmentDraft) {
+    setAttachmentError(null);
+    setAttachments((current) => {
+      if (current.length >= 4) {
+        setAttachmentError("每条消息最多添加 4 个附件。");
+        return current;
+      }
+      return [...current, attachment];
+    });
+  }
+
+  function removeAttachment(localId: string) {
+    setAttachments((current) =>
+      current.filter((attachment) => attachment.localId !== localId),
+    );
+    setAttachmentError(null);
+  }
 
   const patchMessage = useCallback((messageId: string, patch: MessageOverride) => {
     setMessageOverrides((current) => ({
@@ -371,12 +402,21 @@ export function useChatController({
   const sendMessage = useCallback(
     async (rawContent: string, reusedRequestId?: string) => {
       const content = rawContent.trim();
-      if (!user || !effectiveCourseId || !content || isStreaming) {
+      const hasAttachments = attachments.length > 0;
+      if (
+        !user ||
+        !effectiveCourseId ||
+        (!content && !hasAttachments) ||
+        isStreaming
+      ) {
         return;
       }
       if (offline) {
         throw new Error("ECHO 服务暂时不可用");
       }
+
+      const attachmentDrafts = attachments;
+      const messageContent = content || "请分析我上传的内容。";
 
       const clientRequestId = reusedRequestId ?? createClientId("request");
       const localUserId = createClientId("user");
@@ -386,12 +426,13 @@ export function useChatController({
         id: localUserId,
         conversation_id: activeConversationId ?? "",
         role: "user",
-        content,
+        content: messageContent,
         status: "sending",
         client_request_id: clientRequestId,
-        blocks: [{ type: "text", text: content }],
+        blocks: [{ type: "text", text: messageContent }],
         created_at: now,
         citations: [],
+        attachments: [],
       };
       const baseAssistantMessage: Message = {
         id: localAssistantId,
@@ -424,11 +465,28 @@ export function useChatController({
       abortRef.current = controller;
       let conversationIdForRequest = activeConversationId;
       try {
+        const uploadedAttachments: ChatAttachment[] = [];
+        for (const attachment of attachmentDrafts) {
+          const uploaded = await apiClient.uploadChatAttachment(
+            user.id,
+            attachment.kind,
+            {
+              uri: attachment.uri,
+              name: attachment.fileName,
+              type: attachment.mimeType,
+            },
+            attachment.fileName,
+          );
+          uploadedAttachments.push(uploaded.attachment);
+        }
+        if (uploadedAttachments.length > 0) {
+          patchMessage(localUserId, { attachments: uploadedAttachments });
+        }
         if (!conversationIdForRequest) {
           const conversation = await apiClient.createConversation(
             user.id,
             effectiveCourseId,
-            content.slice(0, 80),
+            messageContent.slice(0, 80),
           );
           conversationIdForRequest = conversation.id;
           queryClient.setQueryData<Conversation[]>(
@@ -444,10 +502,11 @@ export function useChatController({
           user.id,
           conversationIdForRequest,
           {
-            content,
+            content: messageContent,
             client_request_id: clientRequestId,
             knowledge_point_id: knowledgePointId,
             retrieval_limit: 5,
+            attachments: uploadedAttachments,
           },
           { signal: controller.signal },
         );
@@ -457,12 +516,18 @@ export function useChatController({
           localAssistantId,
         );
         if (!completed) {
+          if (attachmentDrafts.length > 0) {
+            setAttachmentError("多模态内容会保留在输入区，可直接重试。");
+          }
           setFailedRequest({
             clientRequestId,
             content,
             userId: localUserId,
             assistantId: localAssistantId,
           });
+        } else {
+          setAttachments([]);
+          setAttachmentError(null);
         }
       } catch (error) {
         const interrupted = controller.signal.aborted;
@@ -477,6 +542,7 @@ export function useChatController({
         blocksRef.current[localAssistantId] = nextBlocks;
         patchMessage(localAssistantId, { status, blocks: nextBlocks });
         if (!interrupted) {
+          if (attachmentDrafts.length > 0) setAttachmentError(friendlyError(error));
           setFailedRequest({
             clientRequestId,
             content,
@@ -500,6 +566,7 @@ export function useChatController({
     },
     [
       activeConversationId,
+      attachments,
       consumeStream,
       draftKey,
       effectiveCourseId,
@@ -724,6 +791,8 @@ export function useChatController({
       stopStream();
       setOptimisticMessages([]);
       setMessageOverrides({});
+      setAttachments([]);
+      setAttachmentError(null);
       setIsNewConversation(false);
       setSelectedConversationId(conversationIdToSelect);
       setFailedRequest(null);
@@ -736,6 +805,8 @@ export function useChatController({
     stopStream();
     setOptimisticMessages([]);
     setMessageOverrides({});
+    setAttachments([]);
+    setAttachmentError(null);
     setIsNewConversation(true);
     setSelectedConversationId(null);
     setFailedRequest(null);
@@ -783,6 +854,10 @@ export function useChatController({
     activeConversationId,
     draft,
     setDraft: setDraftState,
+    attachments,
+    attachmentError,
+    addAttachment,
+    removeAttachment,
     isStreaming,
     offline,
     retryConnection,

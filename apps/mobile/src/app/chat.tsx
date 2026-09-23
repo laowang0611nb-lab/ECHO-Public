@@ -257,7 +257,11 @@ function ChatWorkspace({
         )}
         <ChatComposer
           disabled={chat.offline}
+          attachmentError={chat.attachmentError}
+          attachments={chat.attachments}
           onChange={chat.setDraft}
+          onAddAttachment={chat.addAttachment}
+          onRemoveAttachment={chat.removeAttachment}
           onSend={() => void chat.sendMessage(chat.draft)}
           onStop={chat.stopStream}
           streaming={chat.isStreaming}

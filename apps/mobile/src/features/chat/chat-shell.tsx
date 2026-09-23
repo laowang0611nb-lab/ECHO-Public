@@ -1,7 +1,15 @@
 import { SymbolView, type AndroidSymbol } from "expo-symbols";
-import { useMemo } from "react";
 import {
- Image,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from "expo-audio";
+import * as ImagePicker from "expo-image-picker";
+import { useMemo, useState } from "react";
+import {
+  Alert,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -13,6 +21,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { studentTheme } from "@/constants/student-theme";
+import {
+  createAttachmentDraftId,
+  type ChatAttachmentDraft,
+} from "@/features/chat/chat-attachment-draft";
 import type { Conversation, Course } from "@echo/shared-types";
 
 function startOfToday(): number {
@@ -264,6 +276,10 @@ export function ChatComposer({
   onStop,
   streaming,
   disabled,
+  attachments,
+  attachmentError,
+  onAddAttachment,
+  onRemoveAttachment,
   onFocusChange,
 }: {
   value: string;
@@ -272,49 +288,225 @@ export function ChatComposer({
   onStop: () => void;
   streaming: boolean;
   disabled: boolean;
+  attachments: ChatAttachmentDraft[];
+  attachmentError: string | null;
+  onAddAttachment: (attachment: ChatAttachmentDraft) => void;
+  onRemoveAttachment: (localId: string) => void;
   onFocusChange?: (focused: boolean) => void;
 }) {
-  const canSend = value.trim().length > 0 && !disabled && !streaming;
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [recording, setRecording] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const canSend =
+    (value.trim().length > 0 || attachments.length > 0) && !disabled && !streaming;
+
+  function addImageAsset(asset: ImagePicker.ImagePickerAsset) {
+    const isVideo = asset.type === "video";
+    onAddAttachment({
+      localId: createAttachmentDraftId(),
+      kind: isVideo ? "video" : "image",
+      uri: asset.uri,
+      mimeType: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
+      fileName:
+        asset.fileName ||
+        `${isVideo ? "video" : "image"}-${Date.now()}.${isVideo ? "mp4" : "jpg"}`,
+      sizeBytes: asset.fileSize ?? null,
+      width: asset.width ?? null,
+      height: asset.height ?? null,
+      durationSeconds: asset.duration ?? null,
+    });
+  }
+
+  async function pickImage(source: "camera" | "library") {
+    try {
+      setMediaError(null);
+      const permission =
+        source === "camera"
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        setMediaError("需要相机或相册权限才能添加图片。");
+        return;
+      }
+      const result =
+        source === "camera"
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ["images"],
+              quality: 0.85,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ["images", "videos"],
+              quality: 0.85,
+            });
+      if (!result.canceled && result.assets[0]) addImageAsset(result.assets[0]);
+    } catch {
+      setMediaError("无法打开相机或相册，请稍后重试。");
+    }
+  }
+
+  function chooseImageSource() {
+    Alert.alert("添加图片或视频", "选择来源", [
+      { text: "拍照", onPress: () => void pickImage("camera") },
+      { text: "从相册选择", onPress: () => void pickImage("library") },
+      { text: "取消", style: "cancel" },
+    ]);
+  }
+
+  async function toggleRecording() {
+    try {
+      setMediaError(null);
+      if (recorder.isRecording) {
+        const duration = recorder.currentTime;
+        await recorder.stop();
+        setRecording(false);
+        if (recorder.uri) {
+          await setAudioModeAsync({ allowsRecording: false });
+          onAddAttachment({
+            localId: createAttachmentDraftId(),
+            kind: "audio",
+            uri: recorder.uri,
+            mimeType: "audio/mp4",
+            fileName: `voice-${Date.now()}.m4a`,
+            durationSeconds: duration,
+          });
+        }
+        return;
+      }
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        setMediaError("需要麦克风权限才能录制语音。");
+        return;
+      }
+      await recorder.prepareToRecordAsync();
+      await setAudioModeAsync({ allowsRecording: true });
+      recorder.record();
+      setRecording(true);
+    } catch {
+      setRecording(false);
+      setMediaError("录音未能开始，请检查麦克风权限后重试。");
+    }
+  }
+
   return (
     <View style={styles.composer}>
-      <View
-        style={[
-          styles.composerInputShell,
-          disabled && styles.composerInputShellOffline,
-        ]}
-      >
-        <TextInput
-          blurOnSubmit={false}
-          multiline
-          onChangeText={onChange}
-          onFocus={() => onFocusChange?.(true)}
-          onBlur={() => onFocusChange?.(false)}
-          placeholder={disabled ? "连接恢复后可继续提问" : "继续追问或输入你的问题..."}
-          placeholderTextColor={studentTheme.color.textSubtle}
-          style={styles.composerInput}
-          value={value}
-        />
+      {attachments.length > 0 || attachmentError || mediaError ? (
+        <View style={styles.attachmentTray}>
+          <ScrollView
+            contentContainerStyle={styles.attachmentTrayContent}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {attachments.map((attachment) => (
+              <View key={attachment.localId} style={styles.attachmentPreview}>
+                {attachment.kind === "image" ? (
+                  <Image source={{ uri: attachment.uri }} style={styles.attachmentImage} />
+                ) : (
+                  <View style={styles.attachmentAudio}>
+                    <SymbolView
+                      name={{
+                        android: attachment.kind === "audio" ? "mic" : "videocam",
+                        web: attachment.kind === "audio" ? "mic" : "videocam",
+                      }}
+                      size={17}
+                      tintColor={studentTheme.color.primary}
+                    />
+                    <Text numberOfLines={1} style={styles.attachmentAudioText}>
+                      {attachment.kind === "audio" ? "语音" : "视频"}
+                    </Text>
+                  </View>
+                )}
+                <Pressable
+                  accessibilityLabel="移除附件"
+                  onPress={() => onRemoveAttachment(attachment.localId)}
+                  style={styles.attachmentRemove}
+                >
+                  <SymbolView
+                    name={{ android: "close", web: "close" }}
+                    size={13}
+                    tintColor="#ffffff"
+                  />
+                </Pressable>
+              </View>
+            ))}
+          </ScrollView>
+          {mediaError || attachmentError ? (
+            <Text style={styles.attachmentError}>{mediaError || attachmentError}</Text>
+          ) : null}
+        </View>
+      ) : null}
+      <View style={styles.composerRow}>
+        <Pressable
+          accessibilityLabel="添加图片或视频"
+          disabled={disabled || streaming}
+          onPress={chooseImageSource}
+          style={({ pressed }) => [
+            styles.composerToolButton,
+            (disabled || streaming) && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <SymbolView
+            name={{ android: "add_photo_alternate", web: "add_photo_alternate" }}
+            size={20}
+            tintColor={studentTheme.color.textMuted}
+          />
+        </Pressable>
+        <Pressable
+          accessibilityLabel={recording ? "停止录音" : "录制语音"}
+          disabled={disabled || streaming}
+          onPress={() => void toggleRecording()}
+          style={({ pressed }) => [
+            styles.composerToolButton,
+            recording && styles.recordingButton,
+            (disabled || streaming) && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <SymbolView
+            name={{ android: recording ? "stop" : "mic", web: recording ? "stop" : "mic" }}
+            size={20}
+            tintColor={recording ? "#ffffff" : studentTheme.color.textMuted}
+          />
+        </Pressable>
+        <View
+          style={[
+            styles.composerInputShell,
+            disabled && styles.composerInputShellOffline,
+          ]}
+        >
+          <TextInput
+            blurOnSubmit={false}
+            multiline
+            onChangeText={onChange}
+            onFocus={() => onFocusChange?.(true)}
+            onBlur={() => onFocusChange?.(false)}
+            placeholder={disabled ? "连接恢复后可继续提问" : "继续追问或输入你的问题..."}
+            placeholderTextColor={studentTheme.color.textSubtle}
+            style={styles.composerInput}
+            value={value}
+          />
+        </View>
+        <Pressable
+          accessibilityLabel={streaming ? "停止生成" : "发送消息"}
+          disabled={!streaming && !canSend}
+          onPress={streaming ? onStop : onSend}
+          style={({ pressed }) => [
+            styles.sendButton,
+            streaming && styles.stopButton,
+            !streaming && !canSend && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <SymbolView
+            name={{
+              android: streaming ? "stop" : "arrow_upward",
+              web: streaming ? "stop" : "arrow_upward",
+            }}
+            size={21}
+            tintColor="#ffffff"
+          />
+        </Pressable>
       </View>
-      <Pressable
-        accessibilityLabel={streaming ? "停止生成" : "发送消息"}
-        disabled={!streaming && !canSend}
-        onPress={streaming ? onStop : onSend}
-        style={({ pressed }) => [
-          styles.sendButton,
-          streaming && styles.stopButton,
-          !streaming && !canSend && styles.disabled,
-          pressed && styles.pressed,
-        ]}
-      >
-        <SymbolView
-          name={{
-            android: streaming ? "stop" : "arrow_upward",
-            web: streaming ? "stop" : "arrow_upward",
-          }}
-          size={21}
-          tintColor="#ffffff"
-        />
-      </Pressable>
     </View>
   );
 }
@@ -698,15 +890,81 @@ const styles = StyleSheet.create({
     width: "34%",
   },
   composer: {
-    alignItems: "flex-end",
+    alignItems: "stretch",
     backgroundColor: "#ffffff",
     borderTopColor: studentTheme.color.divider,
     borderTopWidth: 1,
-    flexDirection: "row",
     gap: 9,
     paddingBottom: 8,
     paddingHorizontal: 12,
     paddingTop: 9,
+  },
+  composerRow: {
+    alignItems: "flex-end",
+    flexDirection: "row",
+    gap: 7,
+  },
+  composerToolButton: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.surfaceSoft,
+    borderColor: studentTheme.color.border,
+    borderRadius: 19,
+    borderWidth: 1,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
+  recordingButton: {
+    backgroundColor: studentTheme.color.danger,
+    borderColor: studentTheme.color.danger,
+  },
+  attachmentTray: {
+    gap: 6,
+  },
+  attachmentTrayContent: {
+    gap: 8,
+    paddingHorizontal: 1,
+  },
+  attachmentPreview: {
+    backgroundColor: studentTheme.color.surfaceSoft,
+    borderColor: studentTheme.color.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 54,
+    overflow: "hidden",
+    width: 54,
+  },
+  attachmentImage: {
+    height: "100%",
+    width: "100%",
+  },
+  attachmentAudio: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  attachmentAudioText: {
+    color: studentTheme.color.primary,
+    fontSize: 9,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  attachmentRemove: {
+    alignItems: "center",
+    backgroundColor: "rgba(17, 24, 39, 0.72)",
+    borderRadius: 9,
+    height: 18,
+    justifyContent: "center",
+    position: "absolute",
+    right: 2,
+    top: 2,
+    width: 18,
+  },
+  attachmentError: {
+    color: studentTheme.color.danger,
+    fontSize: 11,
+    lineHeight: 17,
   },
   composerInputShell: {
     backgroundColor: studentTheme.color.surfaceSoft,

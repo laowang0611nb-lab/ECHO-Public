@@ -141,9 +141,10 @@ export default function AISupportScreen() {
         />
         <AbilityCard
           accent="#d97706"
-          description="增强版开放"
-          disabled
+          description={archived ? "课程已归档" : "拍照或上传图片提问"}
+          disabled={archived}
           imageSource={require("@/assets/images/student/photo-question.png")}
+          onPress={() => router.push("/chat")}
           title="拍照识题"
         />
         <AbilityCard

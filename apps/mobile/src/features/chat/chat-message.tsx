@@ -31,6 +31,17 @@ import type {
 } from "@echo/shared-types";
 
 import { studentTheme } from "@/constants/student-theme";
+import { getApiBaseUrlSync } from "@/services/api-network-config";
+import { getAccessTokenSync } from "@/services/auth-session-storage";
+
+function attachmentImageSource(url: string) {
+  const resolvedUrl = url.startsWith("http") ? url : `${getApiBaseUrlSync()}${url}`;
+  const accessToken = getAccessTokenSync();
+  return {
+    uri: resolvedUrl,
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  };
+}
 
 function createAttemptId(questionId: string): string {
   return `quick-${questionId}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -733,6 +744,30 @@ export function MessageBubble({
             message.status === "failed" && styles.userBubbleFailed,
           ]}
         >
+          {message.attachments && message.attachments.length > 0 ? (
+            <View style={styles.userAttachmentList}>
+              {message.attachments.map((attachment) =>
+                attachment.kind === "image" && attachment.url ? (
+                  <Image
+                    key={attachment.id}
+                    source={attachmentImageSource(attachment.url)}
+                    style={styles.userAttachmentImage}
+                  />
+                ) : (
+                  <View key={attachment.id} style={styles.userAttachmentFile}>
+                    <SymbolView
+                      name={{ android: "attach_file", web: "attach_file" }}
+                      size={15}
+                      tintColor={studentTheme.color.primary}
+                    />
+                    <Text numberOfLines={1} style={styles.userAttachmentFileName}>
+                      {attachment.file_name || attachment.kind}
+                    </Text>
+                  </View>
+                )
+              )}
+            </View>
+          ) : null}
           <Text selectable style={styles.userMessageText}>
             {message.content}
           </Text>
@@ -950,6 +985,31 @@ const styles = StyleSheet.create({
   },
   userBubbleFailed: {
     borderColor: studentTheme.color.dangerBorder,
+  },
+  userAttachmentList: {
+    gap: 7,
+    marginBottom: 8,
+  },
+  userAttachmentImage: {
+    borderRadius: 10,
+    height: 150,
+    width: 210,
+  },
+  userAttachmentFile: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderRadius: 9,
+    flexDirection: "row",
+    gap: 6,
+    maxWidth: 230,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  userAttachmentFileName: {
+    color: studentTheme.color.text,
+    flexShrink: 1,
+    fontSize: 11,
+    fontWeight: "700",
   },
   userMessageText: {
     color: studentTheme.color.text,
