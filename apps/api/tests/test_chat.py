@@ -1,5 +1,6 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -17,10 +18,15 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.api.dependencies import get_chat_attachment_storage
+from app.main import app
 from app.services.chat import (
     _course_has_searchable_material,
     _stream_chat_response_contents,
 )
+from app.services.storage import LocalDocumentStorage
+
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -85,6 +91,146 @@ async def create_searchable_course(
     assert chunks.status_code == 200
     assert embeddings.status_code == 200
     return course
+
+
+async def test_multimodal_chat_attachment_upload_and_send(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    tmp_path: Path,
+) -> None:
+    teacher = await login(client, "chat-multimodal@example.com", "teacher")
+    attachments_storage = LocalDocumentStorage(tmp_path / "chat-attachments")
+    app.dependency_overrides[get_chat_attachment_storage] = lambda: attachments_storage
+
+    try:
+        modalities = await client.get(
+            "/api/v1/chat/modalities",
+            headers=auth_headers(teacher),
+        )
+        assert modalities.status_code == 200
+        assert modalities.json()["attachments_enabled"] is True
+        assert set(modalities.json()["input_modalities"]) == {
+            "text",
+            "image",
+            "audio",
+            "video",
+        }
+
+        upload = await client.post(
+            "/api/v1/chat/attachments",
+            headers=auth_headers(teacher),
+            data={"kind": "image"},
+            files={"file": ("question.png", PNG_BYTES, "image/png")},
+        )
+        assert upload.status_code == 200, upload.text
+        uploaded = upload.json()["attachment"]
+        assert uploaded["kind"] == "image"
+        assert uploaded["url"].endswith("/file")
+
+        course = await create_searchable_course(client, session_factory, teacher)
+        conversation_response = await client.post(
+            f"/api/v1/courses/{course['id']}/conversations",
+            headers=auth_headers(teacher),
+            json={"title": "图片提问"},
+        )
+        assert conversation_response.status_code == 201
+        conversation_id = conversation_response.json()["id"]
+
+        stream = await client.post(
+            f"/api/v1/conversations/{conversation_id}/messages/stream",
+            headers=auth_headers(teacher),
+            json={
+                "content": "请分析这张图片",
+                "client_request_id": "multimodal-request",
+                "attachments": [uploaded],
+            },
+        )
+        assert stream.status_code == 200
+        assert "event: done" in stream.text
+
+        prompt_content = chat_provider.last_stream_messages[-1]["content"]
+        assert isinstance(prompt_content, list)
+        assert prompt_content[0] == {"type": "text", "text": "请分析这张图片"}
+        assert prompt_content[1]["type"] == "image_url"
+
+        messages = await client.get(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=auth_headers(teacher),
+        )
+        assert messages.status_code == 200
+        user_message = next(message for message in messages.json() if message["role"] == "user")
+        assert user_message["attachments"][0]["id"] == uploaded["id"]
+
+        stored_file = await client.get(
+            f"/api/v1/chat/attachments/{uploaded['id']}/file",
+            headers=auth_headers(teacher),
+        )
+        assert stored_file.status_code == 200
+        assert stored_file.headers["content-type"] == "image/png"
+
+        other_user = await login(
+            client,
+            "chat-multimodal-other@example.com",
+            "teacher",
+        )
+        forbidden_file = await client.get(
+            f"/api/v1/chat/attachments/{uploaded['id']}/file",
+            headers=auth_headers(other_user),
+        )
+        assert forbidden_file.status_code == 403
+
+        media_attachments = []
+        for kind, file_name, mime_type, content in (
+            (
+                "audio",
+                "question.m4a",
+                "audio/mp4",
+                b"\x00\x00\x00\x18ftypM4A ",
+            ),
+            (
+                "video",
+                "question.mp4",
+                "video/mp4",
+                b"\x00\x00\x00\x18ftypisom",
+            ),
+        ):
+            media_upload = await client.post(
+                "/api/v1/chat/attachments",
+                headers=auth_headers(teacher),
+                data={"kind": kind},
+                files={"file": (file_name, content, mime_type)},
+            )
+            assert media_upload.status_code == 200, media_upload.text
+            assert media_upload.json()["attachment"]["kind"] == kind
+            media_attachments.append(media_upload.json()["attachment"])
+
+        media_stream = await client.post(
+            f"/api/v1/conversations/{conversation_id}/messages/stream",
+            headers=auth_headers(teacher),
+            json={
+                "content": "请分析上传的语音和视频",
+                "client_request_id": "multimodal-media-request",
+                "attachments": media_attachments,
+            },
+        )
+        assert media_stream.status_code == 200
+        assert "event: done" in media_stream.text
+        media_prompt = chat_provider.last_stream_messages[-1]["content"]
+        assert [part["type"] for part in media_prompt[1:]] == [
+            "input_audio",
+            "video_url",
+        ]
+
+        invalid = await client.post(
+            "/api/v1/chat/attachments",
+            headers=auth_headers(teacher),
+            data={"kind": "image"},
+            files={"file": ("question.txt", b"plain", "text/plain")},
+        )
+        assert invalid.status_code == 415
+    finally:
+        app.dependency_overrides.pop(get_chat_attachment_storage, None)
 
 
 async def test_searchable_material_ignores_trashed_document_and_chapter(

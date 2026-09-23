@@ -317,6 +317,22 @@ are available, the API returns `insufficient_evidence=true` and does not infer a
 cause. A sufficiently supported result can create a teaching strategy in the
 `suggested` state; it never auto-accepts or publishes the strategy.
 
+## Multimodal chat attachments
+
+```text
+GET  /api/v1/chat/modalities
+POST /api/v1/chat/attachments
+GET  /api/v1/chat/attachments/{attachment_id}/file
+```
+
+Authenticated users can upload image, audio, or video attachments with per-kind
+size limits. Attachments are stored under `tmp/chat_attachments` and persisted
+in `chat_attachments` before being linked to a user message. Message history
+returns attachment metadata and a permission-checked file URL. Multimodal chat
+requests forward OpenAI-compatible `image_url`, `input_audio`, and `video_url`
+content blocks to the configured Chat Provider; unsupported provider capabilities
+surface as real errors rather than fabricated analysis.
+
 ## Teacher resources and evidence
 
 ```text
@@ -420,6 +436,7 @@ Migrations:
 - `e7f8a9b0c1d2`: course profile and resource metadata.
 - `e3f4a5b6c7d8`: course announcements and read state.
 - `f4a5b6c7d8e9`: AI analysis records, evidence, results, and strategy linkage.
+- `a5b6c7d8e9f0`: multimodal chat attachments and message linkage.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

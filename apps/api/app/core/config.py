@@ -12,16 +12,21 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.130"
+    app_version: str = "0.0.131"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
     document_storage_root: Path = PROJECT_ROOT / "tmp" / "uploads"
+    chat_attachment_storage_root: Path = PROJECT_ROOT / "tmp" / "chat_attachments"
     avatar_storage_root: Path = PROJECT_ROOT / "tmp" / "avatars"
     development_auth_enabled: bool = False
     business_timezone: str = "Asia/Shanghai"
     retrieval_max_distance: float = 0.65
     max_upload_bytes: int = 20 * 1024 * 1024
+    chat_image_max_upload_bytes: int = 10 * 1024 * 1024
+    chat_audio_max_upload_bytes: int = 20 * 1024 * 1024
+    chat_video_max_upload_bytes: int = 50 * 1024 * 1024
+    chat_attachment_expiry_hours: int = 24
     avatar_max_upload_bytes: int = 2 * 1024 * 1024
     alibaba_cloud_access_key_id: str | None = Field(
         default=None,
@@ -142,7 +147,11 @@ class Settings(BaseSettings):
             raise ValueError("aliyun_pnvs_timeout_seconds must be between 1 and 60")
         return value
 
-    @field_validator("document_storage_root", "avatar_storage_root")
+    @field_validator(
+        "document_storage_root",
+        "avatar_storage_root",
+        "chat_attachment_storage_root",
+    )
     @classmethod
     def resolve_storage_root(cls, value: Path) -> Path:
         return value if value.is_absolute() else PROJECT_ROOT / value
@@ -152,6 +161,18 @@ class Settings(BaseSettings):
     def require_supported_embedding_dimension(cls, value: int) -> int:
         if value != 1024:
             raise ValueError("embedding_dimension must remain 1024 until a migration is applied")
+        return value
+
+    @field_validator(
+        "chat_image_max_upload_bytes",
+        "chat_audio_max_upload_bytes",
+        "chat_video_max_upload_bytes",
+        "chat_attachment_expiry_hours",
+    )
+    @classmethod
+    def require_positive_chat_attachment_limits(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("chat attachment limits must be positive")
         return value
 
     @field_validator("llm_context_window_tokens")

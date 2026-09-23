@@ -100,7 +100,12 @@ def test_existing_review_flag_survives_workflow_upgrade(tmp_path: Path) -> None:
         "plan_tasks",
         "teaching_strategies",
     } <= tables
-    assert {"ai_analyses", "ai_analysis_evidence", "ai_analysis_results"} <= tables
+    assert {
+        "ai_analyses",
+        "ai_analysis_evidence",
+        "ai_analysis_results",
+        "chat_attachments",
+    } <= tables
 
 
 def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
@@ -108,7 +113,7 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "f4a5b6c7d8e9 (head)" in current.stdout
+    assert "a5b6c7d8e9f0 (head)" in current.stdout
     connection = sqlite3.connect(tmp_path / "echo.db")
     course_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(courses)").fetchall()
@@ -173,4 +178,4 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
     _run_alembic(database_url, "downgrade", "d9e0f1a2b3c4")
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "f4a5b6c7d8e9 (head)" in current.stdout
+    assert "a5b6c7d8e9f0 (head)" in current.stdout

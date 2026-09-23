@@ -9,6 +9,7 @@ def test_core_tables_are_registered() -> None:
         "auth_sessions",
         "ai_review_flags",
         "chapters",
+        "chat_attachments",
         "conversations",
         "document_pages",
         "documents",

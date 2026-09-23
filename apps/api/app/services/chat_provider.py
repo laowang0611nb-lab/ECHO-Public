@@ -14,9 +14,9 @@ class ChatProviderError(Exception):
 
 
 class ChatProvider(Protocol):
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]: ...
+    async def stream(self, messages: list[dict[str, object]]) -> AsyncIterator[str]: ...
 
-    async def complete(self, messages: list[dict[str, str]]) -> str: ...
+    async def complete(self, messages: list[dict[str, object]]) -> str: ...
 
 
 class QwenChatProvider:
@@ -33,7 +33,7 @@ class QwenChatProvider:
         self.model = model
         self.timeout_seconds = timeout_seconds
 
-    async def complete(self, messages: list[dict[str, str]]) -> str:
+    async def complete(self, messages: list[dict[str, object]]) -> str:
         if not self.api_key:
             raise ChatConfigurationError("Chat API key is not configured")
 
@@ -61,7 +61,7 @@ class QwenChatProvider:
             raise ChatProviderError("Chat response did not contain text")
         return content
 
-    async def stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
+    async def stream(self, messages: list[dict[str, object]]) -> AsyncIterator[str]:
         if not self.api_key:
             raise ChatConfigurationError("Chat API key is not configured")
 

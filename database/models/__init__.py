@@ -10,6 +10,8 @@ from database.models.analysis import (
 from database.models.announcement import CourseAnnouncement, CourseAnnouncementRead
 from database.models.auth import AuthSession, PhoneVerificationClaim, UserCredential
 from database.models.chat import (
+    ChatAttachment,
+    ChatAttachmentKind,
     Conversation,
     Message,
     MessageCitation,
@@ -93,6 +95,8 @@ __all__ = [
     "AIReviewFlag",
     "AuthSession",
     "Chapter",
+    "ChatAttachment",
+    "ChatAttachmentKind",
     "Conversation",
     "Course",
     "CourseAnnouncement",

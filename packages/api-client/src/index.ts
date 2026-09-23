@@ -27,8 +27,11 @@ import type {
   ChapterUpdateRequest,
   AvatarUploadResponse,
   ChatContinueRequest,
+  ChatAttachmentKind,
+  ChatAttachmentUploadResponse,
   ChatStreamEvent,
   ChatStreamRequest,
+  ChatModalitiesResponse,
   ChunkSearchRequest,
   ChunkSearchResult,
   Conversation,
@@ -204,6 +207,16 @@ function createDocumentFormData(file: DocumentUploadSource, fileName?: string): 
   } else {
     formData.append("file", file, fileName);
   }
+  return formData;
+}
+
+function createChatAttachmentFormData(
+  kind: ChatAttachmentKind,
+  file: DocumentUploadSource,
+  fileName?: string,
+): FormData {
+  const formData = createDocumentFormData(file, fileName);
+  formData.append("kind", kind);
   return formData;
 }
 
@@ -440,6 +453,19 @@ export function createApiClient({
 
   return {
     health: () => request<HealthResponse>("/api/v1/health"),
+    getChatModalities: (userId: string) =>
+      request<ChatModalitiesResponse>("/api/v1/chat/modalities", undefined, userId),
+    uploadChatAttachment: (
+      userId: string,
+      kind: ChatAttachmentKind,
+      file: DocumentUploadSource,
+      fileName?: string,
+    ) =>
+      request<ChatAttachmentUploadResponse>(
+        "/api/v1/chat/attachments",
+        { method: "POST", body: createChatAttachmentFormData(kind, file, fileName) },
+        userId,
+      ),
     getSystemStatus: (userId: string) =>
       request<SystemStatusResponse>("/api/v1/system/status", undefined, userId),
     getDemoStatus: (userId: string) =>

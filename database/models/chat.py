@@ -5,9 +5,11 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     CheckConstraint,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -40,6 +42,12 @@ class MessageStatus(StrEnum):
     COMPLETE = "complete"
     INTERRUPTED = "interrupted"
     FAILED = "failed"
+
+
+class ChatAttachmentKind(StrEnum):
+    IMAGE = "image"
+    AUDIO = "audio"
+    VIDEO = "video"
 
 
 class TeachingPolicy(Base):
@@ -172,6 +180,87 @@ class Message(Base):
         cascade="all, delete-orphan",
         order_by="MessageCitation.citation_index",
     )
+
+    attachments: Mapped[list["ChatAttachment"]] = relationship(
+        back_populates="message",
+        cascade="all, delete-orphan",
+        order_by="ChatAttachment.created_at",
+    )
+
+
+class ChatAttachment(Base):
+    __tablename__ = "chat_attachments"
+    __table_args__ = (
+        CheckConstraint(
+            "size_bytes >= 0",
+            name="ck_chat_attachments_size_bytes_nonnegative",
+        ),
+        CheckConstraint(
+            "width IS NULL OR width > 0",
+            name="ck_chat_attachments_width_positive",
+        ),
+        CheckConstraint(
+            "height IS NULL OR height > 0",
+            name="ck_chat_attachments_height_positive",
+        ),
+        CheckConstraint(
+            "duration_seconds IS NULL OR duration_seconds >= 0",
+            name="ck_chat_attachments_duration_nonnegative",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        index=True,
+    )
+    message_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        index=True,
+    )
+    kind: Mapped[ChatAttachmentKind] = mapped_column(
+        Enum(
+            ChatAttachmentKind,
+            name="chat_attachment_kind",
+            native_enum=False,
+            length=16,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        nullable=False,
+    )
+    mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_name: Mapped[str | None] = mapped_column(String(255))
+    storage_key: Mapped[str] = mapped_column(
+        String(512), unique=True, index=True, nullable=False
+    )
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    duration_seconds: Mapped[float | None] = mapped_column(Float)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship()
+    conversation: Mapped["Conversation"] = relationship()
+    message: Mapped["Message | None"] = relationship(back_populates="attachments")
+
+    @property
+    def url(self) -> str:
+        return f"/api/v1/chat/attachments/{self.id}/file"
 
 
 class MessageCitation(Base):

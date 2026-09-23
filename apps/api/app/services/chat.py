@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from database.models.chat import (
+    ChatAttachment,
     Conversation,
     Message,
     MessageCitation,
@@ -27,6 +28,11 @@ from sqlalchemy.orm import selectinload
 from app.schemas.chat import ConversationCreate, TeacherMessageResponse
 from app.schemas.learning import LearningEventCreate
 from app.schemas.search import ChunkSearchResult
+from app.services.chat_attachments import (
+    attachment_context_text,
+    attachment_to_model_content,
+    resolve_message_attachments,
+)
 from app.services.chat_provider import ChatProvider
 from app.services.course import get_course_for_member
 from app.services.embedding import EmbeddingProvider
@@ -43,6 +49,7 @@ from app.services.quick_checks import (
 )
 from app.services.review import attach_auto_review_flags
 from app.services.search import search_course_chunks
+from app.services.storage import LocalDocumentStorage
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 
@@ -151,6 +158,7 @@ async def list_messages(
     messages = await session.scalars(
         select(Message)
         .options(selectinload(Message.citations))
+        .options(selectinload(Message.attachments))
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at, Message.id)
     )
@@ -218,6 +226,7 @@ async def list_conversation_messages_for_teacher(
         await session.scalars(
             select(Message)
             .options(selectinload(Message.citations))
+            .options(selectinload(Message.attachments))
             .where(Message.conversation_id == conversation_id)
             .order_by(Message.created_at, Message.id)
         )
@@ -276,6 +285,7 @@ async def list_conversation_messages_for_teacher(
                 blocks=message.blocks,
                 created_at=message.created_at,
                 citations=message.citations,
+                attachments=message.attachments,
                 knowledge_point_ids=sorted(knowledge_point_ids, key=str),
                 review_status=review_status_by_message.get(message.id),
             )
@@ -288,7 +298,9 @@ def _build_prompt(
     history: list[Message],
     sources: list[ChunkSearchResult],
     teaching_policy: str | None,
-) -> list[dict[str, str]]:
+    attachments: list[ChatAttachment] | None = None,
+    storage: LocalDocumentStorage | None = None,
+) -> list[dict[str, object]]:
     source_blocks = [
         f"[{index}] Pages {source.page_start}-{source.page_end}\n{source.content}"
         for index, source in enumerate(sources, start=1)
@@ -319,7 +331,15 @@ def _build_prompt(
         for message in history[-10:]
         if message.role in {MessageRole.USER, MessageRole.ASSISTANT}
     )
-    prompt_messages.append({"role": "user", "content": question})
+    attachment_items = attachments or []
+    if attachment_items and storage is not None:
+        user_content: str | list[dict[str, object]] = [{"type": "text", "text": question}]
+        for attachment in attachment_items:
+            path = storage.path_for(attachment.storage_key)
+            user_content.append(attachment_to_model_content(attachment, path))
+    else:
+        user_content = question + attachment_context_text(attachment_items)
+    prompt_messages.append({"role": "user", "content": user_content})
     return prompt_messages
 
 
@@ -333,6 +353,8 @@ async def _stream_chat_response_contents(
     client_request_id: str | None,
     knowledge_point_id: UUID | None,
     retrieval_limit: int,
+    attachment_ids: list[UUID] | None = None,
+    attachment_storage: LocalDocumentStorage | None = None,
 ) -> AsyncIterator[ChatEvent]:
     conversation = await session.get(Conversation, conversation_id)
     if conversation is None:
@@ -409,6 +431,14 @@ async def _stream_chat_response_contents(
             )
             return
 
+    attachments = await resolve_message_attachments(
+        session,
+        user_id=user_id,
+        conversation_id=conversation.id,
+        attachment_ids=attachment_ids or [],
+    )
+    question_with_attachments = content + attachment_context_text(attachments)
+
     sources = await search_course_chunks(
         session,
         embedding_provider,
@@ -438,6 +468,9 @@ async def _stream_chat_response_contents(
         created_at=datetime.now(UTC),
     )
     session.add(user_message)
+    await session.flush()
+    for attachment in attachments:
+        attachment.message_id = user_message.id
     if not conversation.title:
         conversation.title = content[:80]
     conversation.updated_at = datetime.now(UTC)
@@ -456,7 +489,7 @@ async def _stream_chat_response_contents(
                 message_id=user_message.id,
                 knowledge_point_id=resolved_knowledge_point_id,
                 event_type=LearningEventType.QUESTION_ASKED,
-                evidence=content,
+                evidence=question_with_attachments,
             ),
             require_student_membership=True,
         )
@@ -496,6 +529,8 @@ async def _stream_chat_response_contents(
             history,
             sources,
             policy.content if policy else None,
+            attachments=attachments,
+            storage=attachment_storage,
         )
         async for delta in chat_provider.stream(prompt):
             collected.append(delta)
@@ -538,7 +573,7 @@ async def _stream_chat_response_contents(
             chat_provider,
             course_id=conversation.course_id,
             user_id=user_id,
-            question=content,
+            question=question_with_attachments,
             knowledge_point_id=resolved_knowledge_point_id,
             sources=sources,
             teaching_policy=policy.content if policy else None,
@@ -790,6 +825,8 @@ async def stream_chat_response(
     client_request_id: str | None,
     knowledge_point_id: UUID | None,
     retrieval_limit: int,
+    attachment_ids: list[UUID] | None = None,
+    attachment_storage: LocalDocumentStorage | None = None,
 ) -> AsyncIterator[ChatEvent]:
     try:
         async for event in _stream_chat_response_contents(
@@ -802,6 +839,8 @@ async def stream_chat_response(
             client_request_id,
             knowledge_point_id,
             retrieval_limit,
+            attachment_ids,
+            attachment_storage,
         ):
             yield event
     except Exception as exc:

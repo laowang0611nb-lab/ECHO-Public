@@ -34,6 +34,16 @@ def get_avatar_storage() -> LocalDocumentStorage:
 AvatarStorageDep = Annotated[LocalDocumentStorage, Depends(get_avatar_storage)]
 
 
+def get_chat_attachment_storage() -> LocalDocumentStorage:
+    return LocalDocumentStorage(settings.chat_attachment_storage_root)
+
+
+ChatAttachmentStorageDep = Annotated[
+    LocalDocumentStorage,
+    Depends(get_chat_attachment_storage),
+]
+
+
 def get_aliyun_pnvs_provider() -> AliyunPnvsProvider:
     return AliyunPnvsProvider(
         access_key_id=settings.alibaba_cloud_access_key_id,

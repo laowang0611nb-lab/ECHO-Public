@@ -824,6 +824,32 @@ export type AIMessageBlock =
   | MasteryUpdateBlock
   | WarningBlock;
 
+export type ChatAttachmentKind = "image" | "audio" | "video";
+
+export interface ChatAttachment {
+  id: string;
+  kind: ChatAttachmentKind;
+  mime_type: string;
+  file_name: string | null;
+  size_bytes: number | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  url: string | null;
+}
+
+export interface ChatAttachmentUploadResponse {
+  attachment: ChatAttachment;
+  expires_at: string | null;
+}
+
+export interface ChatModalitiesResponse {
+  input_modalities: ("text" | ChatAttachmentKind)[];
+  output_modalities: "text"[];
+  attachments_enabled: boolean;
+  message: string | null;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -834,6 +860,7 @@ export interface Message {
   client_request_id?: string | null;
   status?: MessageStatus;
   blocks?: AIMessageBlock[];
+  attachments?: ChatAttachment[];
 }
 
 
@@ -847,6 +874,7 @@ export interface ChatStreamRequest {
   client_request_id: string;
   knowledge_point_id?: string | null;
   retrieval_limit?: number;
+  attachments?: ChatAttachment[];
 }
 
 export interface ChatContinueRequest {

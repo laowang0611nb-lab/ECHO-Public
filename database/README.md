@@ -21,11 +21,11 @@ been removed so there is one source of truth.
 ## Current Schema
 
 - Existing history head: `d9e0f1a2b3c4`
-- Current workflow head: `f4a5b6c7d8e9`
+- Current workflow head: `a5b6c7d8e9f0`
 - Added models: `UserCredential`, `AuthSession`, `TeacherProfile`,
   `StudentProfile`, `ReviewAnswerVersion`, `ReviewRegenerationRun`,
   `ReviewHistoryEntry`, `QuestionItem`, `ExternalResource`, `AIAnalysis`,
-  `AIAnalysisEvidence`, `AIAnalysisResult`
+  `AIAnalysisEvidence`, `AIAnalysisResult`, `ChatAttachment`
 - Added user fields: `username`, `avatar_url`, `status`, `last_login_at`
 
 ## Verification

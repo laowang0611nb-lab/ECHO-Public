@@ -1,9 +1,12 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from database.models.chat import MessageRole, MessageStatus
 from database.models.review import ReviewStatus
 from pydantic import BaseModel, ConfigDict, Field
+
+ChatAttachmentKind = Literal["image", "audio", "video"]
 
 
 class ConversationCreate(BaseModel):
@@ -34,6 +37,32 @@ class CitationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ChatAttachmentResponse(BaseModel):
+    id: UUID
+    kind: ChatAttachmentKind
+    mime_type: str
+    file_name: str | None = None
+    size_bytes: int | None = None
+    width: int | None = None
+    height: int | None = None
+    duration_seconds: float | None = None
+    url: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChatAttachmentUploadResponse(BaseModel):
+    attachment: ChatAttachmentResponse
+    expires_at: datetime | None = None
+
+
+class ChatModalitiesResponse(BaseModel):
+    input_modalities: list[Literal["text", "image", "audio", "video"]]
+    output_modalities: list[Literal["text"]]
+    attachments_enabled: bool
+    message: str | None = None
+
+
 class MessageResponse(BaseModel):
     id: UUID
     conversation_id: UUID
@@ -44,6 +73,7 @@ class MessageResponse(BaseModel):
     blocks: list[dict[str, object]] = Field(default_factory=list)
     created_at: datetime
     citations: list[CitationResponse] = Field(default_factory=list)
+    attachments: list[ChatAttachmentResponse] = Field(default_factory=list, max_length=4)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -63,6 +93,7 @@ class ChatStreamRequest(BaseModel):
     client_request_id: str | None = Field(default=None, max_length=128)
     knowledge_point_id: UUID | None = None
     retrieval_limit: int = Field(default=5, ge=1, le=10)
+    attachments: list[ChatAttachmentResponse] = Field(default_factory=list, max_length=4)
 
 
 class ChatContinueRequest(BaseModel):

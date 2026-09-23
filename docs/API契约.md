@@ -79,6 +79,8 @@
 | POST | `/documents/{document_id}/embeddings` | 课程教师 | 生成 1024 维向量 |
 | POST | `/courses/{course_id}/search` | 课程成员 | 课程范围相似度检索 |
 
+分块和知识结构生成都会维护真实 `KnowledgeChunk.chapter_id`：分块时按章节标题、知识点名称和文档顺序映射；重新生成结构后再次回写，避免知识点来源和 RAG 证据脱离章节。
+
 ### 3.1 长文档结构生成
 
 - `qwen3.8-flash` 的上下文窗口按 `1,000,000 Token` 配置。
@@ -123,12 +125,19 @@ POST /api/v1/courses/{course_id}/knowledge-points/merge
 | POST | `/courses/{course_id}/conversations` | 课程成员 | 新建会话 |
 | GET | `/courses/{course_id}/conversations` | 课程成员 | 当前用户的课程会话 |
 | GET | `/conversations/{conversation_id}/messages` | 会话所有者 | 历史消息和引用 |
+| GET | `/chat/modalities` | 已登录 | 返回当前可用输入模态和是否启用附件 |
+| POST | `/chat/attachments` | 已登录 | 上传图片、音频或视频附件 |
+| GET | `/chat/attachments/{attachment_id}/file` | 所有者或课程教师 | 读取附件文件流 |
 | POST | `/conversations/{conversation_id}/messages/stream` | 会话所有者 | RAG 流式回答 |
 | POST | `/conversations/{conversation_id}/messages/{message_id}/continue` | 会话所有者 | 从中断或失败的助手消息继续生成 |
 | POST | `/messages/{message_id}/hints` | 会话所有者 | 请求下一层后端 Hint，并记录 `hint_requested` |
 | POST | `/quick-checks/{question_id}/attempts` | 课程学生成员 | 提交 Quick Check 答案，幂等并返回真实掌握度变化 |
 | GET | `/courses/{course_id}/students/{student_id}/conversations` | 课程教师 | 查看指定学生会话列表 |
 | GET | `/courses/{course_id}/conversations/{conversation_id}/messages` | 课程教师 | 查看完整对话证据、知识点、引用和审核状态 |
+
+附件上传先写入 `chat_attachments`，成功响应返回 `attachment` 和 `expires_at`。发送消息时，`attachments` 只接受当前用户创建、尚未绑定且未过期的附件。消息提交后，附件绑定到用户消息；历史消息通过 `attachments` 返回元数据和文件 URL。
+
+多模态 Chat Provider 输入使用 OpenAI 兼容内容块：图片使用 `image_url`，音频使用 `input_audio`，视频使用 `video_url`。上传和消息持久化不代表模型一定具备对应理解能力；如果 Provider 不支持指定模态，会返回真实错误事件，不会伪造分析结果。
 
 SSE 事件：
 
@@ -169,6 +178,7 @@ Quick Check 由服务端校验答案并通过 `LearningEvent -> StudentKnowledge
 | POST | `/courses/{course_id}/learning-events` | 课程教师 | 记录学习事件 |
 | GET | `/courses/{course_id}/students/{student_id}/mastery` | 本人或课程教师 | 查询知识点状态 |
 | POST | `/courses/{course_id}/announcements` | 课程教师 | 创建或发布课程公告 |
+| PATCH | `/courses/{course_id}/announcements/{announcement_id}` | 课程教师 | 修改公告并发布或撤回 |
 | GET | `/courses/{course_id}/announcements` | 课程成员 | 公告分页、草稿可见性和已读状态 |
 | POST | `/courses/{course_id}/announcements/{announcement_id}/read` | 课程成员 | 标记公告已读 |
 | GET | `/courses/{course_id}/students/{student_id}/learning-events` | 本人或课程教师 | 学生学习事件分页、筛选和学习前后掌握度 |
@@ -647,7 +657,7 @@ AI 二次分析使用 `ai_analyses`、`ai_analysis_evidence` 和 `ai_analysis_re
 
 错因接口返回个人 LearningEvent 聚合证据；窗口内少于 2 条时 `insufficient_evidence=true`，不建立无证据的 misconception 元数据。
 
-课程公告使用 `course_announcements` 和 `course_announcement_reads`；教师可保存草稿或发布，学生只读取已发布公告并持久化已读状态。
+课程公告使用 `course_announcements` 和 `course_announcement_reads`；教师可保存草稿，并通过 PATCH 修改、发布或撤回，学生只读取已发布公告并持久化已读状态。
 
 ## 12. 接口冻结规则
 
