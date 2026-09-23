@@ -3,6 +3,7 @@ import type {
   AnnouncementCreateRequest,
   AnnouncementPage,
   AnnouncementReadResponse,
+  AnnouncementUpdateRequest,
   KnowledgePointQuickCheckSet,
   KnowledgePointSourcePage,
   MisconceptionEvidence,
@@ -652,6 +653,20 @@ export function createApiClient({
         method: "POST",
         body: JSON.stringify(payload),
       }, userId),
+    updateAnnouncement: (
+      userId: string,
+      courseId: string,
+      announcementId: string,
+      payload: AnnouncementUpdateRequest,
+    ) =>
+      request<Announcement>(
+        `/api/v1/courses/${courseId}/announcements/${announcementId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
     listAnnouncements: (
       userId: string,
       courseId: string,

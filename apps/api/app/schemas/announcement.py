@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class AnnouncementCreateRequest(BaseModel):
@@ -16,6 +16,30 @@ class AnnouncementCreateRequest(BaseModel):
         if not normalized:
             raise ValueError("announcement text must not be blank")
         return normalized
+
+
+class AnnouncementUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    content: str | None = Field(default=None, min_length=1, max_length=20000)
+    publish: bool | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("title", "content")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("announcement text must not be null")
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("announcement text must not be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_change(self) -> "AnnouncementUpdateRequest":
+        if not self.model_fields_set:
+            raise ValueError("at least one announcement field must be provided")
+        return self
 
 
 class AnnouncementResponse(BaseModel):

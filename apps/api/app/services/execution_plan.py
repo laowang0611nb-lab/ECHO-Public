@@ -976,5 +976,6 @@ async def _refresh_overdue_tasks(session: AsyncSession, plan_id: UUID) -> None:
             PlanTask.status.in_([PlanTaskStatus.NOT_STARTED, PlanTaskStatus.IN_PROGRESS]),
         )
         .values(status=PlanTaskStatus.OVERDUE)
-        .execution_options(synchronize_session=False)
+        .execution_options(synchronize_session="fetch")
     )
+    await session.commit()

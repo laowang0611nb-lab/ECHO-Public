@@ -241,8 +241,13 @@ async def create_strategy_from_analysis(
     requester_id: UUID,
     payload: AIAnalysisStrategyRequest,
 ):
-    analysis = await _load_analysis(session, course_id, analysis_id)
     await ensure_teacher(session, course_id, requester_id)
+    analysis = await _load_analysis(
+        session,
+        course_id,
+        analysis_id,
+        for_update=True,
+    )
     if analysis.result is None:
         raise AIAnalysisConflictError("Analysis result is not available")
     if analysis.result.insufficient_evidence:
@@ -497,8 +502,10 @@ async def _load_analysis(
     session: AsyncSession,
     course_id: UUID,
     analysis_id: UUID,
+    *,
+    for_update: bool = False,
 ) -> AIAnalysis:
-    analysis = await session.scalar(
+    query = (
         select(AIAnalysis)
         .options(
             selectinload(AIAnalysis.result),
@@ -506,6 +513,9 @@ async def _load_analysis(
         )
         .where(AIAnalysis.id == analysis_id, AIAnalysis.course_id == course_id)
     )
+    if for_update:
+        query = query.with_for_update()
+    analysis = await session.scalar(query)
     if analysis is None:
         raise AIAnalysisNotFoundError
     return analysis

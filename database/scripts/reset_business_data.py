@@ -68,17 +68,32 @@ def _parse_args() -> argparse.Namespace:
 
 async def _existing_tables(connection: AsyncConnection, schema: str) -> list[str]:
     result = await connection.execute(
-        text("select tablename from pg_tables where schemaname = :schema order by tablename"),
+        text(
+            "select tablename from pg_tables where schemaname = :schema order by tablename"
+        ),
         {"schema": schema},
     )
     return [row[0] for row in result]
 
 
-async def _row_counts(connection: AsyncConnection, tables: list[str]) -> dict[str, int]:
+def _quote_identifier(identifier: str) -> str:
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def _qualified_table(schema: str, table: str) -> str:
+    return f"{_quote_identifier(schema)}.{_quote_identifier(table)}"
+
+
+async def _row_counts(
+    connection: AsyncConnection,
+    schema: str,
+    tables: list[str],
+) -> dict[str, int]:
     if not tables:
         return {}
     statement = " union all ".join(
-        f"select '{table}' as table_name, count(*) as row_count from \"{table}\""
+        f"select '{table}' as table_name, count(*) as row_count "
+        f"from {_qualified_table(schema, table)}"
         for table in tables
     )
     result = await connection.execute(text(statement))
@@ -105,13 +120,15 @@ async def reset_business_data(
             if keep_accounts:
                 targets = [table for table in targets if table not in ACCOUNT_TABLES]
 
-            before = await _row_counts(connection, existing)
+            before = await _row_counts(connection, schema, existing)
 
             if targets:
-                quoted = ", ".join(f'"{table}"' for table in targets)
-                await connection.execute(text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE"))
+                quoted = ", ".join(_qualified_table(schema, table) for table in targets)
+                await connection.execute(
+                    text(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
+                )
 
-            after = await _row_counts(connection, existing)
+            after = await _row_counts(connection, schema, existing)
 
         kept = sorted(set(existing) - set(targets))
         return {
@@ -122,7 +139,9 @@ async def reset_business_data(
             "unknown_tables": unknown,
             "rows_before": sum(before.values()),
             "rows_after": sum(after.values()),
-            "remaining_rows": {table: count for table, count in after.items() if count > 0},
+            "remaining_rows": {
+                table: count for table, count in after.items() if count > 0
+            },
         }
     finally:
         await engine.dispose()

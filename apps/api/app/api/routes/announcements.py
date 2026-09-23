@@ -9,6 +9,7 @@ from app.schemas.announcement import (
     AnnouncementPage,
     AnnouncementReadResponse,
     AnnouncementResponse,
+    AnnouncementUpdateRequest,
 )
 from app.services.announcements import (
     AnnouncementForbiddenError,
@@ -16,6 +17,7 @@ from app.services.announcements import (
     create_course_announcement,
     list_course_announcements,
     mark_announcement_read,
+    update_course_announcement,
 )
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 
@@ -54,6 +56,29 @@ async def create_announcement(
         return await create_course_announcement(
             session,
             course_id,
+            current_user.id,
+            payload,
+        )
+    except Exception as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.patch(
+    "/courses/{course_id}/announcements/{announcement_id}",
+    response_model=AnnouncementResponse,
+)
+async def update_announcement(
+    course_id: UUID,
+    announcement_id: UUID,
+    payload: AnnouncementUpdateRequest,
+    current_user: CurrentUser,
+    session: DBSession,
+):
+    try:
+        return await update_course_announcement(
+            session,
+            course_id,
+            announcement_id,
             current_user.id,
             payload,
         )

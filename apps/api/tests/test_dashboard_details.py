@@ -7,6 +7,7 @@ from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
 from database.models.user import UserRole
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
@@ -152,6 +153,28 @@ async def test_teacher_drilldown_endpoints(
     assert point.json()["affected_students"] == 1
     assert learning.status_code == 200
     assert learning.json()["recent_evidence"][0]["event_type"] == "quiz_wrong"
+
+    async with session_factory() as session:
+        document = await session.scalar(
+            select(Document)
+            .join(Chapter, Chapter.document_id == Document.id)
+            .where(Chapter.id == chapter_id)
+        )
+        assert document is not None
+        document.trashed_at = datetime.now(UTC)
+        await session.commit()
+
+    hidden_chapters = await client.get(
+        f"/api/v1/courses/{course['id']}/chapters/analytics",
+        headers=auth_headers(teacher),
+    )
+    hidden_point = await client.get(
+        f"/api/v1/courses/{course['id']}/knowledge-points/{point_id}/analytics",
+        headers=auth_headers(teacher),
+    )
+    assert hidden_chapters.status_code == 200
+    assert hidden_chapters.json() == []
+    assert hidden_point.status_code == 404
 
 
 async def test_student_cannot_use_drilldown(

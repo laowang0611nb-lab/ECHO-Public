@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from database.models.course import CourseMember
 from database.models.document import Document
-from database.models.knowledge import Chapter, KnowledgePoint
+from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import MasterySnapshot, StudentKnowledgeState
 from database.models.user import UserRole
 from httpx import AsyncClient
@@ -86,6 +86,48 @@ async def test_teacher_generates_and_lists_structure(
     assert len(generated.json()[0]["knowledge_points"]) == 2
     assert listed.status_code == 200
     assert listed.json()[0]["knowledge_points"][0]["name"] == "Point 1"
+
+
+async def test_generation_writes_chapter_ids_back_to_existing_chunks(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "knowledge-chunk-map@example.com", "teacher")
+    _, document = await create_ready_document(client, teacher)
+    async with session_factory() as session:
+        stored = await session.get(Document, UUID(document["id"]))
+        assert stored is not None
+        contents = ["Point 1 detail", "Point 2 detail", "Point 3 detail"]
+        session.add_all(
+            [
+                KnowledgeChunk(
+                    course_id=stored.course_id,
+                    document_id=stored.id,
+                    chunk_index=index,
+                    page_start=1 if index < 2 else 2,
+                    page_end=1 if index < 2 else 2,
+                    content=content,
+                    char_count=len(content),
+                    metadata_json={"source": "test"},
+                )
+                for index, content in enumerate(contents)
+            ]
+        )
+        await session.commit()
+
+    response = await client.post(
+        f"/api/v1/documents/{document['id']}/generate-structure",
+        headers=auth_headers(teacher),
+    )
+    assert response.status_code == 200
+
+    async with session_factory() as session:
+        chunks = list(
+            await session.scalars(select(KnowledgeChunk).order_by(KnowledgeChunk.chunk_index))
+        )
+    assert chunks
+    assert all(chunk.chapter_id is not None for chunk in chunks)
+    assert len({chunk.chapter_id for chunk in chunks}) == 2
 
 
 async def test_generation_timeout_returns_gateway_timeout(

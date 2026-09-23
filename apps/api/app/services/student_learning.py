@@ -243,10 +243,19 @@ async def get_student_course_progress(
                 LearningEvent.knowledge_point_id,
                 func.max(LearningEvent.created_at).label("last_learning_at"),
             )
+            .join(
+                KnowledgePoint,
+                KnowledgePoint.id == LearningEvent.knowledge_point_id,
+            )
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
             .where(
                 LearningEvent.course_id == course_id,
                 LearningEvent.user_id == student_id,
                 LearningEvent.knowledge_point_id.is_not(None),
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
             .group_by(LearningEvent.knowledge_point_id)
         )
@@ -264,10 +273,19 @@ async def get_student_course_progress(
     )
     current_event = await session.scalar(
         select(LearningEvent)
+        .join(
+            KnowledgePoint,
+            KnowledgePoint.id == LearningEvent.knowledge_point_id,
+        )
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
         .where(
             LearningEvent.course_id == course_id,
             LearningEvent.user_id == student_id,
             LearningEvent.knowledge_point_id.is_not(None),
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
         )
         .order_by(LearningEvent.created_at.desc(), LearningEvent.id.desc())
         .limit(1)

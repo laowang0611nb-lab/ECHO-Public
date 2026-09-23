@@ -9,6 +9,7 @@ from database.models.user import UserRole
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services.chunk_mapping import assign_document_chunks_to_chapters
 from app.services.knowledge import (
     KnowledgeDocumentNotFoundError,
     KnowledgeDocumentNotReadyError,
@@ -126,6 +127,8 @@ async def chunk_document(
             for draft in drafts
         ]
     )
+    await session.flush()
+    await assign_document_chunks_to_chapters(session, document_id)
     await session.commit()
 
     result = await session.scalars(

@@ -172,6 +172,85 @@ async def test_teacher_reads_course_dashboard(
     }
 
 
+async def test_dashboard_excludes_soft_deleted_document_content(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "dashboard-delete-teacher@example.com", "teacher")
+    student = await login(client, "dashboard-delete-student@example.com", "student")
+    course = (
+        await client.post(
+            "/api/v1/courses",
+            headers=auth_headers(teacher),
+            json={"name": "Deleted Dashboard Course"},
+        )
+    ).json()
+    course_id = UUID(course["id"])
+    document_id = uuid4()
+    chapter_id = uuid4()
+    point_id = uuid4()
+    async with session_factory() as session:
+        session.add_all(
+            [
+                Document(
+                    id=document_id,
+                    course_id=course_id,
+                    uploaded_by=UUID(teacher["id"]),
+                    original_name="deleted.pdf",
+                    storage_key=f"tests/{document_id}.pdf",
+                    content_type="application/pdf",
+                    size_bytes=100,
+                    status=DocumentStatus.READY,
+                    trashed_at=datetime.now(UTC),
+                ),
+                Chapter(
+                    id=chapter_id,
+                    course_id=course_id,
+                    document_id=document_id,
+                    title="Deleted Chapter",
+                    order_index=0,
+                ),
+                KnowledgePoint(
+                    id=point_id,
+                    course_id=course_id,
+                    chapter_id=chapter_id,
+                    name="Deleted Point",
+                    order_index=0,
+                ),
+                CourseMember(
+                    course_id=course_id,
+                    user_id=UUID(student["id"]),
+                    role=UserRole.STUDENT,
+                ),
+                StudentKnowledgeState(
+                    course_id=course_id,
+                    user_id=UUID(student["id"]),
+                    knowledge_point_id=point_id,
+                    score=20.0,
+                ),
+            ]
+        )
+        await session.commit()
+
+    dashboard = await client.get(
+        f"/api/v1/courses/{course_id}/dashboard",
+        headers=auth_headers(teacher),
+    )
+    overview = await client.get(
+        "/api/v1/dashboard/overview",
+        params={"courseId": str(course_id)},
+        headers=auth_headers(teacher),
+    )
+
+    assert dashboard.status_code == 200
+    assert dashboard.json()["average_mastery"] is None
+    assert dashboard.json()["high_risk_knowledge_points"] == []
+    assert overview.status_code == 200
+    assert overview.json()["stats"]["attention_knowledge_point_count"] == 0
+    assert overview.json()["chapter_mastery"] == []
+    assert overview.json()["learning_difficulties"] == []
+
+
 async def test_student_cannot_read_teacher_dashboard(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

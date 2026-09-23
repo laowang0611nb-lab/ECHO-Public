@@ -13,6 +13,7 @@ from app.schemas.announcement import (
     AnnouncementPage,
     AnnouncementReadResponse,
     AnnouncementResponse,
+    AnnouncementUpdateRequest,
 )
 from app.services.course import get_course_for_member
 from app.services.teacher_access import decode_cursor, encode_cursor
@@ -59,6 +60,38 @@ async def create_course_announcement(
         created_by=requester_id,
     )
     session.add(announcement)
+    await session.commit()
+    await session.refresh(announcement)
+    return _announcement_response(announcement, is_read=False, read_at=None)
+
+
+async def update_course_announcement(
+    session: AsyncSession,
+    course_id: UUID,
+    announcement_id: UUID,
+    requester_id: UUID,
+    payload: AnnouncementUpdateRequest,
+) -> AnnouncementResponse:
+    await get_course_for_member(session, course_id, requester_id)
+    if await _teacher_membership(session, course_id, requester_id) is None:
+        raise AnnouncementForbiddenError
+    announcement = await session.scalar(
+        select(CourseAnnouncement).where(
+            CourseAnnouncement.id == announcement_id,
+            CourseAnnouncement.course_id == course_id,
+        )
+    )
+    if announcement is None:
+        raise AnnouncementNotFoundError
+    if "title" in payload.model_fields_set and payload.title is not None:
+        announcement.title = payload.title
+    if "content" in payload.model_fields_set and payload.content is not None:
+        announcement.content = payload.content
+    if "publish" in payload.model_fields_set and payload.publish is not None:
+        if payload.publish and announcement.published_at is None:
+            announcement.published_at = datetime.now(UTC)
+        elif not payload.publish:
+            announcement.published_at = None
     await session.commit()
     await session.refresh(announcement)
     return _announcement_response(announcement, is_read=False, read_at=None)

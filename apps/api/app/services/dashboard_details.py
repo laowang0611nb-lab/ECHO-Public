@@ -1,10 +1,11 @@
 from uuid import UUID
 
 from database.models.course import CourseMember
+from database.models.document import Document
 from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.learning import LearningEvent, StudentKnowledgeState
 from database.models.user import User, UserRole
-from sqlalchemy import distinct, func, select
+from sqlalchemy import and_, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.dashboard_details import (
@@ -41,12 +42,23 @@ async def list_chapter_analytics(
             func.count(distinct(StudentKnowledgeState.user_id)).label("active_learners"),
             func.avg(StudentKnowledgeState.score).label("average_mastery"),
         )
-        .outerjoin(KnowledgePoint, KnowledgePoint.chapter_id == Chapter.id)
+        .outerjoin(
+            KnowledgePoint,
+            and_(
+                KnowledgePoint.chapter_id == Chapter.id,
+                KnowledgePoint.trashed_at.is_(None),
+            ),
+        )
         .outerjoin(
             StudentKnowledgeState,
             StudentKnowledgeState.knowledge_point_id == KnowledgePoint.id,
         )
-        .where(Chapter.course_id == course_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            Chapter.course_id == course_id,
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
         .group_by(Chapter.id, Chapter.title, Chapter.order_index)
         .order_by(Chapter.order_index)
     )
@@ -83,9 +95,13 @@ async def get_knowledge_point_analytics(
         await session.execute(
             select(KnowledgePoint.id, KnowledgePoint.name, Chapter.id, Chapter.title)
             .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
             .where(
                 KnowledgePoint.id == knowledge_point_id,
                 KnowledgePoint.course_id == course_id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
         )
     ).first()
@@ -143,9 +159,18 @@ async def get_student_learning_detail(
     states = list(
         await session.scalars(
             select(StudentKnowledgeState)
+            .join(
+                KnowledgePoint,
+                KnowledgePoint.id == StudentKnowledgeState.knowledge_point_id,
+            )
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
             .where(
                 StudentKnowledgeState.course_id == course_id,
                 StudentKnowledgeState.user_id == student_id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
             )
             .order_by(StudentKnowledgeState.score)
         )
@@ -161,7 +186,27 @@ async def get_student_learning_detail(
             LearningEvent.evidence,
             LearningEvent.created_at,
         )
-        .outerjoin(KnowledgePoint, KnowledgePoint.id == LearningEvent.knowledge_point_id)
+        .outerjoin(
+            KnowledgePoint,
+            and_(
+                KnowledgePoint.id == LearningEvent.knowledge_point_id,
+                KnowledgePoint.trashed_at.is_(None),
+            ),
+        )
+        .outerjoin(
+            Chapter,
+            and_(
+                Chapter.id == KnowledgePoint.chapter_id,
+                Chapter.trashed_at.is_(None),
+            ),
+        )
+        .outerjoin(
+            Document,
+            and_(
+                Document.id == Chapter.document_id,
+                Document.trashed_at.is_(None),
+            ),
+        )
         .where(
             LearningEvent.course_id == course_id,
             LearningEvent.user_id == student_id,

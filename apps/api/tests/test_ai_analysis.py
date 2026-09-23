@@ -232,6 +232,14 @@ async def test_initial_analysis_collects_evidence_and_creates_traceable_strategy
     assert refreshed.status_code == 200
     assert refreshed.json()["result"]["strategy_id"] == strategy["id"]
 
+    repeated = await client.post(
+        f"/api/v1/courses/{course['id']}/ai-analysis/{analysis['id']}/strategy",
+        headers=auth_headers(teacher),
+        json={"priority": "high"},
+    )
+    assert repeated.status_code in {200, 201}
+    assert repeated.json()["id"] == strategy["id"]
+
     listed = await client.get(
         f"/api/v1/courses/{course['id']}/ai-analysis",
         headers=auth_headers(teacher),

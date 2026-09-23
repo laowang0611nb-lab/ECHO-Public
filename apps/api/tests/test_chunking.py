@@ -1,7 +1,7 @@
 from uuid import UUID, uuid4
 
 from database.models.document import Document, DocumentPage, DocumentStatus
-from database.models.knowledge import KnowledgeChunk
+from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -100,6 +100,69 @@ async def test_teacher_creates_chunks_and_rechunk_replaces(
         count = await session.scalar(select(func.count()).select_from(KnowledgeChunk))
 
     assert count == len(second.json())
+
+
+async def test_chunking_assigns_chunks_to_matching_chapters(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "chunk-mapping@example.com", "teacher")
+    document = await create_ready_document(client, session_factory, teacher)
+    async with session_factory() as session:
+        stored = await session.get(Document, UUID(document["id"]))
+        assert stored is not None
+        alpha = Chapter(
+            course_id=stored.course_id,
+            document_id=stored.id,
+            title="Alpha Topic",
+            order_index=0,
+        )
+        beta = Chapter(
+            course_id=stored.course_id,
+            document_id=stored.id,
+            title="Beta Topic",
+            order_index=1,
+        )
+        session.add_all([alpha, beta])
+        await session.flush()
+        session.add_all(
+            [
+                KnowledgePoint(
+                    course_id=stored.course_id,
+                    chapter_id=alpha.id,
+                    name="Alpha",
+                    order_index=0,
+                ),
+                KnowledgePoint(
+                    course_id=stored.course_id,
+                    chapter_id=beta.id,
+                    name="Beta",
+                    order_index=0,
+                ),
+            ]
+        )
+        await session.commit()
+        alpha_id = alpha.id
+        beta_id = beta.id
+
+    response = await client.post(
+        f"/api/v1/documents/{document['id']}/chunks",
+        headers=auth_headers(teacher),
+    )
+    assert response.status_code == 200
+
+    async with session_factory() as session:
+        chunks = list(
+            await session.scalars(select(KnowledgeChunk).order_by(KnowledgeChunk.chunk_index))
+        )
+    assert chunks
+    assert all(chunk.chapter_id is not None for chunk in chunks)
+    alpha_chunks = [chunk for chunk in chunks if chunk.chapter_id == alpha_id]
+    beta_chunks = [chunk for chunk in chunks if chunk.chapter_id == beta_id]
+    assert alpha_chunks
+    assert beta_chunks
+    assert all(chunk.page_start == 1 for chunk in alpha_chunks)
+    assert all(chunk.page_start == 2 for chunk in beta_chunks)
 
 
 async def test_student_cannot_create_chunks(

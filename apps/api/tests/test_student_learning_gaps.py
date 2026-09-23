@@ -297,6 +297,29 @@ async def test_student_progress_uses_server_side_completion_rule(
     assert body["chapters"][0]["mastered_knowledge_point_count"] == 0
 
 
+async def test_student_progress_ignores_soft_deleted_current_point(
+    client: AsyncClient,
+    gap_seed: dict[str, str],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as session:
+        point = await session.get(KnowledgePoint, UUID(gap_seed["knowledge_point_id"]))
+        assert point is not None
+        point.trashed_at = datetime.now(UTC)
+        await session.commit()
+
+    response = await client.get(
+        f"/api/v1/courses/{gap_seed['course_id']}/students/{gap_seed['student_id']}/progress",
+        headers={"X-User-Id": gap_seed["student_id"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["current_knowledge_point_id"] is None
+    assert body["chapters"][0]["knowledge_point_count"] == 0
+    assert body["chapters"][0]["status"] == "not_started"
+
+
 async def test_wrong_questions_return_real_attempt_evidence(
     client: AsyncClient,
     gap_seed: dict[str, str],
@@ -437,11 +460,34 @@ async def test_course_announcements_support_publish_list_and_read(
         headers=teacher_headers,
     )
     assert draft.status_code == 201
+    draft_id = draft.json()["id"]
     student_drafts = await client.get(
         f"/api/v1/courses/{gap_seed['course_id']}/announcements?includeDrafts=true",
         headers=student_headers,
     )
     assert all(item["title"] != "Draft Notice" for item in student_drafts.json()["items"])
+
+    forbidden_publish = await client.patch(
+        f"/api/v1/courses/{gap_seed['course_id']}/announcements/{draft_id}",
+        json={"publish": True},
+        headers=student_headers,
+    )
+    assert forbidden_publish.status_code == 403
+
+    published = await client.patch(
+        f"/api/v1/courses/{gap_seed['course_id']}/announcements/{draft_id}",
+        json={"title": "Published Notice", "publish": True},
+        headers=teacher_headers,
+    )
+    assert published.status_code == 200
+    assert published.json()["title"] == "Published Notice"
+    assert published.json()["published_at"] is not None
+
+    student_visible = await client.get(
+        f"/api/v1/courses/{gap_seed['course_id']}/announcements",
+        headers=student_headers,
+    )
+    assert any(item["id"] == draft_id for item in student_visible.json()["items"])
 
     async with session_factory() as session:
         assert await session.get(CourseAnnouncement, UUID(announcement_id)) is not None

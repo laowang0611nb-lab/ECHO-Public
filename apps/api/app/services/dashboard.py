@@ -3,7 +3,8 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from database.models.course import CourseMember
-from database.models.knowledge import KnowledgePoint
+from database.models.document import Document
+from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType, StudentKnowledgeState
 from database.models.review import AIReviewFlag, ReviewStatus
 from database.models.user import UserRole
@@ -104,8 +105,18 @@ async def get_course_dashboard(
         )
     )
     average_mastery = await session.scalar(
-        select(func.avg(StudentKnowledgeState.score)).where(
-            StudentKnowledgeState.course_id == course_id
+        select(func.avg(StudentKnowledgeState.score))
+        .join(
+            KnowledgePoint,
+            KnowledgePoint.id == StudentKnowledgeState.knowledge_point_id,
+        )
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            StudentKnowledgeState.course_id == course_id,
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
         )
     )
     pending_review_count = await session.scalar(
@@ -148,7 +159,14 @@ async def get_course_dashboard(
             StudentKnowledgeState,
             StudentKnowledgeState.knowledge_point_id == KnowledgePoint.id,
         )
-        .where(KnowledgePoint.course_id == course_id)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            KnowledgePoint.course_id == course_id,
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+        )
         .group_by(KnowledgePoint.id, KnowledgePoint.name)
         .having(func.avg(StudentKnowledgeState.score) < 60)
         .order_by(func.avg(StudentKnowledgeState.score), KnowledgePoint.name)
@@ -244,7 +262,14 @@ async def get_teacher_dashboard_overview(
                 StudentKnowledgeState,
                 StudentKnowledgeState.knowledge_point_id == KnowledgePoint.id,
             )
-            .where(KnowledgePoint.course_id == course_id)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
+                KnowledgePoint.course_id == course_id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
+            )
             .group_by(KnowledgePoint.id)
             .having(func.avg(StudentKnowledgeState.score) < 60)
             .subquery()

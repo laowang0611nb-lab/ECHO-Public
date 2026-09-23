@@ -4,7 +4,7 @@ from uuid import UUID
 
 from database.models.document import Document
 from database.models.knowledge import Chapter, KnowledgePoint
-from database.models.planning import plan_task_target_students
+from database.models.planning import PlanTask, PlanTaskStatus, plan_task_target_students
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -187,6 +187,50 @@ async def test_published_plan_without_tasks_can_initialize_and_completed_task_is
         json={"status": "not_started"},
     )
     assert immutable.status_code == 409
+
+
+async def test_overdue_task_refresh_is_persisted_and_visible(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "overdue-refresh@example.com", "teacher")
+    student = await login(client, "overdue-refresh-student@example.com", "student")
+    _, course_id, point_ids, strategy = await _accepted_strategy(
+        client,
+        session_factory,
+        chat_provider,
+        teacher,
+        [student["id"]],
+    )
+    plan = await _create_plan(
+        client,
+        teacher,
+        course_id,
+        strategy["id"],
+        point_ids[0],
+    )
+    task_id = await _generate_tasks(client, chat_provider, teacher, plan, point_ids[0])
+    async with session_factory() as session:
+        task = await session.get(PlanTask, UUID(task_id))
+        assert task is not None
+        task.due_at = datetime.now(UTC) - timedelta(days=1)
+        task.status = PlanTaskStatus.NOT_STARTED
+        await session.commit()
+
+    listed = await client.get(
+        f"/api/v1/execution-plans/{plan['id']}/tasks",
+        headers=auth_headers(teacher),
+    )
+    detail = await client.get(
+        f"/api/v1/execution-plans/{plan['id']}",
+        headers=auth_headers(teacher),
+    )
+
+    assert listed.status_code == 200
+    assert listed.json()["items"][0]["status"] == "overdue"
+    assert detail.status_code == 200
+    assert detail.json()["progress"]["overdue_tasks"] == 1
 
 
 async def test_grouped_task_rejects_empty_targets_and_cross_student_events(

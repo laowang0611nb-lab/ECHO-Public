@@ -404,3 +404,4 @@ def test_p1_openapi_paths() -> None:
     assert "/api/v1/auth/me/profile" in paths
     assert "/api/v1/auth/change-password" in paths
     assert "/api/v1/courses/{course_id}/documents/{document_id}/metadata" in paths
+    assert "/api/v1/courses/{course_id}/announcements/{announcement_id}" in paths

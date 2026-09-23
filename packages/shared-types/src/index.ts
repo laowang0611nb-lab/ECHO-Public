@@ -1966,6 +1966,12 @@ export interface AnnouncementCreateRequest {
   publish?: boolean;
 }
 
+export interface AnnouncementUpdateRequest {
+  title?: string;
+  content?: string;
+  publish?: boolean;
+}
+
 export interface Announcement {
   id: string;
   course_id: string;

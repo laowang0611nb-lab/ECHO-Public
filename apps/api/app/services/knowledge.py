@@ -24,6 +24,7 @@ from app.schemas.knowledge import (
     KnowledgePointMergeRequest,
     KnowledgePointUpdate,
 )
+from app.services.chunk_mapping import assign_document_chunks_to_chapters
 from app.services.course import get_course_for_member
 from app.services.llm import KnowledgeStructureProvider
 
@@ -174,6 +175,7 @@ async def _replace_document_structure(
         )
         await session.execute(delete(Chapter).where(Chapter.id.in_(unused_chapter_ids)))
 
+    await assign_document_chunks_to_chapters(session, document.id, chapters)
     return chapters
 
 
