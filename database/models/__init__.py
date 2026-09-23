@@ -1,3 +1,12 @@
+from database.models.analysis import (
+    AIAnalysis,
+    AIAnalysisEvidence,
+    AIAnalysisEvidenceSource,
+    AIAnalysisResult,
+    AIAnalysisScope,
+    AIAnalysisStatus,
+    AIAnalysisType,
+)
 from database.models.announcement import CourseAnnouncement, CourseAnnouncementRead
 from database.models.auth import AuthSession, PhoneVerificationClaim, UserCredential
 from database.models.chat import (
@@ -74,6 +83,13 @@ from database.models.review import (
 from database.models.user import User, UserRole, UserStatus
 
 __all__ = [
+    "AIAnalysis",
+    "AIAnalysisEvidence",
+    "AIAnalysisEvidenceSource",
+    "AIAnalysisResult",
+    "AIAnalysisScope",
+    "AIAnalysisStatus",
+    "AIAnalysisType",
     "AIReviewFlag",
     "AuthSession",
     "Chapter",
@@ -107,8 +123,8 @@ __all__ = [
     "Notification",
     "NotificationSeverity",
     "NotificationType",
-    "PlanTargetScope",
     "PhoneVerificationClaim",
+    "PlanTargetScope",
     "PlanTask",
     "PlanTaskStatus",
     "PlanTaskType",

@@ -3,6 +3,9 @@ from database.db.base import Base
 
 def test_core_tables_are_registered() -> None:
     assert set(Base.metadata.tables) == {
+        "ai_analyses",
+        "ai_analysis_evidence",
+        "ai_analysis_results",
         "auth_sessions",
         "ai_review_flags",
         "chapters",

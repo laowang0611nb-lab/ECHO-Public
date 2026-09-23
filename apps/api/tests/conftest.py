@@ -87,6 +87,7 @@ class FakeChatProvider:
         self.last_messages: list[dict[str, str]] = []
         self.last_stream_messages: list[dict[str, str]] = []
         self.last_complete_messages: list[dict[str, str]] = []
+        self.answer_builder = None
         self.fail = False
         self.structured_answer = (
             '{"title":"Quick Check","prompt":"Which option matches?",'
@@ -100,7 +101,10 @@ class FakeChatProvider:
         self.last_stream_messages = messages
         if self.fail:
             raise RuntimeError("fake chat failure")
-        yield self.answer
+        if self.answer_builder is not None:
+            yield self.answer_builder(messages)
+        else:
+            yield self.answer
 
     async def complete(self, messages: list[dict[str, str]]) -> str:
         self.last_messages = messages

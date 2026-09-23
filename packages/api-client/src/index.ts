@@ -15,6 +15,12 @@ import type {
   WrongQuestionDetail,
   WrongQuestionPage,
   AuthSessionResponse,
+  AIAnalysis,
+  AIAnalysisCreateRequest,
+  AIAnalysisPage,
+  AIAnalysisReanalyzeRequest,
+  AIAnalysisResult,
+  AIAnalysisStrategyRequest,
   Chapter,
   ChapterAnalytics,
   ChapterCreateRequest,
@@ -919,6 +925,67 @@ export function createApiClient({
       request<PlanEffect>(
         `/api/v1/teaching-strategies/${strategyId}/effect`,
         undefined,
+        userId,
+      ),
+    createAIAnalysis: (
+      userId: string,
+      courseId: string,
+      payload: AIAnalysisCreateRequest,
+    ) =>
+      request<AIAnalysis>(
+        `/api/v1/courses/${courseId}/ai-analysis`,
+        { method: "POST", body: JSON.stringify(payload) },
+        userId,
+      ),
+    listAIAnalyses: (
+      userId: string,
+      courseId: string,
+      options?: { knowledgePointId?: string; cursor?: string; limit?: number },
+    ) => {
+      const params = new URLSearchParams();
+      if (options?.knowledgePointId)
+        params.set("knowledgePointId", options.knowledgePointId);
+      if (options?.cursor) params.set("cursor", options.cursor);
+      if (options?.limit) params.set("limit", String(options.limit));
+      const query = params.toString();
+      return request<AIAnalysisPage>(
+        `/api/v1/courses/${courseId}/ai-analysis${query ? `?${query}` : ""}`,
+        undefined,
+        userId,
+      );
+    },
+    getAIAnalysis: (userId: string, courseId: string, analysisId: string) =>
+      request<AIAnalysis>(
+        `/api/v1/courses/${courseId}/ai-analysis/${analysisId}`,
+        undefined,
+        userId,
+      ),
+    getAIAnalysisResult: (userId: string, courseId: string, analysisId: string) =>
+      request<AIAnalysisResult>(
+        `/api/v1/courses/${courseId}/ai-analysis/${analysisId}/result`,
+        undefined,
+        userId,
+      ),
+    reanalyzeAIAnalysis: (
+      userId: string,
+      courseId: string,
+      analysisId: string,
+      payload?: AIAnalysisReanalyzeRequest,
+    ) =>
+      request<AIAnalysis>(
+        `/api/v1/courses/${courseId}/ai-analysis/${analysisId}/reanalyze`,
+        { method: "POST", body: JSON.stringify(payload ?? {}) },
+        userId,
+      ),
+    createStrategyFromAIAnalysis: (
+      userId: string,
+      courseId: string,
+      analysisId: string,
+      payload?: AIAnalysisStrategyRequest,
+    ) =>
+      request<TeachingStrategyDetail>(
+        `/api/v1/courses/${courseId}/ai-analysis/${analysisId}/strategy`,
+        { method: "POST", body: JSON.stringify(payload ?? {}) },
         userId,
       ),
     listExecutionPlans: (

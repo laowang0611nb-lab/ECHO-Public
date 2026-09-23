@@ -297,6 +297,26 @@ contracts are frozen in `docs/API契约.md`.
 Teachers can also regenerate an answer with an instruction without overwriting the
 original message, then inspect versions, regeneration status, and audit history.
 
+## AI secondary analysis
+
+```text
+POST /api/v1/courses/{course_id}/ai-analysis
+GET  /api/v1/courses/{course_id}/ai-analysis
+GET  /api/v1/courses/{course_id}/ai-analysis/{analysis_id}
+GET  /api/v1/courses/{course_id}/ai-analysis/{analysis_id}/result
+POST /api/v1/courses/{course_id}/ai-analysis/{analysis_id}/reanalyze
+POST /api/v1/courses/{course_id}/ai-analysis/{analysis_id}/strategy
+```
+
+Course teachers can persist an evidence-backed analysis and later create a linked
+secondary analysis without overwriting the original result. Evidence is collected
+from learning events, mastery snapshots, quick checks, conversations, review flags,
+citations, knowledge chunks, and the previous analysis. Every fact returned by the
+model must reference a persisted evidence ID. When fewer than two evidence items
+are available, the API returns `insufficient_evidence=true` and does not infer a
+cause. A sufficiently supported result can create a teaching strategy in the
+`suggested` state; it never auto-accepts or publishes the strategy.
+
 ## Teacher resources and evidence
 
 ```text
@@ -375,6 +395,9 @@ Implemented domain models:
 - `ReviewAnswerVersion`: immutable original, regenerated, and teacher-edit answer versions.
 - `ReviewRegenerationRun`: persisted regeneration status, progress, instruction, and error.
 - `ReviewHistoryEntry`: ordered audit trail for review decisions and regeneration.
+- `AIAnalysis`: persisted initial or secondary analysis run and scope.
+- `AIAnalysisEvidence`: source-linked evidence snapshot used by one analysis.
+- `AIAnalysisResult`: structured conclusion, facts, recommendation, and strategy link.
 
 Migrations:
 
@@ -393,6 +416,10 @@ Migrations:
 - `a3c4d5e6f7a8`: optional teacher and student profiles.
 - `b4c5d6e7f8a9`: review answer versions, regeneration runs, and review history.
 - `c5d6e7f8a9b0`: teacher resources, page dimensions, soft deletion, and graph relationships.
+- `d6e7f8a9b0c1`: teaching strategies, execution plans, tasks, and plan events.
+- `e7f8a9b0c1d2`: course profile and resource metadata.
+- `e3f4a5b6c7d8`: course announcements and read state.
+- `f4a5b6c7d8e9`: AI analysis records, evidence, results, and strategy linkage.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

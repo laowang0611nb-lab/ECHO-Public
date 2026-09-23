@@ -1324,6 +1324,118 @@ export interface TeachingStrategyPage {
   nextCursor: string | null;
 }
 
+export type AIAnalysisType = "initial" | "secondary";
+
+export type AIAnalysisStatus = "analyzing" | "completed" | "failed";
+
+export type AIAnalysisScope =
+  | "whole_class"
+  | "student_group"
+  | "custom_students";
+
+export type AIAnalysisEvidenceSource =
+  | "initial_analysis"
+  | "learning_event"
+  | "mastery_snapshot"
+  | "quick_check_attempt"
+  | "conversation_message"
+  | "review_flag"
+  | "message_citation"
+  | "knowledge_chunk";
+
+export interface AIAnalysisCreateRequest {
+  knowledge_point_id?: string | null;
+  scope?: AIAnalysisScope;
+  student_ids?: string[];
+  time_range_days?: number;
+  focus?: string | null;
+}
+
+export interface AIAnalysisReanalyzeRequest {
+  focus?: string | null;
+  time_range_days?: number | null;
+}
+
+export interface AIAnalysisFact {
+  fact: string;
+  evidence_ids: string[];
+}
+
+export interface AIAnalysisEvidence {
+  id: string;
+  source_type: AIAnalysisEvidenceSource;
+  source_id: string;
+  student_id: string | null;
+  knowledge_point_id: string | null;
+  label: string;
+  description: string | null;
+  snapshot: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AIAnalysisResult {
+  conclusion: string;
+  root_cause: string;
+  recommendation: string;
+  affected_student_ids: string[];
+  facts: AIAnalysisFact[];
+  evidence_summary: Record<string, unknown>[];
+  recommendation_payload: Record<string, unknown>;
+  insufficient_evidence: boolean;
+  model_name: string | null;
+  strategy_id: string | null;
+  generated_at: string;
+}
+
+export interface AIAnalysis {
+  id: string;
+  course_id: string;
+  knowledge_point_id: string | null;
+  previous_analysis_id: string | null;
+  analysis_type: AIAnalysisType;
+  scope: AIAnalysisScope;
+  student_ids: string[];
+  time_range_days: number;
+  focus: string | null;
+  status: AIAnalysisStatus;
+  error_message: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
+  result: AIAnalysisResult | null;
+  evidence: AIAnalysisEvidence[];
+}
+
+export interface AIAnalysisListItem {
+  id: string;
+  course_id: string;
+  knowledge_point_id: string | null;
+  analysis_type: AIAnalysisType;
+  scope: AIAnalysisScope;
+  status: AIAnalysisStatus;
+  student_count: number;
+  evidence_count: number;
+  insufficient_evidence: boolean;
+  conclusion: string | null;
+  recommendation: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface AIAnalysisPage {
+  items: AIAnalysisListItem[];
+  total: number;
+  nextCursor: string | null;
+}
+
+export interface AIAnalysisStrategyRequest {
+  title?: string | null;
+  description?: string | null;
+  type?: TeachingStrategyType | null;
+  priority?: TeachingStrategyPriority | null;
+}
+
 export interface TeachingStrategyGenerateRequest {
   knowledgePointIds: string[];
   studentIds: string[];
