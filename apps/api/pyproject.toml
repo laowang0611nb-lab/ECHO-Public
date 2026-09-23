@@ -1,6 +1,6 @@
 [project]
 name = "echo-api"
-version = "0.0.131"
+version = "0.0.132"
 description = "ECHO education agent backend"
 requires-python = ">=3.11"
 dependencies = [
@@ -24,6 +24,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+asr = [
+    "faster-whisper>=1.2.0,<2.0.0",
+]
 dev = [
     "aiosqlite>=0.20.0,<1.0.0",
     "httpx>=0.28.0,<1.0.0",

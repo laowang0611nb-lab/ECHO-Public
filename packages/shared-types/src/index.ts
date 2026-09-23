@@ -835,6 +835,7 @@ export interface ChatAttachment {
   width: number | null;
   height: number | null;
   duration_seconds: number | null;
+  transcript: string | null;
   url: string | null;
 }
 

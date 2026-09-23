@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 
 from app.api.dependencies import (
+    ASRProviderDep,
     ChatAttachmentStorageDep,
     ChatProviderDep,
     CurrentUser,
@@ -324,6 +325,7 @@ async def stream_message(
     session: DBSession,
     embedding_provider: EmbeddingProviderDep,
     chat_provider: ChatProviderDep,
+    asr_provider: ASRProviderDep,
     attachment_storage: ChatAttachmentStorageDep,
 ):
     try:
@@ -352,6 +354,7 @@ async def stream_message(
             payload.retrieval_limit,
             [attachment.id for attachment in payload.attachments],
             attachment_storage,
+            asr_provider,
         ):
             yield event.encode()
 

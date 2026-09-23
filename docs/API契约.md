@@ -139,6 +139,8 @@ POST /api/v1/courses/{course_id}/knowledge-points/merge
 
 多模态 Chat Provider 输入使用 OpenAI 兼容内容块：图片使用 `image_url`，音频使用 `input_audio`，视频使用 `video_url`。上传和消息持久化不代表模型一定具备对应理解能力；如果 Provider 不支持指定模态，会返回真实错误事件，不会伪造分析结果。
 
+当 `ECHO_ASR_ENABLED=true` 时，音频附件先通过可选依赖 `faster-whisper` 在本地转写，转写结果保存到附件的 `transcript` 字段，并使用 `[音频转写]` 文本块进入 RAG，不再发送 `input_audio`。该能力使用 MIT 许可证的开源实现，模型和推理依赖由部署环境单独安装。
+
 SSE 事件：
 
 | 事件 | 数据结构 |

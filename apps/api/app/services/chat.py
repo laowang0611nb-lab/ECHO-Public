@@ -8,6 +8,7 @@ from uuid import UUID
 
 from database.models.chat import (
     ChatAttachment,
+    ChatAttachmentKind,
     Conversation,
     Message,
     MessageCitation,
@@ -25,9 +26,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.schemas.chat import ConversationCreate, TeacherMessageResponse
 from app.schemas.learning import LearningEventCreate
 from app.schemas.search import ChunkSearchResult
+from app.services.asr import ASRConfigurationError, ASRProvider, ASRProviderError
 from app.services.chat_attachments import (
     attachment_context_text,
     attachment_to_model_content,
@@ -74,6 +77,28 @@ async def _course_has_searchable_material(session: AsyncSession, course_id: UUID
         )
         is not None
     )
+
+
+async def _transcribe_audio_attachments(
+    attachments: list[ChatAttachment],
+    storage: LocalDocumentStorage | None,
+    provider: ASRProvider | None,
+) -> None:
+    if provider is None or storage is None:
+        return
+    for attachment in attachments:
+        if attachment.kind != ChatAttachmentKind.AUDIO or attachment.transcript:
+            continue
+        path = storage.path_for(attachment.storage_key)
+        if not path.is_file():
+            raise ASRProviderError("Audio attachment file is missing")
+        try:
+            attachment.transcript = await provider.transcribe(
+                path,
+                language=settings.asr_language or None,
+            )
+        except (ASRConfigurationError, ASRProviderError):
+            raise
 
 
 def _referenced_sources(
@@ -336,7 +361,15 @@ def _build_prompt(
         user_content: str | list[dict[str, object]] = [{"type": "text", "text": question}]
         for attachment in attachment_items:
             path = storage.path_for(attachment.storage_key)
-            user_content.append(attachment_to_model_content(attachment, path))
+            if attachment.kind == ChatAttachmentKind.AUDIO and attachment.transcript:
+                user_content.append(
+                    {
+                        "type": "text",
+                        "text": f"[音频转写] {attachment.transcript}",
+                    }
+                )
+            else:
+                user_content.append(attachment_to_model_content(attachment, path))
     else:
         user_content = question + attachment_context_text(attachment_items)
     prompt_messages.append({"role": "user", "content": user_content})
@@ -355,6 +388,7 @@ async def _stream_chat_response_contents(
     retrieval_limit: int,
     attachment_ids: list[UUID] | None = None,
     attachment_storage: LocalDocumentStorage | None = None,
+    asr_provider: ASRProvider | None = None,
 ) -> AsyncIterator[ChatEvent]:
     conversation = await session.get(Conversation, conversation_id)
     if conversation is None:
@@ -436,6 +470,11 @@ async def _stream_chat_response_contents(
         user_id=user_id,
         conversation_id=conversation.id,
         attachment_ids=attachment_ids or [],
+    )
+    await _transcribe_audio_attachments(
+        attachments,
+        attachment_storage,
+        asr_provider,
     )
     question_with_attachments = content + attachment_context_text(attachments)
 
@@ -827,6 +866,7 @@ async def stream_chat_response(
     retrieval_limit: int,
     attachment_ids: list[UUID] | None = None,
     attachment_storage: LocalDocumentStorage | None = None,
+    asr_provider: ASRProvider | None = None,
 ) -> AsyncIterator[ChatEvent]:
     try:
         async for event in _stream_chat_response_contents(
@@ -841,6 +881,7 @@ async def stream_chat_response(
             retrieval_limit,
             attachment_ids,
             attachment_storage,
+            asr_provider,
         ):
             yield event
     except Exception as exc:

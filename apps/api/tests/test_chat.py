@@ -18,7 +18,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.dependencies import get_chat_attachment_storage
+from app.api.dependencies import get_asr_provider, get_chat_attachment_storage
 from app.main import app
 from app.services.chat import (
     _course_has_searchable_material,
@@ -27,6 +27,15 @@ from app.services.chat import (
 from app.services.storage import LocalDocumentStorage
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 24
+
+
+class FakeASRProvider:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Path, str | None]] = []
+
+    async def transcribe(self, path: Path, *, language: str | None) -> str:
+        self.calls.append((path, language))
+        return "这是语音转写后的课程问题"
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -231,6 +240,66 @@ async def test_multimodal_chat_attachment_upload_and_send(
         assert invalid.status_code == 415
     finally:
         app.dependency_overrides.pop(get_chat_attachment_storage, None)
+
+
+async def test_audio_attachment_uses_local_asr_transcript(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    tmp_path: Path,
+) -> None:
+    teacher = await login(client, "chat-asr@example.com", "teacher")
+    asr_provider = FakeASRProvider()
+    attachments_storage = LocalDocumentStorage(tmp_path / "chat-asr-attachments")
+    app.dependency_overrides[get_chat_attachment_storage] = lambda: attachments_storage
+    app.dependency_overrides[get_asr_provider] = lambda: asr_provider
+
+    try:
+        upload = await client.post(
+            "/api/v1/chat/attachments",
+            headers=auth_headers(teacher),
+            data={"kind": "audio"},
+            files={"file": ("question.m4a", b"audio-data", "audio/mp4")},
+        )
+        assert upload.status_code == 200, upload.text
+        attachment = upload.json()["attachment"]
+
+        course = await create_searchable_course(client, session_factory, teacher)
+        conversation = await client.post(
+            f"/api/v1/courses/{course['id']}/conversations",
+            headers=auth_headers(teacher),
+            json={"title": "语音提问"},
+        )
+        assert conversation.status_code == 201
+        conversation_id = conversation.json()["id"]
+
+        stream = await client.post(
+            f"/api/v1/conversations/{conversation_id}/messages/stream",
+            headers=auth_headers(teacher),
+            json={
+                "content": "请分析这段录音",
+                "client_request_id": "audio-asr-request",
+                "attachments": [attachment],
+            },
+        )
+        assert stream.status_code == 200
+        assert "event: done" in stream.text
+        assert asr_provider.calls
+
+        prompt = chat_provider.last_stream_messages[-1]["content"]
+        assert prompt[1]["type"] == "text"
+        assert "这是语音转写后的课程问题" in prompt[1]["text"]
+        assert all(part["type"] != "input_audio" for part in prompt[1:])
+
+        messages = await client.get(
+            f"/api/v1/conversations/{conversation_id}/messages",
+            headers=auth_headers(teacher),
+        )
+        user_message = next(message for message in messages.json() if message["role"] == "user")
+        assert user_message["attachments"][0]["transcript"] == "这是语音转写后的课程问题"
+    finally:
+        app.dependency_overrides.pop(get_chat_attachment_storage, None)
+        app.dependency_overrides.pop(get_asr_provider, None)
 
 
 async def test_searchable_material_ignores_trashed_document_and_chapter(

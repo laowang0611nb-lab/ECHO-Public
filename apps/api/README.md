@@ -333,6 +333,17 @@ requests forward OpenAI-compatible `image_url`, `input_audio`, and `video_url`
 content blocks to the configured Chat Provider; unsupported provider capabilities
 surface as real errors rather than fabricated analysis.
 
+Optional local ASR uses `faster-whisper` (MIT):
+
+```powershell
+apps\api\.venv\Scripts\python.exe -m pip install -e "apps/api[asr]"
+```
+
+Set `ECHO_ASR_ENABLED=true`, `ECHO_ASR_MODEL=small`, and optionally
+`ECHO_ASR_DEVICE=cpu` and `ECHO_ASR_MODEL_ROOT=<cache-dir>`. Audio is transcribed
+before retrieval; the transcript is stored on the attachment and passed as text,
+while the original audio remains available through the attachment URL.
+
 ## Teacher resources and evidence
 
 ```text
@@ -437,6 +448,7 @@ Migrations:
 - `e3f4a5b6c7d8`: course announcements and read state.
 - `f4a5b6c7d8e9`: AI analysis records, evidence, results, and strategy linkage.
 - `a5b6c7d8e9f0`: multimodal chat attachments and message linkage.
+- `b6c7d8e9f0a1`: optional local ASR transcript on chat attachments.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

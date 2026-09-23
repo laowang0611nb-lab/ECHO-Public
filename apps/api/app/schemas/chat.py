@@ -46,6 +46,7 @@ class ChatAttachmentResponse(BaseModel):
     width: int | None = None
     height: int | None = None
     duration_seconds: float | None = None
+    transcript: str | None = None
     url: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

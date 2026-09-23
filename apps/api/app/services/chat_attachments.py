@@ -230,6 +230,8 @@ def attachment_context_text(attachments: list[ChatAttachment]) -> str:
             f"({attachment.mime_type}, {attachment.size_bytes} bytes, "
             f"attachment_id={attachment.id})"
         )
+        if attachment.transcript:
+            lines.append(f"  音频转写：{attachment.transcript}")
     return "\n".join(lines)
 
 

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.services.aliyun_pnvs import AliyunPnvsProvider
+from app.services.asr import FasterWhisperProvider
 from app.services.chat_provider import QwenChatProvider
 from app.services.embedding import QwenEmbeddingProvider
 from app.services.llm import QwenKnowledgeStructureProvider
@@ -42,6 +44,22 @@ ChatAttachmentStorageDep = Annotated[
     LocalDocumentStorage,
     Depends(get_chat_attachment_storage),
 ]
+
+
+@lru_cache(maxsize=1)
+def get_asr_provider() -> FasterWhisperProvider | None:
+    if not settings.asr_enabled:
+        return None
+    return FasterWhisperProvider(
+        model_name=settings.asr_model,
+        device=settings.asr_device,
+        compute_type=settings.asr_compute_type,
+        beam_size=settings.asr_beam_size,
+        download_root=settings.asr_model_root,
+    )
+
+
+ASRProviderDep = Annotated[FasterWhisperProvider | None, Depends(get_asr_provider)]
 
 
 def get_aliyun_pnvs_provider() -> AliyunPnvsProvider:
