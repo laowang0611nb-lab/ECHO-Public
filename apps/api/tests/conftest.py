@@ -26,6 +26,8 @@ from app.services.storage import LocalDocumentStorage
 @pytest.fixture(autouse=True)
 def enable_development_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "development_auth_enabled", True)
+    monkeypatch.setattr(settings, "asr_remote_enabled", False)
+    monkeypatch.setattr(settings, "chat_media_upload_enabled", False)
 
 
 @pytest_asyncio.fixture

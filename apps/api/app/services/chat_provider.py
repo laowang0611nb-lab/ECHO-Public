@@ -44,6 +44,7 @@ class QwenChatProvider:
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
+                        "X-DashScope-OssResourceResolve": "enable",
                     },
                     json={
                         "model": self.model,
@@ -73,6 +74,7 @@ class QwenChatProvider:
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
+                        "X-DashScope-OssResourceResolve": "enable",
                     },
                     json={
                         "model": self.model,

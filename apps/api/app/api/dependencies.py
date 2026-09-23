@@ -17,7 +17,12 @@ from app.services.analysis_tasks import (
     DatabaseAnalysisTaskScheduler,
     create_analysis_task_scheduler,
 )
-from app.services.asr import FasterWhisperProvider
+from app.services.asr import (
+    ASRProvider,
+    DashScopeAsrProvider,
+    FallbackASRProvider,
+    FasterWhisperProvider,
+)
 from app.services.chat_provider import QwenChatProvider
 from app.services.embedding import QwenEmbeddingProvider
 from app.services.llm import QwenKnowledgeStructureProvider
@@ -51,19 +56,35 @@ ChatAttachmentStorageDep = Annotated[
 
 
 @lru_cache(maxsize=1)
-def get_asr_provider() -> FasterWhisperProvider | None:
-    if not settings.asr_enabled:
+def get_asr_provider() -> ASRProvider | None:
+    providers: list[ASRProvider] = []
+    if settings.asr_enabled:
+        providers.append(
+            FasterWhisperProvider(
+                model_name=settings.asr_model,
+                device=settings.asr_device,
+                compute_type=settings.asr_compute_type,
+                beam_size=settings.asr_beam_size,
+                download_root=settings.asr_model_root,
+            )
+        )
+    if settings.asr_remote_enabled and settings.chat_api_key:
+        providers.append(
+            DashScopeAsrProvider(
+                api_key=settings.chat_api_key,
+                base_url=settings.chat_base_url,
+                model=settings.asr_remote_model,
+                timeout_seconds=settings.chat_timeout_seconds,
+            )
+        )
+    if not providers:
         return None
-    return FasterWhisperProvider(
-        model_name=settings.asr_model,
-        device=settings.asr_device,
-        compute_type=settings.asr_compute_type,
-        beam_size=settings.asr_beam_size,
-        download_root=settings.asr_model_root,
-    )
+    if len(providers) == 1:
+        return providers[0]
+    return FallbackASRProvider(providers)
 
 
-ASRProviderDep = Annotated[FasterWhisperProvider | None, Depends(get_asr_provider)]
+ASRProviderDep = Annotated[ASRProvider | None, Depends(get_asr_provider)]
 
 
 def get_aliyun_pnvs_provider() -> AliyunPnvsProvider:

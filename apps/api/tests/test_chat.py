@@ -33,7 +33,13 @@ class FakeASRProvider:
     def __init__(self) -> None:
         self.calls: list[tuple[Path, str | None]] = []
 
-    async def transcribe(self, path: Path, *, language: str | None) -> str:
+    async def transcribe(
+        self,
+        path: Path,
+        *,
+        language: str | None,
+        mime_type: str | None = None,
+    ) -> str:
         self.calls.append((path, language))
         return "这是语音转写后的课程问题"
 
@@ -110,7 +116,9 @@ async def test_multimodal_chat_attachment_upload_and_send(
 ) -> None:
     teacher = await login(client, "chat-multimodal@example.com", "teacher")
     attachments_storage = LocalDocumentStorage(tmp_path / "chat-attachments")
+    asr_provider = FakeASRProvider()
     app.dependency_overrides[get_chat_attachment_storage] = lambda: attachments_storage
+    app.dependency_overrides[get_asr_provider] = lambda: asr_provider
 
     try:
         modalities = await client.get(
@@ -227,9 +235,10 @@ async def test_multimodal_chat_attachment_upload_and_send(
         assert "event: done" in media_stream.text
         media_prompt = chat_provider.last_stream_messages[-1]["content"]
         assert [part["type"] for part in media_prompt[1:]] == [
-            "input_audio",
+            "text",
             "video_url",
         ]
+        assert "这是语音转写后的课程问题" in media_prompt[1]["text"]
 
         invalid = await client.post(
             "/api/v1/chat/attachments",
@@ -240,6 +249,7 @@ async def test_multimodal_chat_attachment_upload_and_send(
         assert invalid.status_code == 415
     finally:
         app.dependency_overrides.pop(get_chat_attachment_storage, None)
+        app.dependency_overrides.pop(get_asr_provider, None)
 
 
 async def test_audio_attachment_uses_local_asr_transcript(

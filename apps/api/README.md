@@ -341,6 +341,12 @@ requests forward OpenAI-compatible `image_url`, `input_audio`, and `video_url`
 content blocks to the configured Chat Provider; unsupported provider capabilities
 surface as real errors rather than fabricated analysis.
 
+Audio is transcribed locally with `faster-whisper` when enabled, otherwise through
+the DashScope `qwen3-asr-flash` compatible endpoint. Only the transcript is sent to
+the main chat model. Videos are normalized to standard H.264 MP4 with PyAV and
+uploaded to DashScope temporary file storage, then passed as a model-bound `oss://`
+URL with the required `X-DashScope-OssResourceResolve: enable` header.
+
 Optional local ASR uses `faster-whisper` (MIT):
 
 ```powershell
@@ -459,6 +465,7 @@ Migrations:
 - `a5b6c7d8e9f0`: multimodal chat attachments and message linkage.
 - `b6c7d8e9f0a1`: optional local ASR transcript on chat attachments.
 - `c7d8e9f0a1b2`: AI analysis stage, percent, heartbeat, idempotency key, and stage-event history.
+- `d8e9f0a1b2c3`: model-bound temporary media URL cache for chat attachments.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

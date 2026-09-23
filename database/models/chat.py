@@ -249,6 +249,11 @@ class ChatAttachment(Base):
     height: Mapped[int | None] = mapped_column(Integer)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     transcript: Mapped[str | None] = mapped_column(Text)
+    model_file_url: Mapped[str | None] = mapped_column(Text)
+    model_file_model: Mapped[str | None] = mapped_column(String(120))
+    model_file_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(

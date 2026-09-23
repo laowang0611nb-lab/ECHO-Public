@@ -114,7 +114,7 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "c7d8e9f0a1b2 (head)" in current.stdout
+    assert "d8e9f0a1b2c3 (head)" in current.stdout
     connection = sqlite3.connect(tmp_path / "echo.db")
     course_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(courses)").fetchall()
@@ -135,6 +135,10 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
     citation_columns = {
         row[1]
         for row in connection.execute("PRAGMA table_info(message_citations)").fetchall()
+    }
+    chat_attachment_columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(chat_attachments)").fetchall()
     }
     analysis_columns = {
         row[1]
@@ -182,6 +186,11 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
         "progress_message",
         "heartbeat_at",
     } <= analysis_columns
+    assert {
+        "model_file_url",
+        "model_file_model",
+        "model_file_expires_at",
+    } <= chat_attachment_columns
     assert "quick_check_attempts" in quick_check_tables
     assert "course_announcements" in quick_check_tables
     assert "course_announcement_reads" in quick_check_tables
@@ -190,4 +199,4 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
     _run_alembic(database_url, "downgrade", "d9e0f1a2b3c4")
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "c7d8e9f0a1b2 (head)" in current.stdout
+    assert "d8e9f0a1b2c3 (head)" in current.stdout

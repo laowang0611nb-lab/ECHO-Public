@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.136"
+    app_version: str = "0.0.137"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -34,7 +34,14 @@ class Settings(BaseSettings):
     asr_language: str = "zh"
     asr_beam_size: int = 5
     asr_model_root: str | None = None
+    asr_remote_enabled: bool = True
+    asr_remote_model: str = "qwen3-asr-flash"
     analysis_progress_heartbeat_seconds: int = 5
+    chat_media_upload_enabled: bool = True
+    chat_media_upload_base_url: str = "https://dashscope.aliyuncs.com"
+    chat_video_normalization_fps: int = 10
+    chat_video_max_dimension: int = 1280
+    chat_model_file_expiry_hours: int = 48
     avatar_max_upload_bytes: int = 2 * 1024 * 1024
     alibaba_cloud_access_key_id: str | None = Field(
         default=None,
@@ -178,6 +185,9 @@ class Settings(BaseSettings):
         "chat_attachment_expiry_hours",
         "asr_beam_size",
         "analysis_progress_heartbeat_seconds",
+        "chat_video_normalization_fps",
+        "chat_video_max_dimension",
+        "chat_model_file_expiry_hours",
     )
     @classmethod
     def require_positive_chat_attachment_limits(cls, value: int) -> int:

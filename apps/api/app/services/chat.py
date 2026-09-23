@@ -36,6 +36,7 @@ from app.services.chat_attachments import (
     attachment_to_model_content,
     resolve_message_attachments,
 )
+from app.services.chat_media import ensure_video_model_url
 from app.services.chat_provider import ChatProvider
 from app.services.course import get_course_for_member
 from app.services.embedding import EmbeddingProvider
@@ -96,6 +97,7 @@ async def _transcribe_audio_attachments(
             attachment.transcript = await provider.transcribe(
                 path,
                 language=settings.asr_language or None,
+                mime_type=attachment.mime_type,
             )
         except (ASRConfigurationError, ASRProviderError):
             raise
@@ -318,6 +320,37 @@ async def list_conversation_messages_for_teacher(
     return responses
 
 
+async def _build_attachment_parts(
+    session: AsyncSession,
+    attachments: list[ChatAttachment],
+    storage: LocalDocumentStorage | None,
+) -> list[dict[str, object]]:
+    if not attachments or storage is None:
+        return []
+    parts: list[dict[str, object]] = []
+    for attachment in attachments:
+        path = storage.path_for(attachment.storage_key)
+        if attachment.kind == ChatAttachmentKind.AUDIO:
+            if not attachment.transcript:
+                raise ASRConfigurationError("Audio transcription is unavailable")
+            parts.append(
+                {
+                    "type": "text",
+                    "text": f"[音频转写] {attachment.transcript}",
+                }
+            )
+            continue
+        video_url = await ensure_video_model_url(session, attachment, path)
+        parts.append(
+            attachment_to_model_content(
+                attachment,
+                path,
+                video_url=video_url,
+            )
+        )
+    return parts
+
+
 def _build_prompt(
     question: str,
     history: list[Message],
@@ -325,6 +358,7 @@ def _build_prompt(
     teaching_policy: str | None,
     attachments: list[ChatAttachment] | None = None,
     storage: LocalDocumentStorage | None = None,
+    attachment_parts: list[dict[str, object]] | None = None,
 ) -> list[dict[str, object]]:
     source_blocks = [
         f"[{index}] Pages {source.page_start}-{source.page_end}\n{source.content}"
@@ -357,7 +391,10 @@ def _build_prompt(
         if message.role in {MessageRole.USER, MessageRole.ASSISTANT}
     )
     attachment_items = attachments or []
-    if attachment_items and storage is not None:
+    if attachment_parts is not None:
+        user_content: str | list[dict[str, object]] = [{"type": "text", "text": question}]
+        user_content.extend(attachment_parts)
+    elif attachment_items and storage is not None:
         user_content: str | list[dict[str, object]] = [{"type": "text", "text": question}]
         for attachment in attachment_items:
             path = storage.path_for(attachment.storage_key)
@@ -476,6 +513,11 @@ async def _stream_chat_response_contents(
         attachment_storage,
         asr_provider,
     )
+    attachment_parts = await _build_attachment_parts(
+        session,
+        attachments,
+        attachment_storage,
+    )
     question_with_attachments = content + attachment_context_text(attachments)
 
     sources = await search_course_chunks(
@@ -570,6 +612,7 @@ async def _stream_chat_response_contents(
             policy.content if policy else None,
             attachments=attachments,
             storage=attachment_storage,
+            attachment_parts=attachment_parts,
         )
         async for delta in chat_provider.stream(prompt):
             collected.append(delta)

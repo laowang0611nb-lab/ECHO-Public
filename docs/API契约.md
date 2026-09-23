@@ -137,9 +137,11 @@ POST /api/v1/courses/{course_id}/knowledge-points/merge
 
 附件上传先写入 `chat_attachments`，成功响应返回 `attachment` 和 `expires_at`。发送消息时，`attachments` 只接受当前用户创建、尚未绑定且未过期的附件。消息提交后，附件绑定到用户消息；历史消息通过 `attachments` 返回元数据和文件 URL。
 
-多模态 Chat Provider 输入使用 OpenAI 兼容内容块：图片使用 `image_url`，音频使用 `input_audio`，视频使用 `video_url`。上传和消息持久化不代表模型一定具备对应理解能力；如果 Provider 不支持指定模态，会返回真实错误事件，不会伪造分析结果。
+多模态 Chat Provider 输入使用 OpenAI 兼容内容块：图片使用 `image_url`，音频在转写后使用文本，视频使用 `video_url`。上传和消息持久化不代表模型一定具备对应理解能力；如果 Provider 不支持指定模态，会返回真实错误事件，不会伪造分析结果。
 
-当 `ECHO_ASR_ENABLED=true` 时，音频附件先通过可选依赖 `faster-whisper` 在本地转写，转写结果保存到附件的 `transcript` 字段，并使用 `[音频转写]` 文本块进入 RAG，不再发送 `input_audio`。该能力使用 MIT 许可证的开源实现，模型和推理依赖由部署环境单独安装。
+音频处理按本地优先、远程兜底：`ECHO_ASR_ENABLED=true` 时先通过可选依赖 `faster-whisper` 转写；未启用或本地转写失败时，使用 `ECHO_ASR_REMOTE_MODEL`（默认 `qwen3-asr-flash`）把 Data URL 音频提交给百炼语音识别。转写结果保存到附件的 `transcript` 字段，并以 `[音频转写]` 文本块进入 RAG，不再把 base64 `input_audio` 交给主对话模型。
+
+视频先通过 PyAV 规范化为标准 H.264 MP4，再上传到百炼临时文件服务，获取绑定当前 Chat 模型的 `oss://` 临时 URL。调用 `/chat/completions` 时自动携带 `X-DashScope-OssResourceResolve: enable`；临时 URL 与模型名、过期时间缓存到 `chat_attachments`，默认有效期 48 小时。
 
 SSE 事件：
 

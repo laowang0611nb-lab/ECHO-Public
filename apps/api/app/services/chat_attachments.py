@@ -196,7 +196,13 @@ async def get_chat_attachment_path(
     return attachment, path
 
 
-def attachment_to_model_content(attachment: ChatAttachment, path: Path) -> dict[str, object]:
+def attachment_to_model_content(
+    attachment: ChatAttachment,
+    path: Path,
+    *,
+    video_url: str | None = None,
+    video_fps: int = 2,
+) -> dict[str, object]:
     if attachment.kind == ChatAttachmentKind.IMAGE:
         return {
             "type": "image_url",
@@ -215,8 +221,9 @@ def attachment_to_model_content(attachment: ChatAttachment, path: Path) -> dict[
     return {
         "type": "video_url",
         "video_url": {
-            "url": _data_url(attachment.mime_type, path),
+            "url": video_url or _data_url(attachment.mime_type, path),
         },
+        "fps": video_fps,
     }
 
 
