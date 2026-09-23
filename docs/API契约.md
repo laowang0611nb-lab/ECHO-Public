@@ -201,10 +201,11 @@ Quick Check 由服务端校验答案并通过 `LearningEvent -> StudentKnowledge
 |---|---|---|---|
 | GET | `/courses/{course_id}/dashboard` | 课程教师 | 课程聚合指标 |
 | GET | `/dashboard/overview?courseId={courseId}` | 课程教师 | 教师首页一次性聚合读取 |
-| POST | `/courses/{course_id}/ai-analysis` | 课程教师 | 创建基于持久化学习证据的 AI 分析 |
+| POST | `/courses/{course_id}/ai-analysis` | 课程教师 | 创建基于持久化学习证据的 AI 分析，默认异步返回 `202` |
 | GET | `/courses/{course_id}/ai-analysis` | 课程教师 | 查询课程 AI 分析记录 |
-| GET | `/courses/{course_id}/ai-analysis/{analysis_id}` | 课程教师 | 查询分析状态、结果和证据链 |
-| POST | `/courses/{course_id}/ai-analysis/{analysis_id}/reanalyze` | 课程教师 | 基于已完成分析创建二次分析 |
+| GET | `/courses/{course_id}/ai-analysis/{analysis_id}` | 课程教师 | 查询分析状态、结果、证据链和 `progress` |
+| GET | `/courses/{course_id}/ai-analysis/{analysis_id}/progress` | 课程教师 | 轮询五阶段、百分比、心跳和错误 |
+| POST | `/courses/{course_id}/ai-analysis/{analysis_id}/reanalyze` | 课程教师 | 基于已完成分析创建异步二次分析 |
 | POST | `/courses/{course_id}/ai-analysis/{analysis_id}/strategy` | 课程教师 | 将证据充分的分析建议转为 `suggested` 策略 |
 | GET | `/courses/{course_id}/chapters/analytics` | 课程教师 | 章节掌握分析 |
 | GET | `/courses/{course_id}/knowledge-points/{knowledge_point_id}/analytics` | 课程教师 | 知识点分布 |
@@ -637,7 +638,9 @@ AI 二次分析使用 `ai_analyses`、`ai_analysis_evidence` 和 `ai_analysis_re
 
 证据来源包括 LearningEvent、MasterySnapshot、QuickCheckAttempt、Conversation/Message、ReviewFlag、MessageCitation、KnowledgeChunk 和前序分析结果。模型返回的每条 fact 必须引用当前分析中真实存在的 evidence_id；无效引用会被过滤。证据少于 2 条、模型明确证据不足或没有任何带证据的事实引用时，结果固定返回 `insufficient_evidence=true`，不能生成无依据的教学策略。
 
-`POST /courses/{course_id}/ai-analysis/{analysis_id}/strategy` 只在证据充分时可用，创建的 TeachingStrategy 状态固定为 `suggested`，必须由教师后续采纳、修改和发布。当前版本采用同步请求完成分析，状态字段已按后续任务队列兼容方式设计。完整请求和响应见 [AI二次分析接口_v1.md](./api/AI二次分析接口_v1.md)。
+`POST /courses/{course_id}/ai-analysis` 和 `POST /courses/{course_id}/ai-analysis/{analysis_id}/reanalyze` 默认异步执行：立即持久化 `analyzing` 记录并返回 `202`，同一 `client_request_id` 重试返回同一记录。兼容 `"async": false` 的同步调用。`GET /courses/{course_id}/ai-analysis/{analysis_id}/progress` 返回固定五阶段 `collecting_previous_analysis`、`querying_evidence`、`expanding_knowledge_graph`、`analyzing_student_impact`、`generating_recommendation`，百分比依次为 10、30、50、70、90，完成时 100 且阶段百分比只能单调前进。后台任务每 5 秒更新 `heartbeat_at`，失败保留最后阶段和错误，证据不足仍正常完成。
+
+`POST /courses/{course_id}/ai-analysis/{analysis_id}/strategy` 只在证据充分时可用，创建的 TeachingStrategy 状态固定为 `suggested`，必须由教师后续采纳、修改和发布。完整请求和响应见 [AI二次分析接口_v1.md](./api/AI二次分析接口_v1.md)。
 
 
 ### 10.7 保留的 P2

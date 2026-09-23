@@ -303,6 +303,7 @@ original message, then inspect versions, regeneration status, and audit history.
 POST /api/v1/courses/{course_id}/ai-analysis
 GET  /api/v1/courses/{course_id}/ai-analysis
 GET  /api/v1/courses/{course_id}/ai-analysis/{analysis_id}
+GET  /api/v1/courses/{course_id}/ai-analysis/{analysis_id}/progress
 GET  /api/v1/courses/{course_id}/ai-analysis/{analysis_id}/result
 POST /api/v1/courses/{course_id}/ai-analysis/{analysis_id}/reanalyze
 POST /api/v1/courses/{course_id}/ai-analysis/{analysis_id}/strategy
@@ -316,6 +317,13 @@ model must reference a persisted evidence ID. When fewer than two evidence items
 are available, the API returns `insufficient_evidence=true` and does not infer a
 cause. A sufficiently supported result can create a teaching strategy in the
 `suggested` state; it never auto-accepts or publishes the strategy.
+
+Creation and reanalysis are asynchronous by default: they persist `analyzing` and
+return `202`, while `async: false` keeps the synchronous compatibility path. The
+five progress stages are persisted and exposed through the progress endpoint;
+percentages are monotonic (10, 30, 50, 70, 90, then 100), and heartbeat timestamps
+are refreshed every five seconds while work is running. Repeating a request with the
+same `client_request_id` returns the existing record.
 
 ## Multimodal chat attachments
 
@@ -425,6 +433,7 @@ Implemented domain models:
 - `AIAnalysis`: persisted initial or secondary analysis run and scope.
 - `AIAnalysisEvidence`: source-linked evidence snapshot used by one analysis.
 - `AIAnalysisResult`: structured conclusion, facts, recommendation, and strategy link.
+- `AIAnalysisStageEvent`: ordered persisted stage transition for one analysis.
 
 Migrations:
 
@@ -449,6 +458,7 @@ Migrations:
 - `f4a5b6c7d8e9`: AI analysis records, evidence, results, and strategy linkage.
 - `a5b6c7d8e9f0`: multimodal chat attachments and message linkage.
 - `b6c7d8e9f0a1`: optional local ASR transcript on chat attachments.
+- `c7d8e9f0a1b2`: AI analysis stage, percent, heartbeat, idempotency key, and stage-event history.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

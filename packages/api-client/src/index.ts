@@ -19,6 +19,7 @@ import type {
   AIAnalysis,
   AIAnalysisCreateRequest,
   AIAnalysisPage,
+  AIAnalysisProgressResponse,
   AIAnalysisReanalyzeRequest,
   AIAnalysisResult,
   AIAnalysisStrategyRequest,
@@ -998,6 +999,12 @@ export function createApiClient({
     getAIAnalysis: (userId: string, courseId: string, analysisId: string) =>
       request<AIAnalysis>(
         `/api/v1/courses/${courseId}/ai-analysis/${analysisId}`,
+        undefined,
+        userId,
+      ),
+    getAIAnalysisProgress: (userId: string, courseId: string, analysisId: string) =>
+      request<AIAnalysisProgressResponse>(
+        `/api/v1/courses/${courseId}/ai-analysis/${analysisId}/progress`,
         undefined,
         userId,
       ),

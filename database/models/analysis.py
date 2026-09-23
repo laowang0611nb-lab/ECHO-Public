@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     Uuid,
     func,
 )
@@ -38,6 +39,14 @@ class AIAnalysisStatus(StrEnum):
     FAILED = "failed"
 
 
+class AIAnalysisStage(StrEnum):
+    COLLECTING_PREVIOUS_ANALYSIS = "collecting_previous_analysis"
+    QUERYING_EVIDENCE = "querying_evidence"
+    EXPANDING_KNOWLEDGE_GRAPH = "expanding_knowledge_graph"
+    ANALYZING_STUDENT_IMPACT = "analyzing_student_impact"
+    GENERATING_RECOMMENDATION = "generating_recommendation"
+
+
 class AIAnalysisScope(StrEnum):
     WHOLE_CLASS = "whole_class"
     STUDENT_GROUP = "student_group"
@@ -61,6 +70,16 @@ class AIAnalysis(Base):
         CheckConstraint(
             "time_range_days >= 1",
             name="ck_ai_analyses_time_range_days_positive",
+        ),
+        CheckConstraint(
+            "progress_percent >= 0 AND progress_percent <= 100",
+            name="ck_ai_analyses_progress_percent_range",
+        ),
+        UniqueConstraint(
+            "course_id",
+            "created_by",
+            "client_request_id",
+            name="uq_ai_analyses_course_creator_request",
         ),
     )
 
@@ -108,6 +127,7 @@ class AIAnalysis(Base):
     student_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     time_range_days: Mapped[int] = mapped_column(Integer, default=28, nullable=False)
     focus: Mapped[str | None] = mapped_column(Text)
+    client_request_id: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[AIAnalysisStatus] = mapped_column(
         Enum(
             AIAnalysisStatus,
@@ -121,6 +141,21 @@ class AIAnalysis(Base):
         server_default=AIAnalysisStatus.ANALYZING.value,
         nullable=False,
     )
+    stage: Mapped[AIAnalysisStage | None] = mapped_column(
+        Enum(
+            AIAnalysisStage,
+            name="ai_analysis_stage",
+            native_enum=False,
+            length=40,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        )
+    )
+    progress_percent: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    progress_message: Mapped[str | None] = mapped_column(Text)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -155,6 +190,11 @@ class AIAnalysis(Base):
         back_populates="analysis",
         cascade="all, delete-orphan",
         uselist=False,
+    )
+    stage_events: Mapped[list["AIAnalysisStageEvent"]] = relationship(
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+        order_by="AIAnalysisStageEvent.sequence",
     )
 
 
@@ -203,6 +243,50 @@ class AIAnalysisEvidence(Base):
     )
 
     analysis: Mapped[AIAnalysis] = relationship(back_populates="evidence")
+
+
+class AIAnalysisStageEvent(Base):
+    __tablename__ = "ai_analysis_stage_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "analysis_id",
+            "sequence",
+            name="uq_ai_analysis_stage_events_sequence",
+        ),
+        CheckConstraint(
+            "percent >= 0 AND percent <= 100",
+            name="ck_ai_analysis_stage_events_percent_range",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
+    analysis_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("ai_analyses.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    stage: Mapped[AIAnalysisStage] = mapped_column(
+        Enum(
+            AIAnalysisStage,
+            name="ai_analysis_stage_event_stage",
+            native_enum=False,
+            length=40,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        nullable=False,
+    )
+    percent: Mapped[int] = mapped_column(Integer, nullable=False)
+    message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    analysis: Mapped[AIAnalysis] = relationship(back_populates="stage_events")
 
 
 class AIAnalysisResult(Base):

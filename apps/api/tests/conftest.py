@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -7,7 +8,7 @@ from database.db.base import Base
 from database.db.session import get_db_session
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import NullPool
 
 from app.api.dependencies import (
     get_aliyun_pnvs_provider,
@@ -28,11 +29,13 @@ def enable_development_auth(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest_asyncio.fixture
-async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+async def session_factory(
+    tmp_path: Path,
+) -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(
-        "sqlite+aiosqlite://",
+        f"sqlite+aiosqlite:///{(tmp_path / 'echo-test.db').as_posix()}",
         connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+        poolclass=NullPool,
     )
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -88,6 +91,9 @@ class FakeChatProvider:
         self.last_stream_messages: list[dict[str, str]] = []
         self.last_complete_messages: list[dict[str, str]] = []
         self.answer_builder = None
+        self.stream_gate: asyncio.Event | None = None
+        self.stream_started = asyncio.Event()
+        self.stream_finished = asyncio.Event()
         self.fail = False
         self.structured_answer = (
             '{"title":"Quick Check","prompt":"Which option matches?",'
@@ -99,6 +105,10 @@ class FakeChatProvider:
     async def stream(self, messages: list[dict[str, str]]):
         self.last_messages = messages
         self.last_stream_messages = messages
+        self.stream_started.set()
+        if self.stream_gate is not None:
+            await self.stream_gate.wait()
+        self.stream_finished.set()
         if self.fail:
             raise RuntimeError("fake chat failure")
         if self.answer_builder is not None:

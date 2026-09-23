@@ -9,10 +9,14 @@ from database.db.session import get_db_session
 from database.models.auth import AuthSession
 from database.models.user import User, UserStatus
 from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import settings
 from app.services.aliyun_pnvs import AliyunPnvsProvider
+from app.services.analysis_tasks import (
+    DatabaseAnalysisTaskScheduler,
+    create_analysis_task_scheduler,
+)
 from app.services.asr import FasterWhisperProvider
 from app.services.chat_provider import QwenChatProvider
 from app.services.embedding import QwenEmbeddingProvider
@@ -128,6 +132,23 @@ def get_chat_provider() -> QwenChatProvider:
 ChatProviderDep = Annotated[
     QwenChatProvider,
     Depends(get_chat_provider),
+]
+
+
+def get_analysis_task_scheduler(
+    session: DBSession,
+    provider: ChatProviderDep,
+) -> DatabaseAnalysisTaskScheduler:
+    bind = session.bind
+    if not isinstance(bind, AsyncEngine):
+        raise RuntimeError("Analysis tasks require an async database engine")
+    session_factory = async_sessionmaker(bind, expire_on_commit=False)
+    return create_analysis_task_scheduler(provider, session_factory=session_factory)
+
+
+AnalysisTaskSchedulerDep = Annotated[
+    DatabaseAnalysisTaskScheduler,
+    Depends(get_analysis_task_scheduler),
 ]
 
 

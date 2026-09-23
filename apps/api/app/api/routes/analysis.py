@@ -1,12 +1,18 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.api.dependencies import ChatProviderDep, CurrentUser, DBSession
+from app.api.dependencies import (
+    AnalysisTaskSchedulerDep,
+    ChatProviderDep,
+    CurrentUser,
+    DBSession,
+)
 from app.schemas.analysis import (
     AIAnalysisCreateRequest,
     AIAnalysisPage,
+    AIAnalysisProgressResponse,
     AIAnalysisReanalyzeRequest,
     AIAnalysisResponse,
     AIAnalysisResultResponse,
@@ -19,6 +25,7 @@ from app.services.analysis import (
     create_initial_analysis,
     create_strategy_from_analysis,
     get_analysis,
+    get_analysis_progress,
     get_analysis_result,
     list_analyses,
     reanalyze,
@@ -71,7 +78,7 @@ def _translate(exc: Exception) -> HTTPException:
 @router.post(
     "/courses/{course_id}/ai-analysis",
     response_model=AIAnalysisResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_analysis_endpoint(
     course_id: UUID,
@@ -79,15 +86,21 @@ async def create_analysis_endpoint(
     current_user: CurrentUser,
     session: DBSession,
     provider: ChatProviderDep,
+    scheduler: AnalysisTaskSchedulerDep,
+    response: Response,
 ) -> AIAnalysisResponse:
     try:
-        return await create_initial_analysis(
+        analysis = await create_initial_analysis(
             session,
             provider,
             course_id,
             current_user.id,
             payload,
+            scheduler=scheduler,
         )
+        if not payload.run_async:
+            response.status_code = status.HTTP_200_OK
+        return analysis
     except (
         TeacherContentNotFoundError,
         TeacherContentForbiddenError,
@@ -124,6 +137,31 @@ async def list_analyses_endpoint(
             limit=limit,
         )
     except (TeacherContentNotFoundError, TeacherContentForbiddenError) as exc:
+        raise _translate(exc) from exc
+
+
+@router.get(
+    "/courses/{course_id}/ai-analysis/{analysis_id}/progress",
+    response_model=AIAnalysisProgressResponse,
+)
+async def get_analysis_progress_endpoint(
+    course_id: UUID,
+    analysis_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> AIAnalysisProgressResponse:
+    try:
+        return await get_analysis_progress(
+            session,
+            course_id,
+            analysis_id,
+            current_user.id,
+        )
+    except (
+        TeacherContentNotFoundError,
+        TeacherContentForbiddenError,
+        AIAnalysisNotFoundError,
+    ) as exc:
         raise _translate(exc) from exc
 
 
@@ -180,7 +218,7 @@ async def get_analysis_result_endpoint(
 @router.post(
     "/courses/{course_id}/ai-analysis/{analysis_id}/reanalyze",
     response_model=AIAnalysisResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def reanalyze_endpoint(
     course_id: UUID,
@@ -189,16 +227,23 @@ async def reanalyze_endpoint(
     current_user: CurrentUser,
     session: DBSession,
     provider: ChatProviderDep,
+    scheduler: AnalysisTaskSchedulerDep,
+    response: Response,
 ) -> AIAnalysisResponse:
+    request_payload = payload or AIAnalysisReanalyzeRequest()
     try:
-        return await reanalyze(
+        analysis = await reanalyze(
             session,
             provider,
             course_id,
             analysis_id,
             current_user.id,
-            payload or AIAnalysisReanalyzeRequest(),
+            request_payload,
+            scheduler=scheduler,
         )
+        if not request_payload.run_async:
+            response.status_code = status.HTTP_200_OK
+        return analysis
     except (
         TeacherContentNotFoundError,
         TeacherContentForbiddenError,

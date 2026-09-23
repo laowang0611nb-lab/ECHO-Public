@@ -1357,6 +1357,13 @@ export type AIAnalysisType = "initial" | "secondary";
 
 export type AIAnalysisStatus = "analyzing" | "completed" | "failed";
 
+export type AIAnalysisStage =
+  | "collecting_previous_analysis"
+  | "querying_evidence"
+  | "expanding_knowledge_graph"
+  | "analyzing_student_impact"
+  | "generating_recommendation";
+
 export type AIAnalysisScope =
   | "whole_class"
   | "student_group"
@@ -1378,11 +1385,17 @@ export interface AIAnalysisCreateRequest {
   student_ids?: string[];
   time_range_days?: number;
   focus?: string | null;
+  async?: boolean;
+  run_async?: boolean;
+  client_request_id?: string | null;
 }
 
 export interface AIAnalysisReanalyzeRequest {
   focus?: string | null;
   time_range_days?: number | null;
+  async?: boolean;
+  run_async?: boolean;
+  client_request_id?: string | null;
 }
 
 export interface AIAnalysisFact {
@@ -1416,7 +1429,25 @@ export interface AIAnalysisResult {
   generated_at: string;
 }
 
+export interface AIAnalysisProgress {
+  stage: AIAnalysisStage | null;
+  stage_label: string | null;
+  percent: number;
+  message: string | null;
+  heartbeat_at: string | null;
+}
+
+export interface AIAnalysisProgressResponse extends AIAnalysisProgress {
+  analysis_id: string;
+  status: AIAnalysisStatus;
+  started_at: string | null;
+  updated_at: string;
+  completed_at: string | null;
+  error_message: string | null;
+}
+
 export interface AIAnalysis {
+  analysis_id: string;
   id: string;
   course_id: string;
   knowledge_point_id: string | null;
@@ -1426,8 +1457,10 @@ export interface AIAnalysis {
   student_ids: string[];
   time_range_days: number;
   focus: string | null;
+  client_request_id: string | null;
   status: AIAnalysisStatus;
   error_message: string | null;
+  progress: AIAnalysisProgress | null;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -1448,6 +1481,7 @@ export interface AIAnalysisListItem {
   insufficient_evidence: boolean;
   conclusion: string | null;
   recommendation: string | null;
+  progress: AIAnalysisProgress | null;
   created_at: string;
   completed_at: string | null;
 }

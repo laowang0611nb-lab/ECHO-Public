@@ -6,6 +6,7 @@ def test_core_tables_are_registered() -> None:
         "ai_analyses",
         "ai_analysis_evidence",
         "ai_analysis_results",
+        "ai_analysis_stage_events",
         "auth_sessions",
         "ai_review_flags",
         "chapters",

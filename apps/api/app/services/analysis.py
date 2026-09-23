@@ -1,6 +1,8 @@
-from collections.abc import Iterable
+import asyncio
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Protocol, TypeVar
 from uuid import UUID
 
 from database.models.analysis import (
@@ -9,6 +11,8 @@ from database.models.analysis import (
     AIAnalysisEvidenceSource,
     AIAnalysisResult,
     AIAnalysisScope,
+    AIAnalysisStage,
+    AIAnalysisStageEvent,
     AIAnalysisStatus,
     AIAnalysisType,
 )
@@ -27,6 +31,7 @@ from database.models.planning import (
 from database.models.review import AIReviewFlag
 from database.models.user import User
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,6 +42,8 @@ from app.schemas.analysis import (
     AIAnalysisFactResponse,
     AIAnalysisListItem,
     AIAnalysisPage,
+    AIAnalysisProgressResponse,
+    AIAnalysisProgressSummary,
     AIAnalysisReanalyzeRequest,
     AIAnalysisResponse,
     AIAnalysisResultResponse,
@@ -83,6 +90,44 @@ class AIAnalysisConflictError(Exception):
     pass
 
 
+T = TypeVar("T")
+
+_REQUEST_LOCKS: dict[tuple[UUID, UUID, str], asyncio.Lock] = {}
+
+STAGE_LABELS: dict[AIAnalysisStage, str] = {
+    AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS: "收集已有分析结果",
+    AIAnalysisStage.QUERYING_EVIDENCE: "查询关联学习证据",
+    AIAnalysisStage.EXPANDING_KNOWLEDGE_GRAPH: "扩展知识关系",
+    AIAnalysisStage.ANALYZING_STUDENT_IMPACT: "分析影响学生",
+    AIAnalysisStage.GENERATING_RECOMMENDATION: "生成教学建议",
+}
+STAGE_ORDER: dict[AIAnalysisStage, int] = {
+    stage: index for index, stage in enumerate(STAGE_LABELS, start=1)
+}
+STAGE_PERCENT: dict[AIAnalysisStage, int] = {
+    AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS: 10,
+    AIAnalysisStage.QUERYING_EVIDENCE: 30,
+    AIAnalysisStage.EXPANDING_KNOWLEDGE_GRAPH: 50,
+    AIAnalysisStage.ANALYZING_STUDENT_IMPACT: 70,
+    AIAnalysisStage.GENERATING_RECOMMENDATION: 90,
+}
+
+
+async def _with_request_lock(
+    key: tuple[UUID, UUID, str] | None,
+    operation: Callable[[], Awaitable[T]],
+) -> T:
+    if key is None:
+        return await operation()
+    lock = _REQUEST_LOCKS.setdefault(key, asyncio.Lock())
+    async with lock:
+        return await operation()
+
+
+class AnalysisTaskScheduler(Protocol):
+    async def start(self, analysis_id: UUID) -> None: ...
+
+
 @dataclass(frozen=True)
 class EvidenceDraft:
     source_type: AIAnalysisEvidenceSource
@@ -100,10 +145,44 @@ async def create_initial_analysis(
     course_id: UUID,
     requester_id: UUID,
     payload: AIAnalysisCreateRequest,
+    *,
+    scheduler: AnalysisTaskScheduler | None = None,
+) -> AIAnalysisResponse:
+    key = (
+        (course_id, requester_id, payload.client_request_id) if payload.client_request_id else None
+    )
+    return await _with_request_lock(
+        key,
+        lambda: _create_initial_analysis_unlocked(
+            session,
+            provider,
+            course_id,
+            requester_id,
+            payload,
+            scheduler=scheduler,
+        ),
+    )
+
+
+async def _create_initial_analysis_unlocked(
+    session: AsyncSession,
+    provider: ChatProvider,
+    course_id: UUID,
+    requester_id: UUID,
+    payload: AIAnalysisCreateRequest,
+    *,
+    scheduler: AnalysisTaskScheduler | None = None,
 ) -> AIAnalysisResponse:
     await ensure_teacher(session, course_id, requester_id)
+    existing = await _find_by_request_id(
+        session, course_id, requester_id, payload.client_request_id
+    )
+    if existing is not None:
+        return _analysis_response(existing)
+
     point = await _load_knowledge_point(session, course_id, payload.knowledge_point_id)
     students = await _resolve_students(session, course_id, payload.scope, payload.student_ids)
+    now = datetime.now(UTC)
     analysis = AIAnalysis(
         course_id=course_id,
         knowledge_point_id=point.id if point is not None else None,
@@ -112,13 +191,33 @@ async def create_initial_analysis(
         student_ids=[str(student.id) for student in students],
         time_range_days=payload.time_range_days,
         focus=_normalize_optional_text(payload.focus),
+        client_request_id=payload.client_request_id,
         status=AIAnalysisStatus.ANALYZING,
+        stage=AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS,
+        progress_percent=STAGE_PERCENT[AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS],
+        progress_message=STAGE_LABELS[AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS],
+        heartbeat_at=now,
         created_by=requester_id,
-        started_at=datetime.now(UTC),
+        started_at=now,
     )
     session.add(analysis)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await _find_by_request_id(
+            session, course_id, requester_id, payload.client_request_id
+        )
+        if existing is not None:
+            return _analysis_response(existing)
+        raise
     await session.refresh(analysis)
+    analysis = await _load_analysis(session, course_id, analysis.id)
+    if payload.run_async:
+        if scheduler is None:
+            raise AIAnalysisConflictError("Analysis scheduler is unavailable")
+        await scheduler.start(analysis.id)
+        return _analysis_response(analysis)
     return await _execute_analysis(
         session,
         provider,
@@ -136,8 +235,43 @@ async def reanalyze(
     analysis_id: UUID,
     requester_id: UUID,
     payload: AIAnalysisReanalyzeRequest,
+    *,
+    scheduler: AnalysisTaskScheduler | None = None,
+) -> AIAnalysisResponse:
+    key = (
+        (course_id, requester_id, payload.client_request_id) if payload.client_request_id else None
+    )
+    return await _with_request_lock(
+        key,
+        lambda: _reanalyze_unlocked(
+            session,
+            provider,
+            course_id,
+            analysis_id,
+            requester_id,
+            payload,
+            scheduler=scheduler,
+        ),
+    )
+
+
+async def _reanalyze_unlocked(
+    session: AsyncSession,
+    provider: ChatProvider,
+    course_id: UUID,
+    analysis_id: UUID,
+    requester_id: UUID,
+    payload: AIAnalysisReanalyzeRequest,
+    *,
+    scheduler: AnalysisTaskScheduler | None = None,
 ) -> AIAnalysisResponse:
     await ensure_teacher(session, course_id, requester_id)
+    existing = await _find_by_request_id(
+        session, course_id, requester_id, payload.client_request_id
+    )
+    if existing is not None:
+        return _analysis_response(existing)
+
     previous = await _load_analysis(session, course_id, analysis_id)
     if previous.status != AIAnalysisStatus.COMPLETED or previous.result is None:
         raise AIAnalysisConflictError("Only completed analyses can be reanalyzed")
@@ -147,6 +281,7 @@ async def reanalyze(
     point = await _load_knowledge_point(session, course_id, previous.knowledge_point_id)
     previous_student_ids = _uuid_list(previous.student_ids)
     students = await _resolve_students(session, course_id, previous.scope, previous_student_ids)
+    now = datetime.now(UTC)
     analysis = AIAnalysis(
         course_id=course_id,
         knowledge_point_id=point.id if point is not None else None,
@@ -156,13 +291,33 @@ async def reanalyze(
         student_ids=[str(student.id) for student in students],
         time_range_days=payload.time_range_days or previous.time_range_days,
         focus=_normalize_optional_text(payload.focus) or previous.focus,
+        client_request_id=payload.client_request_id,
         status=AIAnalysisStatus.ANALYZING,
+        stage=AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS,
+        progress_percent=STAGE_PERCENT[AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS],
+        progress_message=STAGE_LABELS[AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS],
+        heartbeat_at=now,
         created_by=requester_id,
-        started_at=datetime.now(UTC),
+        started_at=now,
     )
     session.add(analysis)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        existing = await _find_by_request_id(
+            session, course_id, requester_id, payload.client_request_id
+        )
+        if existing is not None:
+            return _analysis_response(existing)
+        raise
     await session.refresh(analysis)
+    analysis = await _load_analysis(session, course_id, analysis.id)
+    if payload.run_async:
+        if scheduler is None:
+            raise AIAnalysisConflictError("Analysis scheduler is unavailable")
+        await scheduler.start(analysis.id)
+        return _analysis_response(analysis)
     return await _execute_analysis(
         session,
         provider,
@@ -183,6 +338,17 @@ async def get_analysis(
     await ensure_teacher(session, course_id, requester_id)
     analysis = await _load_analysis(session, course_id, analysis_id)
     return _analysis_response(analysis)
+
+
+async def get_analysis_progress(
+    session: AsyncSession,
+    course_id: UUID,
+    analysis_id: UUID,
+    requester_id: UUID,
+) -> AIAnalysisProgressResponse:
+    await ensure_teacher(session, course_id, requester_id)
+    analysis = await _load_analysis(session, course_id, analysis_id)
+    return _progress_response(analysis)
 
 
 async def get_analysis_result(
@@ -300,6 +466,42 @@ async def create_strategy_from_analysis(
     return strategy
 
 
+async def execute_analysis_record(
+    session: AsyncSession,
+    provider: ChatProvider,
+    analysis_id: UUID,
+) -> AIAnalysisResponse:
+    analysis = await session.get(AIAnalysis, analysis_id)
+    if analysis is None:
+        raise AIAnalysisNotFoundError
+    point = await _load_knowledge_point(
+        session,
+        analysis.course_id,
+        analysis.knowledge_point_id,
+    )
+    students = await load_course_students(
+        session,
+        analysis.course_id,
+        _uuid_list(analysis.student_ids),
+    )
+    previous = None
+    if analysis.previous_analysis_id is not None:
+        previous = await _load_analysis(
+            session,
+            analysis.course_id,
+            analysis.previous_analysis_id,
+        )
+    return await _execute_analysis(
+        session,
+        provider,
+        analysis,
+        point,
+        students,
+        analysis.created_by,
+        previous=previous,
+    )
+
+
 async def _execute_analysis(
     session: AsyncSession,
     provider: ChatProvider,
@@ -310,12 +512,28 @@ async def _execute_analysis(
     *,
     previous: AIAnalysis | None = None,
 ) -> AIAnalysisResponse:
+    await _set_progress(
+        session,
+        analysis.id,
+        AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS,
+        record_event=True,
+    )
+    await _set_progress(
+        session,
+        analysis.id,
+        AIAnalysisStage.QUERYING_EVIDENCE,
+    )
     evidence_drafts = await _collect_evidence(
         session,
         analysis,
         point,
         students,
         previous=previous,
+    )
+    await _set_progress(
+        session,
+        analysis.id,
+        AIAnalysisStage.EXPANDING_KNOWLEDGE_GRAPH,
     )
     session.add_all(
         [
@@ -341,7 +559,17 @@ async def _execute_analysis(
         )
     )
 
+    await _set_progress(
+        session,
+        analysis.id,
+        AIAnalysisStage.ANALYZING_STUDENT_IMPACT,
+    )
     if len(stored_evidence) < MINIMUM_EVIDENCE_COUNT:
+        await _set_progress(
+            session,
+            analysis.id,
+            AIAnalysisStage.GENERATING_RECOMMENDATION,
+        )
         draft = _insufficient_draft()
         return await _save_result(
             session,
@@ -352,11 +580,16 @@ async def _execute_analysis(
             requester_id,
         )
 
+    await _set_progress(
+        session,
+        analysis.id,
+        AIAnalysisStage.GENERATING_RECOMMENDATION,
+    )
     context = _analysis_context(analysis, point, students, stored_evidence, previous)
     try:
         draft = await generate_analysis_draft(provider, context)
     except (ChatConfigurationError, ChatProviderError, AIAnalysisProviderError) as exc:
-        await _mark_failed(session, analysis.id, exc)
+        await mark_analysis_failed(session, analysis.id, exc)
         raise
 
     return await _save_result(
@@ -441,14 +674,25 @@ async def _save_result(
         generated_at=datetime.now(UTC),
     )
     session.add(result)
-    analysis.status = AIAnalysisStatus.COMPLETED
-    analysis.completed_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    analysis.completed_at = now
+    analysis.heartbeat_at = now
     analysis.error_message = None
+    await _set_progress(
+        session,
+        analysis.id,
+        AIAnalysisStage.GENERATING_RECOMMENDATION,
+        percent=100,
+        message="分析完成",
+        commit=False,
+    )
+    analysis.status = AIAnalysisStatus.COMPLETED
     await session.commit()
+    await session.refresh(analysis, attribute_names=["result", "evidence"])
     return await get_analysis(session, analysis.course_id, analysis.id, requester_id)
 
 
-async def _mark_failed(
+async def mark_analysis_failed(
     session: AsyncSession,
     analysis_id: UUID,
     error: Exception,
@@ -460,6 +704,7 @@ async def _mark_failed(
     analysis.status = AIAnalysisStatus.FAILED
     analysis.error_message = str(error)[:2000]
     analysis.completed_at = datetime.now(UTC)
+    analysis.heartbeat_at = datetime.now(UTC)
     await session.commit()
 
 
@@ -511,6 +756,8 @@ async def _load_analysis(
             selectinload(AIAnalysis.result),
             selectinload(AIAnalysis.evidence),
         )
+        .options(selectinload(AIAnalysis.stage_events))
+        .execution_options(populate_existing=True)
         .where(AIAnalysis.id == analysis_id, AIAnalysis.course_id == course_id)
     )
     if for_update:
@@ -519,6 +766,29 @@ async def _load_analysis(
     if analysis is None:
         raise AIAnalysisNotFoundError
     return analysis
+
+
+async def _find_by_request_id(
+    session: AsyncSession,
+    course_id: UUID,
+    requester_id: UUID,
+    client_request_id: str | None,
+) -> AIAnalysis | None:
+    if not client_request_id:
+        return None
+    return await session.scalar(
+        select(AIAnalysis)
+        .options(
+            selectinload(AIAnalysis.result),
+            selectinload(AIAnalysis.evidence),
+        )
+        .options(selectinload(AIAnalysis.stage_events))
+        .where(
+            AIAnalysis.course_id == course_id,
+            AIAnalysis.created_by == requester_id,
+            AIAnalysis.client_request_id == client_request_id,
+        )
+    )
 
 
 async def _collect_evidence(
@@ -864,9 +1134,99 @@ def _analysis_context(
     }
 
 
+def _stage_label(stage: AIAnalysisStage | None) -> str | None:
+    return STAGE_LABELS.get(stage) if stage is not None else None
+
+
+def _progress_summary(analysis: AIAnalysis) -> AIAnalysisProgressSummary:
+    if analysis.stage is None and analysis.status == AIAnalysisStatus.COMPLETED:
+        return AIAnalysisProgressSummary(
+            stage=None,
+            stage_label=None,
+            percent=100,
+            message="分析完成",
+            heartbeat_at=analysis.completed_at or analysis.updated_at,
+        )
+    return AIAnalysisProgressSummary(
+        stage=analysis.stage,
+        stage_label=_stage_label(analysis.stage),
+        percent=analysis.progress_percent or 0,
+        message=analysis.progress_message,
+        heartbeat_at=analysis.heartbeat_at,
+    )
+
+
+def _progress_response(analysis: AIAnalysis) -> AIAnalysisProgressResponse:
+    progress = _progress_summary(analysis)
+    return AIAnalysisProgressResponse(
+        analysis_id=analysis.id,
+        status=analysis.status,
+        stage=progress.stage,
+        stage_label=progress.stage_label,
+        percent=progress.percent,
+        message=progress.message,
+        heartbeat_at=progress.heartbeat_at,
+        started_at=analysis.started_at,
+        updated_at=analysis.updated_at,
+        completed_at=analysis.completed_at,
+        error_message=analysis.error_message,
+    )
+
+
+async def _set_progress(
+    session: AsyncSession,
+    analysis_id: UUID,
+    stage: AIAnalysisStage,
+    *,
+    percent: int | None = None,
+    message: str | None = None,
+    commit: bool = True,
+    record_event: bool = False,
+) -> None:
+    analysis = await session.get(AIAnalysis, analysis_id)
+    if analysis is None or (analysis.status != AIAnalysisStatus.ANALYZING and percent != 100):
+        return
+    target = percent if percent is not None else STAGE_PERCENT[stage]
+    current = analysis.progress_percent or 0
+    if target < current:
+        return
+    if analysis.stage is not None and STAGE_ORDER[stage] < STAGE_ORDER[analysis.stage]:
+        return
+    now = datetime.now(UTC)
+    status_changed = target > current or analysis.stage != stage or record_event
+    if status_changed:
+        sequence = (
+            int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(AIAnalysisStageEvent)
+                    .where(AIAnalysisStageEvent.analysis_id == analysis_id)
+                )
+                or 0
+            )
+            + 1
+        )
+        session.add(
+            AIAnalysisStageEvent(
+                analysis_id=analysis_id,
+                sequence=sequence,
+                stage=stage,
+                percent=target,
+                message=message or STAGE_LABELS[stage],
+            )
+        )
+    analysis.stage = stage
+    analysis.progress_percent = max(current, target)
+    analysis.progress_message = message or STAGE_LABELS[stage]
+    analysis.heartbeat_at = now
+    if commit:
+        await session.commit()
+
+
 def _analysis_response(analysis: AIAnalysis) -> AIAnalysisResponse:
     return AIAnalysisResponse(
         id=analysis.id,
+        analysis_id=analysis.id,
         course_id=analysis.course_id,
         knowledge_point_id=analysis.knowledge_point_id,
         previous_analysis_id=analysis.previous_analysis_id,
@@ -875,8 +1235,10 @@ def _analysis_response(analysis: AIAnalysis) -> AIAnalysisResponse:
         student_ids=_uuid_list(analysis.student_ids),
         time_range_days=analysis.time_range_days,
         focus=analysis.focus,
+        client_request_id=analysis.client_request_id,
         status=analysis.status,
         error_message=analysis.error_message,
+        progress=_progress_summary(analysis),
         created_at=analysis.created_at,
         started_at=analysis.started_at,
         completed_at=analysis.completed_at,
@@ -937,6 +1299,7 @@ def _analysis_list_item(analysis: AIAnalysis) -> AIAnalysisListItem:
         insufficient_evidence=bool(result and result.insufficient_evidence),
         conclusion=result.conclusion if result is not None else None,
         recommendation=result.recommendation if result is not None else None,
+        progress=_progress_summary(analysis),
         created_at=analysis.created_at,
         completed_at=analysis.completed_at,
     )

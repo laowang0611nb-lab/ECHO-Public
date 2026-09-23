@@ -5,6 +5,8 @@ from database.models.analysis import (
     AIAnalysisEvidenceSource,
     AIAnalysisResult,
     AIAnalysisScope,
+    AIAnalysisStage,
+    AIAnalysisStageEvent,
     AIAnalysisStatus,
     AIAnalysisType,
 )
@@ -85,6 +87,8 @@ __all__ = [
     "AIAnalysisEvidenceSource",
     "AIAnalysisResult",
     "AIAnalysisScope",
+    "AIAnalysisStage",
+    "AIAnalysisStageEvent",
     "AIAnalysisStatus",
     "AIAnalysisType",
     "AIReviewFlag",

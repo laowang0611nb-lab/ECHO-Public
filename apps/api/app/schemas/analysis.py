@@ -4,6 +4,7 @@ from uuid import UUID
 from database.models.analysis import (
     AIAnalysisEvidenceSource,
     AIAnalysisScope,
+    AIAnalysisStage,
     AIAnalysisStatus,
     AIAnalysisType,
 )
@@ -41,6 +42,15 @@ class AIAnalysisCreateRequest(BaseModel):
         validation_alias=AliasChoices("time_range_days", "timeRangeDays"),
     )
     focus: str | None = Field(default=None, max_length=2000)
+    run_async: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("async", "run_async", "async_mode"),
+    )
+    client_request_id: str | None = Field(
+        default=None,
+        max_length=128,
+        validation_alias=AliasChoices("client_request_id", "clientRequestId"),
+    )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -60,6 +70,15 @@ class AIAnalysisReanalyzeRequest(BaseModel):
         ge=7,
         le=180,
         validation_alias=AliasChoices("time_range_days", "timeRangeDays"),
+    )
+    run_async: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("async", "run_async", "async_mode"),
+    )
+    client_request_id: str | None = Field(
+        default=None,
+        max_length=128,
+        validation_alias=AliasChoices("client_request_id", "clientRequestId"),
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
@@ -96,8 +115,26 @@ class AIAnalysisResultResponse(BaseModel):
     generated_at: datetime
 
 
+class AIAnalysisProgressSummary(BaseModel):
+    stage: AIAnalysisStage | None
+    stage_label: str | None
+    percent: int = Field(ge=0, le=100)
+    message: str | None
+    heartbeat_at: datetime | None
+
+
+class AIAnalysisProgressResponse(AIAnalysisProgressSummary):
+    analysis_id: UUID
+    status: AIAnalysisStatus
+    started_at: datetime | None
+    updated_at: datetime
+    completed_at: datetime | None
+    error_message: str | None
+
+
 class AIAnalysisResponse(BaseModel):
     id: UUID
+    analysis_id: UUID
     course_id: UUID
     knowledge_point_id: UUID | None
     previous_analysis_id: UUID | None
@@ -106,8 +143,10 @@ class AIAnalysisResponse(BaseModel):
     student_ids: list[UUID] = Field(default_factory=list)
     time_range_days: int
     focus: str | None
+    client_request_id: str | None
     status: AIAnalysisStatus
     error_message: str | None
+    progress: AIAnalysisProgressSummary | None = None
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
@@ -128,6 +167,7 @@ class AIAnalysisListItem(BaseModel):
     insufficient_evidence: bool
     conclusion: str | None
     recommendation: str | None
+    progress: AIAnalysisProgressSummary | None = None
     created_at: datetime
     completed_at: datetime | None
 
