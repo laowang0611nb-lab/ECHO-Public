@@ -1,6 +1,6 @@
 [project]
 name = "echo-api"
-version = "0.0.137"
+version = "0.0.138"
 description = "ECHO education agent backend"
 requires-python = ">=3.11"
 dependencies = [
@@ -33,6 +33,7 @@ dev = [
     "httpx>=0.28.0,<1.0.0",
     "pytest>=8.3.0,<9.0.0",
     "pytest-asyncio>=0.25.0,<1.0.0",
+    "reportlab>=4.4.0,<5.0.0",
     "ruff>=0.9.0,<1.0.0",
 ]
 
