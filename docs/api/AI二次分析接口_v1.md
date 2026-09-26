@@ -200,7 +200,24 @@ AI 返回的每条 fact 必须引用当前分析中真实存在的 `evidence_id`
 - AI 明确返回证据不足。
 - AI 没有返回任何带有效证据 ID 的事实。
 
-证据不足时仍完成阶段进度，但不生成教学策略，也不把模型推测保存为确定原因。
+证据不足时仍完成阶段进度，但不生成教学策略。
+
+后端**保留模型自己的解释**，只在字段为空时使用安全兜底文案：
+
+- `conclusion`、`root_cause`、`recommendation` 优先保存模型返回值。
+- `insufficient_reason` 保存模型给出的不足原因；模型未提供时由分类推导。
+- `insufficient_categories` 为结构化分类数组，取值：
+
+```text
+no_evidence              没有可用的持久化证据
+partial_coverage         证据只覆盖部分学生或知识点
+conflicting_evidence     证据之间互相冲突
+missing_causal_evidence  缺少能确认因果链的关键证据
+model_uncertain          证据存在但模型无法确认结论
+```
+
+- `facts` 在证据不足时照常返回，前端可展示已确认的事实与其证据来源。
+- 旧记录没有这两个字段时，接口返回 `insufficient_reason: null` 与 `insufficient_categories: []`，不会报错。
 
 ## 9. 转教学策略
 

@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
 from database.models.analysis import (
@@ -19,6 +20,14 @@ from pydantic import (
     Field,
     model_validator,
 )
+
+
+class AIAnalysisInsufficientCategory(StrEnum):
+    NO_EVIDENCE = "no_evidence"
+    PARTIAL_COVERAGE = "partial_coverage"
+    CONFLICTING_EVIDENCE = "conflicting_evidence"
+    MISSING_CAUSAL_EVIDENCE = "missing_causal_evidence"
+    MODEL_UNCERTAIN = "model_uncertain"
 
 
 class AIAnalysisCreateRequest(BaseModel):
@@ -110,6 +119,8 @@ class AIAnalysisResultResponse(BaseModel):
     evidence_summary: list[dict[str, object]] = Field(default_factory=list)
     recommendation_payload: dict[str, object] = Field(default_factory=dict)
     insufficient_evidence: bool
+    insufficient_reason: str | None = None
+    insufficient_categories: list[AIAnalysisInsufficientCategory] = Field(default_factory=list)
     model_name: str | None
     strategy_id: UUID | None
     generated_at: datetime
@@ -193,9 +204,22 @@ class AIAnalysisFactDraft(BaseModel):
 
 
 class AIAnalysisDraft(BaseModel):
-    conclusion: str = Field(min_length=1, max_length=10000)
-    root_cause: str = Field(min_length=1, max_length=10000)
-    recommendation: str = Field(min_length=1, max_length=10000)
+    conclusion: str = Field(default="", max_length=10000)
+    root_cause: str = Field(default="", max_length=10000)
+    recommendation: str = Field(default="", max_length=10000)
     affected_student_ids: list[UUID] = Field(default_factory=list, max_length=500)
     facts: list[AIAnalysisFactDraft] = Field(default_factory=list, max_length=100)
     insufficient_evidence: bool = False
+    insufficient_reason: str | None = Field(default=None, max_length=4000)
+    insufficient_categories: list[AIAnalysisInsufficientCategory] = Field(
+        default_factory=list, max_length=10
+    )
+
+    @model_validator(mode="after")
+    def require_explanation_unless_insufficient(self) -> "AIAnalysisDraft":
+        if self.insufficient_evidence:
+            return self
+        for name in ("conclusion", "root_cause", "recommendation"):
+            if not getattr(self, name).strip():
+                raise ValueError(f"{name} is required unless insufficient_evidence is true")
+        return self

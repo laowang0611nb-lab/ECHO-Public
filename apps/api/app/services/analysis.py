@@ -40,6 +40,7 @@ from app.schemas.analysis import (
     AIAnalysisDraft,
     AIAnalysisEvidenceResponse,
     AIAnalysisFactResponse,
+    AIAnalysisInsufficientCategory,
     AIAnalysisListItem,
     AIAnalysisPage,
     AIAnalysisProgressResponse,
@@ -80,6 +81,22 @@ MINIMUM_EVIDENCE_COUNT = 2
 MAX_ANALYSIS_EVIDENCE = 120
 MAX_MESSAGE_TEXT = 1000
 MAX_SNAPSHOT_TEXT = 800
+
+# Safety-net copy used only when the model returns an empty explanation.
+INSUFFICIENT_FALLBACK_CONCLUSION = "现有证据不足，暂不能形成可靠的二次分析结论。"
+INSUFFICIENT_FALLBACK_ROOT_CAUSE = "当前证据只支持局部观察，尚不足以确认完整的因果链。"
+INSUFFICIENT_FALLBACK_RECOMMENDATION = (
+    "建议补充课堂观察、Quick Check、学生对话或教师修正证据后重新分析。"
+)
+INSUFFICIENT_CATEGORY_REASONS: dict[AIAnalysisInsufficientCategory, str] = {
+    AIAnalysisInsufficientCategory.NO_EVIDENCE: "本次分析没有可用的持久化证据。",
+    AIAnalysisInsufficientCategory.PARTIAL_COVERAGE: "现有证据只覆盖部分学生或知识点。",
+    AIAnalysisInsufficientCategory.CONFLICTING_EVIDENCE: (
+        "现有证据之间存在冲突，无法形成一致结论。"
+    ),
+    AIAnalysisInsufficientCategory.MISSING_CAUSAL_EVIDENCE: ("缺少能够确认因果链的关键证据。"),
+    AIAnalysisInsufficientCategory.MODEL_UNCERTAIN: "模型无法基于当前证据确认结论。",
+}
 
 # Learning events arrive in bulk and used to swallow the whole budget before
 # other sources were even queried. Every source is now capped by a quota,
@@ -627,6 +644,37 @@ async def _execute_analysis(
     )
 
 
+def _text_or_fallback(value: str | None, fallback: str) -> str:
+    text = (value or "").strip()
+    return text or fallback
+
+
+def _insufficient_categories(
+    draft: AIAnalysisDraft,
+    *,
+    evidence_count: int,
+    fact_count: int,
+) -> list[AIAnalysisInsufficientCategory]:
+    """Prefer the model's categories, otherwise derive them from the data."""
+    if draft.insufficient_categories:
+        return list(dict.fromkeys(draft.insufficient_categories))
+    if evidence_count == 0:
+        return [AIAnalysisInsufficientCategory.NO_EVIDENCE]
+    if fact_count == 0:
+        return [AIAnalysisInsufficientCategory.MISSING_CAUSAL_EVIDENCE]
+    return [AIAnalysisInsufficientCategory.MODEL_UNCERTAIN]
+
+
+def _insufficient_reason(
+    draft: AIAnalysisDraft,
+    categories: list[AIAnalysisInsufficientCategory],
+) -> str:
+    explicit = (draft.insufficient_reason or "").strip()
+    if explicit:
+        return explicit
+    return "；".join(INSUFFICIENT_CATEGORY_REASONS[item] for item in categories)
+
+
 async def _save_result(
     session: AsyncSession,
     analysis_id: UUID,
@@ -661,13 +709,22 @@ async def _save_result(
     ]
     insufficient = draft.insufficient_evidence or not facts
     if insufficient:
-        conclusion = "现有证据不足，暂不能形成可靠的二次分析结论。"
-        root_cause = "当前证据只支持局部观察，尚不足以确认完整的因果链。"
-        recommendation = "建议补充课堂观察、Quick Check、学生对话或教师修正证据后重新分析。"
+        # Keep the model's own explanation; templates are only a safety net.
+        conclusion = _text_or_fallback(draft.conclusion, INSUFFICIENT_FALLBACK_CONCLUSION)
+        root_cause = _text_or_fallback(draft.root_cause, INSUFFICIENT_FALLBACK_ROOT_CAUSE)
+        recommendation = _text_or_fallback(
+            draft.recommendation, INSUFFICIENT_FALLBACK_RECOMMENDATION
+        )
+        insufficient_categories = _insufficient_categories(
+            draft, evidence_count=len(evidence), fact_count=len(facts)
+        )
+        insufficient_reason = _insufficient_reason(draft, insufficient_categories)
     else:
         conclusion = draft.conclusion
         root_cause = draft.root_cause
         recommendation = draft.recommendation
+        insufficient_categories = []
+        insufficient_reason = None
 
     result = AIAnalysisResult(
         analysis_id=analysis.id,
@@ -695,6 +752,8 @@ async def _save_result(
             "evidence_ids": sorted(fact_evidence_ids),
         },
         insufficient_evidence=insufficient,
+        insufficient_reason=insufficient_reason,
+        insufficient_categories=[item.value for item in insufficient_categories],
         model_name=getattr(provider, "model", None),
         generated_at=datetime.now(UTC),
     )
@@ -1322,6 +1381,14 @@ def _analysis_response(analysis: AIAnalysis) -> AIAnalysisResponse:
     )
 
 
+def _insufficient_category_values(
+    values: list[str] | None,
+) -> list[AIAnalysisInsufficientCategory]:
+    """Ignore unknown values so legacy or hand-edited rows stay readable."""
+    allowed = {item.value for item in AIAnalysisInsufficientCategory}
+    return [AIAnalysisInsufficientCategory(value) for value in (values or []) if value in allowed]
+
+
 def _result_response(result: AIAnalysisResult) -> AIAnalysisResultResponse:
     return AIAnalysisResultResponse(
         conclusion=result.conclusion,
@@ -1339,6 +1406,8 @@ def _result_response(result: AIAnalysisResult) -> AIAnalysisResultResponse:
         evidence_summary=result.evidence_summary,
         recommendation_payload=result.recommendation_payload,
         insufficient_evidence=result.insufficient_evidence,
+        insufficient_reason=result.insufficient_reason,
+        insufficient_categories=_insufficient_category_values(result.insufficient_categories),
         model_name=result.model_name,
         strategy_id=result.strategy_id,
         generated_at=result.generated_at,

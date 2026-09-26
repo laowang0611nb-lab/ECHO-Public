@@ -5,9 +5,11 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import pytest
 from database.models.analysis import (
     AIAnalysis,
     AIAnalysisEvidenceSource,
+    AIAnalysisResult,
     AIAnalysisScope,
     AIAnalysisStage,
     AIAnalysisStageEvent,
@@ -31,11 +33,13 @@ from database.models.review import (
     ReviewStatus,
 )
 from httpx import AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
 from app.main import app
+from app.schemas.analysis import AIAnalysisDraft
 from app.services.analysis import (
     EVIDENCE_QUOTAS,
     MAX_ANALYSIS_EVIDENCE,
@@ -1000,3 +1004,198 @@ async def test_reanalysis_keeps_every_evidence_source_within_quota(
     )
     assert counts["learning_event"] < MAX_ANALYSIS_EVIDENCE
     assert len(body["evidence"]) <= MAX_ANALYSIS_EVIDENCE
+
+
+def _insufficient_answer_builder(
+    student_id: UUID,
+    *,
+    with_text: bool,
+    with_facts: bool,
+):
+    """Build an insufficient-evidence answer that may or may not explain itself."""
+
+    def builder(messages: list[dict[str, str]]) -> str:
+        context = "\n".join(message["content"] for message in messages)
+        evidence_ids = re.findall(r'"evidence_id"\s*:\s*"([^"]+)"', context)
+        payload: dict[str, object] = {
+            "conclusion": "现有证据只能说明该生反复答错边界值题目，尚不能区分概念缺失与读题失误。",
+            "root_cause": "缺少能区分概念理解与题目理解的关键证据。",
+            "recommendation": "补充一次口头追问与订正记录后再判断。",
+            "affected_student_ids": [str(student_id)],
+            "facts": (
+                [
+                    {
+                        "fact": "该生在同一知识点上重复出错。",
+                        "evidence_ids": evidence_ids[:2],
+                    }
+                ]
+                if with_facts
+                else []
+            ),
+            "insufficient_evidence": True,
+            "insufficient_reason": "缺少能区分概念缺失与读题失误的对话证据。",
+            "insufficient_categories": ["missing_causal_evidence"],
+        }
+        if not with_text:
+            payload["conclusion"] = ""
+            payload["root_cause"] = ""
+            payload["recommendation"] = ""
+            payload["insufficient_reason"] = None
+            payload["insufficient_categories"] = []
+        return json.dumps(payload, ensure_ascii=False)
+
+    return builder
+
+
+async def _run_insufficient_analysis(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    *,
+    email_prefix: str,
+    with_text: bool,
+    with_facts: bool,
+) -> dict[str, object]:
+    teacher = await login(client, f"{email_prefix}-teacher@example.com", "teacher")
+    student = await login(client, f"{email_prefix}-student@example.com", "student")
+    course = await create_course_with_students(client, teacher, [student])
+    course_id = UUID(course["id"])
+    chapter_id, point_id = await create_structure(
+        session_factory,
+        course_id,
+        UUID(teacher["id"]),
+    )
+    await add_learning_evidence(
+        session_factory,
+        course_id=course_id,
+        chapter_id=chapter_id,
+        point_id=point_id,
+        students=[UUID(student["id"])],
+    )
+    chat_provider.answer_builder = _insufficient_answer_builder(
+        UUID(student["id"]),
+        with_text=with_text,
+        with_facts=with_facts,
+    )
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/ai-analysis",
+        headers=auth_headers(teacher),
+        json={"knowledge_point_id": str(point_id), "scope": "whole_class", "async": False},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()["result"]
+
+
+async def test_insufficient_analysis_keeps_model_explanation(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    result = await _run_insufficient_analysis(
+        client,
+        session_factory,
+        chat_provider,
+        email_prefix="insufficient-detail",
+        with_text=True,
+        with_facts=True,
+    )
+
+    assert result["insufficient_evidence"] is True
+    assert result["conclusion"].startswith("现有证据只能说明")
+    assert "关键证据" in result["root_cause"]
+    assert result["recommendation"].startswith("补充一次口头追问")
+    assert result["insufficient_reason"].startswith("缺少能区分")
+    assert result["insufficient_categories"] == ["missing_causal_evidence"]
+    assert result["facts"]
+    assert result["facts"][0]["evidence_ids"]
+    assert result["conclusion"] != "现有证据不足，暂不能形成可靠的二次分析结论。"
+
+
+async def test_insufficient_analysis_without_model_text_uses_fallback(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    result = await _run_insufficient_analysis(
+        client,
+        session_factory,
+        chat_provider,
+        email_prefix="insufficient-blank",
+        with_text=False,
+        with_facts=False,
+    )
+
+    assert result["insufficient_evidence"] is True
+    assert result["conclusion"] == "现有证据不足，暂不能形成可靠的二次分析结论。"
+    assert result["root_cause"] == "当前证据只支持局部观察，尚不足以确认完整的因果链。"
+    assert result["recommendation"].startswith("建议补充课堂观察")
+    assert result["insufficient_reason"]
+    assert result["insufficient_categories"] == ["missing_causal_evidence"]
+    assert result["facts"] == []
+
+
+def test_analysis_draft_allows_blank_explanation_only_when_insufficient() -> None:
+    with pytest.raises(ValidationError):
+        AIAnalysisDraft(conclusion="", root_cause="", recommendation="")
+
+    draft = AIAnalysisDraft(
+        conclusion="",
+        root_cause="",
+        recommendation="",
+        insufficient_evidence=True,
+    )
+    assert draft.conclusion == ""
+    assert draft.insufficient_categories == []
+
+
+async def test_legacy_result_without_insufficient_detail_stays_readable(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "legacy-insufficient-teacher@example.com", "teacher")
+    course = await create_course_with_students(client, teacher, [])
+    analysis_id = uuid4()
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        session.add(
+            AIAnalysis(
+                id=analysis_id,
+                course_id=UUID(course["id"]),
+                analysis_type=AIAnalysisType.INITIAL,
+                scope=AIAnalysisScope.WHOLE_CLASS,
+                student_ids=[],
+                time_range_days=28,
+                status=AIAnalysisStatus.COMPLETED,
+                progress_percent=100,
+                created_by=UUID(teacher["id"]),
+                started_at=now,
+                completed_at=now,
+            )
+        )
+        session.add(
+            AIAnalysisResult(
+                analysis_id=analysis_id,
+                conclusion="旧记录结论",
+                root_cause="旧记录原因",
+                recommendation="旧记录建议",
+                affected_student_ids=[],
+                facts=[{"fact": "旧记录事实", "evidence_ids": []}],
+                evidence_summary=[],
+                recommendation_payload={},
+                insufficient_evidence=True,
+                model_name="legacy-model",
+                generated_at=now,
+            )
+        )
+        await session.commit()
+
+    detail = await client.get(
+        f"/api/v1/courses/{course['id']}/ai-analysis/{analysis_id}",
+        headers=auth_headers(teacher),
+    )
+    assert detail.status_code == 200, detail.text
+    result = detail.json()["result"]
+    assert result["insufficient_evidence"] is True
+    assert result["insufficient_reason"] is None
+    assert result["insufficient_categories"] == []
+    assert result["facts"][0]["fact"] == "旧记录事实"

@@ -1390,6 +1390,13 @@ export interface AIAnalysisCreateRequest {
   client_request_id?: string | null;
 }
 
+export type AIAnalysisInsufficientCategory =
+  | "no_evidence"
+  | "partial_coverage"
+  | "conflicting_evidence"
+  | "missing_causal_evidence"
+  | "model_uncertain";
+
 export interface AIAnalysisReanalyzeRequest {
   focus?: string | null;
   time_range_days?: number | null;
@@ -1424,6 +1431,8 @@ export interface AIAnalysisResult {
   evidence_summary: Record<string, unknown>[];
   recommendation_payload: Record<string, unknown>;
   insufficient_evidence: boolean;
+  insufficient_reason: string | null;
+  insufficient_categories: AIAnalysisInsufficientCategory[];
   model_name: string | null;
   strategy_id: string | null;
   generated_at: string;

@@ -29,8 +29,23 @@ Return one JSON object with this shape:
   "recommendation": string,
   "affected_student_ids": string[],
   "facts": [{"fact": string, "evidence_ids": string[]}],
-  "insufficient_evidence": boolean
+  "insufficient_evidence": boolean,
+  "insufficient_reason": string | null,
+  "insufficient_categories": string[]
 }
+When insufficient_evidence is true, still answer with your concrete reasoning:
+- conclusion: why the current evidence cannot support a reliable conclusion
+- root_cause: which part of the causal chain is still unproven
+- recommendation: the specific evidence a teacher should collect next
+- insufficient_reason: one short paragraph naming what is missing
+- insufficient_categories: array using only these values:
+  no_evidence (no usable persisted evidence),
+  partial_coverage (evidence covers only part of the students or knowledge points),
+  conflicting_evidence (evidence contradicts itself),
+  missing_causal_evidence (key evidence for causality is absent),
+  model_uncertain (the evidence is present but the model cannot confirm the conclusion).
+Never leave conclusion, root_cause or recommendation empty; they explain the
+insufficiency instead of restating a generic apology.
 Use only evidence_ids and affected_student_ids present in the supplied context.
 Do not claim causality unless the evidence directly supports it.
 """
