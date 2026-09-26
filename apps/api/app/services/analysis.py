@@ -81,6 +81,31 @@ MAX_ANALYSIS_EVIDENCE = 120
 MAX_MESSAGE_TEXT = 1000
 MAX_SNAPSHOT_TEXT = 800
 
+# Learning events arrive in bulk and used to swallow the whole budget before
+# other sources were even queried. Every source is now capped by a quota,
+# learning events are allocated last and act as filler, and any leftover
+# budget is topped up round-robin under a hard per-source ceiling.
+EVIDENCE_QUOTAS: dict[AIAnalysisEvidenceSource, int] = {
+    AIAnalysisEvidenceSource.INITIAL_ANALYSIS: 1,
+    AIAnalysisEvidenceSource.CONVERSATION_MESSAGE: 18,
+    AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT: 18,
+    AIAnalysisEvidenceSource.REVIEW_FLAG: 10,
+    AIAnalysisEvidenceSource.MESSAGE_CITATION: 12,
+    AIAnalysisEvidenceSource.KNOWLEDGE_CHUNK: 12,
+    AIAnalysisEvidenceSource.MASTERY_SNAPSHOT: 20,
+    AIAnalysisEvidenceSource.LEARNING_EVENT: 30,
+}
+EVIDENCE_SOURCE_ORDER: tuple[AIAnalysisEvidenceSource, ...] = (
+    AIAnalysisEvidenceSource.CONVERSATION_MESSAGE,
+    AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT,
+    AIAnalysisEvidenceSource.REVIEW_FLAG,
+    AIAnalysisEvidenceSource.MESSAGE_CITATION,
+    AIAnalysisEvidenceSource.KNOWLEDGE_CHUNK,
+    AIAnalysisEvidenceSource.MASTERY_SNAPSHOT,
+    AIAnalysisEvidenceSource.LEARNING_EVENT,
+)
+EVIDENCE_TOP_UP_CEILING = MAX_ANALYSIS_EVIDENCE // 2
+
 
 class AIAnalysisNotFoundError(Exception):
     pass
@@ -804,7 +829,7 @@ async def _collect_evidence(
     student_ids = [student.id for student in students]
     start = datetime.now(UTC) - timedelta(days=analysis.time_range_days)
     point_id = point.id if point is not None else None
-    evidence: list[EvidenceDraft] = []
+    buckets: dict[AIAnalysisEvidenceSource, list[EvidenceDraft]] = {}
     seen: set[tuple[str, str, str]] = set()
 
     def add(draft: EvidenceDraft) -> None:
@@ -813,10 +838,10 @@ async def _collect_evidence(
             str(draft.source_id),
             str(draft.student_id) if draft.student_id else "",
         )
-        if key in seen or len(evidence) >= MAX_ANALYSIS_EVIDENCE:
+        if key in seen:
             return
         seen.add(key)
-        evidence.append(draft)
+        buckets.setdefault(draft.source_type, []).append(draft)
 
     if previous is not None and previous.result is not None:
         previous_result = previous.result
@@ -1083,7 +1108,56 @@ async def _collect_evidence(
             )
         )
 
-    return evidence
+    return _select_evidence(buckets)
+
+
+def _select_evidence(
+    buckets: dict[AIAnalysisEvidenceSource, list[EvidenceDraft]],
+) -> list[EvidenceDraft]:
+    """Merge per-source candidates into a balanced evidence set.
+
+    The previous analysis result is reserved first, every other source takes its
+    quota before learning events are considered, and any leftover budget is
+    topped up round-robin under a hard per-source ceiling. A single source can
+    therefore never own the whole budget, while each source that has data keeps
+    at least one representative.
+    """
+    selected: list[EvidenceDraft] = []
+    cursors: dict[AIAnalysisEvidenceSource, int] = {}
+    counts: dict[AIAnalysisEvidenceSource, int] = {}
+    budget = MAX_ANALYSIS_EVIDENCE
+
+    def take(source: AIAnalysisEvidenceSource, limit: int) -> None:
+        nonlocal budget
+        items = buckets.get(source, [])
+        index = cursors.get(source, 0)
+        taken = counts.get(source, 0)
+        while index < len(items) and taken < limit and budget > 0:
+            selected.append(items[index])
+            index += 1
+            taken += 1
+            budget -= 1
+        cursors[source] = index
+        counts[source] = taken
+
+    initial_source = AIAnalysisEvidenceSource.INITIAL_ANALYSIS
+    take(initial_source, EVIDENCE_QUOTAS[initial_source])
+    for source in EVIDENCE_SOURCE_ORDER:
+        take(source, EVIDENCE_QUOTAS[source])
+
+    progressed = True
+    while budget > 0 and progressed:
+        progressed = False
+        for source in EVIDENCE_SOURCE_ORDER:
+            if budget <= 0:
+                break
+            if counts.get(source, 0) >= EVIDENCE_TOP_UP_CEILING:
+                continue
+            before = len(selected)
+            take(source, EVIDENCE_TOP_UP_CEILING)
+            if len(selected) > before:
+                progressed = True
+    return selected
 
 
 def _analysis_context(

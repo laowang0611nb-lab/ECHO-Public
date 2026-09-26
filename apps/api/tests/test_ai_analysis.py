@@ -1,26 +1,47 @@
 import asyncio
 import json
 import re
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from database.models.analysis import (
     AIAnalysis,
+    AIAnalysisEvidenceSource,
     AIAnalysisScope,
     AIAnalysisStage,
     AIAnalysisStageEvent,
     AIAnalysisStatus,
     AIAnalysisType,
 )
+from database.models.chat import Conversation, Message, MessageCitation, MessageRole
 from database.models.document import Document, DocumentStatus
 from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
-from database.models.learning import LearningEvent, LearningEventType, MasterySnapshot
+from database.models.learning import (
+    LearningEvent,
+    LearningEventType,
+    MasterySnapshot,
+    QuickCheckAttempt,
+)
+from database.models.resource import QuestionItem, QuestionType
+from database.models.review import (
+    AIReviewFlag,
+    ReviewReason,
+    ReviewSeverity,
+    ReviewStatus,
+)
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
 from app.main import app
+from app.services.analysis import (
+    EVIDENCE_QUOTAS,
+    MAX_ANALYSIS_EVIDENCE,
+    EvidenceDraft,
+    _select_evidence,
+)
 from app.services.analysis_tasks import _ACTIVE_TASKS
 
 
@@ -736,3 +757,246 @@ async def test_legacy_completed_analysis_without_progress_remains_readable(
 def test_ai_analysis_progress_openapi_path() -> None:
     path = "/api/v1/courses/{course_id}/ai-analysis/{analysis_id}/progress"
     assert "get" in app.openapi()["paths"][path]
+
+
+def _evidence_draft(source: AIAnalysisEvidenceSource) -> EvidenceDraft:
+    return EvidenceDraft(
+        source_type=source,
+        source_id=uuid4(),
+        student_id=None,
+        knowledge_point_id=None,
+        label=f"{source.value} 草稿",
+        description="回归测试",
+        snapshot_json={},
+    )
+
+
+def test_evidence_selection_balances_every_source() -> None:
+    """A bulk source must not swallow the budget that other sources need."""
+    sources = (
+        AIAnalysisEvidenceSource.CONVERSATION_MESSAGE,
+        AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT,
+        AIAnalysisEvidenceSource.REVIEW_FLAG,
+        AIAnalysisEvidenceSource.MESSAGE_CITATION,
+        AIAnalysisEvidenceSource.KNOWLEDGE_CHUNK,
+        AIAnalysisEvidenceSource.MASTERY_SNAPSHOT,
+        AIAnalysisEvidenceSource.LEARNING_EVENT,
+    )
+    buckets = {source: [_evidence_draft(source) for _ in range(200)] for source in sources}
+    buckets[AIAnalysisEvidenceSource.INITIAL_ANALYSIS] = [
+        _evidence_draft(AIAnalysisEvidenceSource.INITIAL_ANALYSIS)
+    ]
+
+    selected = _select_evidence(buckets)
+    counts = Counter(item.source_type for item in selected)
+
+    assert len(selected) == MAX_ANALYSIS_EVIDENCE
+    assert counts[AIAnalysisEvidenceSource.INITIAL_ANALYSIS] == 1
+    for source in sources:
+        assert counts[source] >= 1, source
+        assert counts[source] <= EVIDENCE_QUOTAS[source], source
+    assert counts[AIAnalysisEvidenceSource.LEARNING_EVENT] < MAX_ANALYSIS_EVIDENCE
+
+
+def test_evidence_selection_caps_a_lone_bulk_source() -> None:
+    source = AIAnalysisEvidenceSource.LEARNING_EVENT
+    selected = _select_evidence({source: [_evidence_draft(source) for _ in range(500)]})
+
+    assert 0 < len(selected) <= MAX_ANALYSIS_EVIDENCE // 2
+    assert all(item.source_type is source for item in selected)
+
+
+async def add_mixed_evidence(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    course_id: UUID,
+    teacher_id: UUID,
+    chapter_id: UUID,
+    point_id: UUID,
+    students: list[UUID],
+    event_count: int = 300,
+    per_source: int = 24,
+    chunk_count: int = 16,
+) -> None:
+    """Seed every evidence source, with learning events dominating by volume."""
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        chapter = await session.get(Chapter, chapter_id)
+        assert chapter is not None
+        document_id = chapter.document_id
+
+        for index in range(event_count):
+            session.add(
+                LearningEvent(
+                    course_id=course_id,
+                    user_id=students[index % len(students)],
+                    knowledge_point_id=point_id,
+                    event_type=LearningEventType.REPEATED_ERROR,
+                    weight=1.0,
+                    evidence=f"重复错误 {index}",
+                    metadata_json={"index": index},
+                    created_at=now - timedelta(minutes=index + 1),
+                )
+            )
+
+        question = QuestionItem(
+            course_id=course_id,
+            type=QuestionType.SINGLE_CHOICE,
+            title="边界值回归题目",
+            content="下列哪个输入属于边界值？",
+            metadata_json={"options": ["A", "B"]},
+            created_by=teacher_id,
+            created_at=now,
+        )
+        session.add(question)
+        await session.flush()
+
+        for index in range(per_source):
+            created_at = now - timedelta(hours=index + 1)
+            student_id = students[index % len(students)]
+            conversation = Conversation(
+                course_id=course_id,
+                user_id=student_id,
+                title=f"回归对话 {index}",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+            session.add(conversation)
+            await session.flush()
+            message = Message(
+                conversation_id=conversation.id,
+                role=MessageRole.USER,
+                content=f"边界值问题 {index}",
+                created_at=created_at,
+            )
+            session.add(message)
+            await session.flush()
+            session.add(
+                MessageCitation(
+                    message_id=message.id,
+                    citation_index=1,
+                    document_id=document_id,
+                    document_name="analysis.pdf",
+                    page_start=1,
+                    page_end=1,
+                    quote="边界值分析需要覆盖边界输入。",
+                    created_at=created_at,
+                )
+            )
+            session.add(
+                AIReviewFlag(
+                    course_id=course_id,
+                    conversation_id=conversation.id,
+                    message_id=message.id,
+                    student_id=student_id,
+                    reason=ReviewReason.MISSING_COURSE_BASIS,
+                    severity=ReviewSeverity.HIGH,
+                    status=ReviewStatus.OPEN,
+                    details={"summary": f"缺少课程依据 {index}"},
+                    created_at=created_at,
+                )
+            )
+            session.add(
+                QuickCheckAttempt(
+                    course_id=course_id,
+                    user_id=student_id,
+                    question_item_id=question.id,
+                    knowledge_point_id=point_id,
+                    attempt_id=f"regression-attempt-{index}",
+                    selected_option_id="A",
+                    correct=index % 2 == 0,
+                    response_json={"selected": "A"},
+                    created_at=created_at,
+                )
+            )
+            session.add(
+                MasterySnapshot(
+                    course_id=course_id,
+                    user_id=student_id,
+                    knowledge_point_id=point_id,
+                    score=40.0 + index,
+                    created_at=created_at,
+                )
+            )
+
+        for index in range(chunk_count):
+            session.add(
+                KnowledgeChunk(
+                    course_id=course_id,
+                    document_id=document_id,
+                    chapter_id=chapter_id,
+                    chunk_index=index + 1,
+                    page_start=index + 1,
+                    page_end=index + 1,
+                    content=f"资料片段 {index}",
+                    char_count=12,
+                    metadata_json={"index": index},
+                )
+            )
+        await session.commit()
+
+
+async def test_reanalysis_keeps_every_evidence_source_within_quota(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "quota-teacher@example.com", "teacher")
+    students = [
+        await login(client, f"quota-student-{index}@example.com", "student") for index in range(3)
+    ]
+    course = await create_course_with_students(client, teacher, students)
+    course_id = UUID(course["id"])
+    chapter_id, point_id = await create_structure(
+        session_factory,
+        course_id,
+        UUID(teacher["id"]),
+    )
+    await add_mixed_evidence(
+        session_factory,
+        course_id=course_id,
+        teacher_id=UUID(teacher["id"]),
+        chapter_id=chapter_id,
+        point_id=point_id,
+        students=[UUID(student["id"]) for student in students],
+    )
+    chat_provider.answer_builder = lambda messages: evidence_aware_answer(
+        messages,
+        UUID(students[0]["id"]),
+    )
+
+    initial = await client.post(
+        f"/api/v1/courses/{course['id']}/ai-analysis",
+        headers=auth_headers(teacher),
+        json={"scope": "whole_class", "async": False},
+    )
+    assert initial.status_code == 200, initial.text
+    initial_id = initial.json()["id"]
+
+    reanalysis = await client.post(
+        f"/api/v1/courses/{course['id']}/ai-analysis/{initial_id}/reanalyze",
+        headers=auth_headers(teacher),
+        json={"focus": "验证证据来源分布", "async": False},
+    )
+    assert reanalysis.status_code == 200, reanalysis.text
+    body = reanalysis.json()
+    counts = Counter(item["source_type"] for item in body["evidence"])
+
+    assert counts["initial_analysis"] == 1
+    assert (
+        counts["conversation_message"]
+        == EVIDENCE_QUOTAS[AIAnalysisEvidenceSource.CONVERSATION_MESSAGE]
+    )
+    assert (
+        counts["quick_check_attempt"]
+        == EVIDENCE_QUOTAS[AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT]
+    )
+    assert counts["review_flag"] == EVIDENCE_QUOTAS[AIAnalysisEvidenceSource.REVIEW_FLAG]
+    assert counts["message_citation"] == EVIDENCE_QUOTAS[AIAnalysisEvidenceSource.MESSAGE_CITATION]
+    assert counts["knowledge_chunk"] == EVIDENCE_QUOTAS[AIAnalysisEvidenceSource.KNOWLEDGE_CHUNK]
+    assert counts["mastery_snapshot"] == EVIDENCE_QUOTAS[AIAnalysisEvidenceSource.MASTERY_SNAPSHOT]
+    assert (
+        20 <= counts["learning_event"] <= EVIDENCE_QUOTAS[AIAnalysisEvidenceSource.LEARNING_EVENT]
+    )
+    assert counts["learning_event"] < MAX_ANALYSIS_EVIDENCE
+    assert len(body["evidence"]) <= MAX_ANALYSIS_EVIDENCE
