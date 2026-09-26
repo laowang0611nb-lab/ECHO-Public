@@ -41,13 +41,26 @@ def test_software_engineering_handoff_package_is_complete_and_valid(
     assert manifest["counts"]["documents"] == 4
     assert manifest["counts"]["assignments"] == 12
     assert manifest["counts"]["assignment-submissions"] == 576
-    assert manifest["counts"]["learning-events"] == 2016
+    assert manifest["counts"]["learning-events"] == 2183
     assert manifest["counts"]["student-knowledge-states"] == 4032
-    assert manifest["counts"]["mastery-snapshots"] == 28224
-    assert manifest["counts"]["conversations"] == 96
-    assert manifest["counts"]["messages"] == 576
-    assert manifest["counts"]["message-citations"] == 288
-    assert manifest["counts"]["ai-review-flags"] == 96
+    assert manifest["counts"]["mastery-snapshots"] == 28320
+    assert manifest["counts"]["conversations"] == 144
+    assert manifest["counts"]["messages"] == 768
+    assert manifest["counts"]["message-citations"] == 384
+    assert manifest["counts"]["quick-check-attempts"] == 480
+    assert manifest["counts"]["ai-review-flags"] == 144
+    assert manifest["counts"]["question-items"] == 30
+    assert manifest["causalDesign"]["targetStudentCount"] == 16
+    assert manifest["causalDesign"]["targetKnowledgePointCount"] == 3
+    assert manifest["causalDesign"]["causalChainCount"] == 48
+    assert manifest["causalDesign"]["classBaselineStudentPointPairs"] == 144
+    assert manifest["causalDesign"]["classBaselineSnapshotCount"] == 288
+    assert manifest["causalDesign"]["planLinkedEventCount"] >= 144
+    assert manifest["causalDesign"]["improvedChainCount"] == 35
+    assert manifest["causalDesign"]["notImprovedChainCount"] == 13
+    assert manifest["causalDesign"]["assessmentDesign"]["transferDelayHours"] == 144
+    assert manifest["causalDesign"]["cohortSummary"]["target_group_coverage"] == "16/16"
+    assert manifest["causalDesign"]["sourceCoverage"]["measuredKnowledgePointIds"]
     assert manifest["counts"]["ai-analyses"] == 4
     assert manifest["counts"]["ai-analysis-evidence"] == 481
     assert manifest["counts"]["ai-analysis-results"] == 2

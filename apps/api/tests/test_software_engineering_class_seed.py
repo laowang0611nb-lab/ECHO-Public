@@ -81,15 +81,15 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
         assert counts["knowledgePoints"] == 84
         assert counts["chunks"] == 140
         assert counts["embeddedChunks"] == 140
-        assert counts["learningEvents"] == 2016
+        assert counts["learningEvents"] == 2183
         assert counts["knowledgeStates"] == 4032
-        assert counts["masterySnapshots"] == 28224
-        assert counts["conversations"] == 96
-        assert counts["messages"] == 576
-        assert counts["citations"] == 288
-        assert counts["reviews"] == 96
-        assert counts["questions"] == 24
-        assert counts["quickCheckAttempts"] == 384
+        assert counts["masterySnapshots"] == 28320
+        assert counts["conversations"] == 144
+        assert counts["messages"] == 768
+        assert counts["citations"] == 384
+        assert counts["reviews"] == 144
+        assert counts["questions"] == 30
+        assert counts["quickCheckAttempts"] == 480
         assert counts["strategies"] == 3
         assert counts["plans"] == 2
         assert counts["analyses"] == 4
@@ -172,7 +172,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                 )
                 or 0
             )
-            assert snapshot_count == 48 * 84 * 7
+            assert snapshot_count == 28320
 
             event_types = set(
                 await session.scalars(
@@ -211,7 +211,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                 )
                 or 0
             )
-            assert question_link_count == 24
+            assert question_link_count == 30
 
             assert (
                 await session.scalar(
@@ -253,7 +253,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                         Conversation.course_id == course_id
                     )
                 )
-                == 96
+                == 144
             )
             assert (
                 await session.scalar(
@@ -265,7 +265,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                         )
                     )
                 )
-                == 576
+                == 768
             )
             assert (
                 await session.scalar(
@@ -281,7 +281,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                         )
                     )
                 )
-                == 288
+                == 384
             )
             assert (
                 await session.scalar(
@@ -305,7 +305,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                         QuestionItem.course_id == course_id
                     )
                 )
-                == 24
+                == 30
             )
             assert (
                 await session.scalar(
@@ -313,7 +313,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                         QuickCheckAttempt.course_id == course_id
                     )
                 )
-                == 384
+                == 480
             )
 
         unrelated_teacher = User(

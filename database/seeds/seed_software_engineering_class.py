@@ -115,6 +115,9 @@ from database.models.review import (
     ReviewVersionSource,
 )
 from database.models.user import User, UserRole, UserStatus
+from database.seeds.software_engineering_causal_data import (
+    upgrade_causal_evidence,
+)
 from database.seeds.software_engineering_class_data import (
     CHAPTER_DEFINITIONS,
     RESOURCE_DEFINITIONS,
@@ -1052,7 +1055,7 @@ def _build_conversations(
                             "document_id": chunk["document_id"],
                             "page_start": chunk["page_start"],
                             "page_end": chunk["page_end"],
-                            "document_name": "软件工程核心讲义（演示版）.pdf",
+                            "document_name": "软件工程核心讲义.pdf",
                             "chapter_title": CHAPTER_DEFINITIONS[
                                 point_index // POINTS_PER_CHAPTER
                             ].title,
@@ -1136,6 +1139,55 @@ def _build_mastery(
     return states, snapshots
 
 
+def _trajectory_event_type(
+    student_index: int,
+    event_index: int,
+    band: str,
+) -> LearningEventType:
+    if event_index < 7:
+        return (
+            LearningEventType.QUESTION_ASKED,
+            LearningEventType.HINT_REQUESTED,
+            LearningEventType.QUIZ_WRONG,
+            LearningEventType.CONCEPT_CONFUSION,
+            LearningEventType.HINT_REQUESTED,
+        )[event_index % 5]
+    if event_index < 17:
+        return (
+            LearningEventType.CONCEPT_CONFUSION,
+            LearningEventType.REPEATED_ERROR,
+            LearningEventType.QUIZ_WRONG,
+            LearningEventType.HINT_REQUESTED,
+            LearningEventType.QUESTION_ASKED,
+        )[(event_index + student_index) % 5]
+    if event_index < 31:
+        if band in {"attention", "risk"} and event_index % 4 == 0:
+            return LearningEventType.REPEATED_ERROR
+        return (
+            LearningEventType.QUIZ_CORRECT,
+            LearningEventType.RESOLVED,
+            LearningEventType.HINT_REQUESTED,
+            LearningEventType.QUESTION_ASKED,
+        )[(event_index + student_index) % 4]
+    if band in {"excellent", "good"}:
+        return (
+            LearningEventType.QUIZ_CORRECT,
+            LearningEventType.RESOLVED,
+        )[event_index % 2]
+    if band == "medium":
+        return (
+            LearningEventType.RESOLVED,
+            LearningEventType.QUIZ_WRONG,
+            LearningEventType.QUESTION_ASKED,
+        )[event_index % 3]
+    return (
+        LearningEventType.REPEATED_ERROR,
+        LearningEventType.CONCEPT_CONFUSION,
+        LearningEventType.QUIZ_WRONG,
+        LearningEventType.HINT_REQUESTED,
+    )[event_index % 4]
+
+
 def _build_events(
     course_id: UUID,
     points: Sequence[dict[str, Any]],
@@ -1167,7 +1219,8 @@ def _build_events(
             if _student_band(student_index) in {"attention", "risk"}:
                 point_index = (point_index + event_index % 11 * 5) % len(points)
             point = points[point_index]
-            event_type = EVENT_TYPES[(event_index + student_index) % len(EVENT_TYPES)]
+            band = _student_band(student_index)
+            event_type = _trajectory_event_type(student_index, event_index, band)
             message: dict[str, Any] | None = None
             conversation_id: UUID | None = None
             if student_messages and event_index % 7 == 0:
@@ -1189,10 +1242,16 @@ def _build_events(
                     "weight": 1.0,
                     "evidence": (
                         f"{STUDENT_NAMES[student_index]}在“{point['name']}”上的学习证据："
-                        f"{event_type.value}。"
+                        f"完成{event_type.value}活动，并记录当前判断与结果。"
                     ),
                     "metadata_json": {
-                        "seed": DATASET_NAME,
+                        "phase": (
+                            "diagnosis"
+                            if event_index < 17
+                            else "practice"
+                            if event_index < 31
+                            else "consolidation"
+                        ),
                         "source": "conversation" if message else "learning_activity",
                         "sequence": event_index,
                     },
@@ -1321,7 +1380,7 @@ def _build_planning(
             TeachingStrategyPriority.HIGH,
             TeachingStrategyStatus.ACTIVE,
             TeachingStrategySource.AI_GENERATED,
-            ("等价类划分", "边界值分析", "测试数据设计"),
+            ("边界值分析", "变更影响分析", "质量门禁"),
         ),
         (
             "requirements-trace",
@@ -1432,7 +1491,7 @@ def _build_planning(
             "测试用例设计四周强化计划",
             ExecutionPlanStatus.ACTIVE,
             1,
-            ("等价类划分", "边界值分析", "测试数据设计"),
+            ("边界值分析", "变更影响分析", "质量门禁"),
             10,
         ),
         (
@@ -1670,7 +1729,7 @@ def _build_reviews(
                         else None
                     ),
                     "details": {
-                        "seed": DATASET_NAME,
+                        "causeStatus": "confirmed",
                         "reasonLabel": REVIEW_REASON_LABELS[reason],
                         "citation": {
                             "documentName": citation["document_name"],
@@ -2123,6 +2182,50 @@ def _build_analyses(
         course_attempts = [
             attempt for attempt in attempts if attempt["course_id"] == course_id
         ]
+        causal_message_ids = {
+            message["id"]
+            for message in course_messages
+            if str(message.get("client_request_id") or "").startswith("causal-")
+        }
+        causal_event_ids = {
+            event["id"]
+            for event in course_events
+            if event["metadata_json"].get("causal_chain_id")
+        }
+        causal_snapshot_ids = {
+            snapshot["id"]
+            for snapshot in course_snapshots
+            if snapshot.get("source_event_id") in causal_event_ids
+        }
+        causal_attempt_ids = {
+            attempt["id"]
+            for attempt in course_attempts
+            if attempt["response_json"].get("causal_chain_id")
+        }
+        causal_citation_ids = {
+            citation["id"]
+            for citation in course_citations
+            if citation["message_id"] in causal_message_ids
+        }
+        causal_chunk_ids = {
+            citation["chunk_id"]
+            for citation in course_citations
+            if citation["id"] in causal_citation_ids
+        }
+        causal_review_ids = {
+            flag["id"]
+            for flag in flags
+            if flag["details"].get("causal_chain_id")
+        }
+        causal_id_sets = {
+            AIAnalysisEvidenceSource.CONVERSATION_MESSAGE: causal_message_ids,
+            AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT: causal_attempt_ids,
+            AIAnalysisEvidenceSource.LEARNING_EVENT: causal_event_ids,
+            AIAnalysisEvidenceSource.REVIEW_FLAG: causal_review_ids,
+            AIAnalysisEvidenceSource.MESSAGE_CITATION: causal_citation_ids,
+            AIAnalysisEvidenceSource.KNOWLEDGE_CHUNK: causal_chunk_ids,
+            AIAnalysisEvidenceSource.MASTERY_SNAPSHOT: causal_snapshot_ids,
+        }
         evidence_source_specs = (
             (
                 AIAnalysisEvidenceSource.CONVERSATION_MESSAGE,
@@ -2174,8 +2277,13 @@ def _build_analyses(
             count,
             label,
         ) in enumerate(evidence_source_specs):
+            causal_ids = causal_id_sets.get(source_type, set())
+            prioritized_rows = sorted(
+                rows,
+                key=lambda row: 0 if row["id"] in causal_ids else 1,
+            )
             selected_rows = sample_rows(
-                list(rows),
+                prioritized_rows,
                 count,
                 analysis_index + source_index,
             )
@@ -2193,7 +2301,6 @@ def _build_analyses(
                 point_id = row.get("knowledge_point_id") or knowledge_point_id
                 description = f"用于支持“{focus}”的分析证据。"
                 snapshot_json: dict[str, object] = {
-                    "seed": DATASET_NAME,
                     "sourceType": source_type.value,
                     "sourceId": str(source_id),
                 }
@@ -2231,6 +2338,7 @@ def _build_analyses(
                     )
                 elif source_type == AIAnalysisEvidenceSource.REVIEW_FLAG:
                     student_id = row["student_id"]
+                    point_id = message_point.get(row["message_id"]) or knowledge_point_id
                     description = row.get("teacher_note") or row["reason"].value
                     label_text = f"AI审核：{row['reason'].value}"
                     snapshot_json.update(
@@ -2318,7 +2426,6 @@ def _build_analyses(
                     "label": "前序分析结果",
                     "description": "引用首次分析结论继续二次分析。",
                     "snapshot_json": {
-                        "seed": DATASET_NAME,
                         "sourceType": AIAnalysisEvidenceSource.INITIAL_ANALYSIS.value,
                         "sourceId": str(previous_analysis_id),
                     },
@@ -2406,10 +2513,10 @@ def _build_analyses(
                     "recommendation_payload": {
                         "strategyKey": "testing-focus",
                         "durationWeeks": 4,
-                        "targetKnowledgePoints": ["等价类划分", "边界值分析", "测试数据设计"],
+                        "targetKnowledgePoints": ["边界值分析", "变更影响分析", "质量门禁"],
                     },
                     "insufficient_evidence": False,
-                    "model_name": "demo-analysis-v1",
+                    "model_name": "causal-evidence-fixture-v1",
                     "strategy_id": _strategy_id("testing-focus"),
                     "generated_at": now - timedelta(days=8 - analysis_index),
                     "updated_at": now - timedelta(days=8 - analysis_index),
@@ -2889,6 +2996,26 @@ async def seed_software_engineering_class(
         citations,
         now,
     )
+    causal_design = upgrade_causal_evidence(
+        course_id=course_id,
+        teacher_id=teacher.id,
+        students=students,
+        points=points,
+        documents=documents,
+        chunks=chunks,
+        questions=questions,
+        question_links=question_links,
+        conversations=conversations,
+        messages=messages,
+        citations=citations,
+        attempts=attempts,
+        events=events,
+        states=states,
+        snapshots=snapshots,
+        planning=planning,
+        reviews=reviews,
+        now=now,
+    )
     announcements, announcement_reads, notifications = (
         _build_announcements_and_notifications(course_id, teacher.id, now)
     )
@@ -2999,6 +3126,7 @@ async def seed_software_engineering_class(
             for index in range(STUDENT_COUNT)
         ],
         "resources": resource_manifest,
+        "causalDesign": causal_design,
         "counts": counts,
         "storageRoot": str(storage_root.resolve()),
         "resetCommand": (

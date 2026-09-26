@@ -251,7 +251,7 @@ CHAPTER_DEFINITIONS = (
 RESOURCE_DEFINITIONS = (
     ResourceDefinition(
         key="textbook",
-        file_name="软件工程核心讲义（演示版）.pdf",
+        file_name="软件工程核心讲义.pdf",
         display_name="软件工程核心讲义",
         resource_type="textbook",
         page_count=60,
