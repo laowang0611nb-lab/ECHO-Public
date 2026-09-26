@@ -48,6 +48,9 @@ def test_software_engineering_handoff_package_is_complete_and_valid(
     assert manifest["counts"]["messages"] == 576
     assert manifest["counts"]["message-citations"] == 288
     assert manifest["counts"]["ai-review-flags"] == 96
+    assert manifest["counts"]["ai-analyses"] == 4
+    assert manifest["counts"]["ai-analysis-evidence"] == 481
+    assert manifest["counts"]["ai-analysis-results"] == 2
 
     assert len(manifest["entities"]) == 44
     assert len(manifest["resources"]) == 4

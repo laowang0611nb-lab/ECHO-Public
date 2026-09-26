@@ -1923,6 +1923,10 @@ def _build_analyses(
     snapshots: Sequence[dict[str, Any]],
     attempts: Sequence[dict[str, Any]],
     flags: Sequence[dict[str, Any]],
+    conversations: Sequence[dict[str, Any]],
+    messages: Sequence[dict[str, Any]],
+    citations: Sequence[dict[str, Any]],
+    chunks: Sequence[dict[str, Any]],
     now: datetime,
 ) -> dict[str, list[dict[str, Any]]]:
     analyses: list[dict[str, Any]] = []
@@ -1969,6 +1973,38 @@ def _build_analyses(
     )
     attention_students = students[30:40]
     boundary_point = next(point for point in points if point["name"] == "边界值分析")
+    conversation_student = {
+        conversation["id"]: conversation["user_id"]
+        for conversation in conversations
+    }
+    message_conversation = {
+        message["id"]: message["conversation_id"] for message in messages
+    }
+    message_point = {
+        event["message_id"]: event["knowledge_point_id"]
+        for event in events
+        if event.get("message_id") and event.get("knowledge_point_id")
+    }
+    chapter_point = {
+        point["chapter_id"]: point["id"]
+        for point in points
+    }
+
+    def sample_rows(
+        rows: Sequence[dict[str, Any]],
+        count: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        if not rows or count <= 0:
+            return []
+        if len(rows) <= count:
+            return list(rows)
+        step = len(rows) / count
+        indexes = [
+            int((index + 0.5) * step + offset * 7) % len(rows)
+            for index in range(count)
+        ]
+        return [rows[index] for index in dict.fromkeys(indexes)]
     for analysis_index, (
         key,
         analysis_type,
@@ -2056,10 +2092,30 @@ def _build_analyses(
                     ),
                 }
             )
+        course_conversations = [
+            conversation
+            for conversation in conversations
+            if conversation["course_id"] == course_id
+        ]
+        course_conversation_ids = {
+            conversation["id"] for conversation in course_conversations
+        }
+        course_messages = [
+            message
+            for message in messages
+            if message["conversation_id"] in course_conversation_ids
+        ]
+        course_message_ids = {message["id"] for message in course_messages}
+        course_citations = [
+            citation
+            for citation in citations
+            if citation["message_id"] in course_message_ids
+        ]
+        course_chunks = [
+            chunk for chunk in chunks if chunk["course_id"] == course_id
+        ]
         course_events = [
-            event
-            for event in events
-            if event["course_id"] == course_id
+            event for event in events if event["course_id"] == course_id
         ]
         course_snapshots = [
             snapshot for snapshot in snapshots if snapshot["course_id"] == course_id
@@ -2069,33 +2125,61 @@ def _build_analyses(
         ]
         evidence_source_specs = (
             (
-                AIAnalysisEvidenceSource.LEARNING_EVENT,
-                course_events,
-                "学习事件",
-            ),
-            (
-                AIAnalysisEvidenceSource.MASTERY_SNAPSHOT,
-                course_snapshots,
-                "掌握度状态",
+                AIAnalysisEvidenceSource.CONVERSATION_MESSAGE,
+                course_messages,
+                18,
+                "学生对话",
             ),
             (
                 AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT,
                 course_attempts,
-                "Quick Check 作答",
+                18,
+                "测验结果",
+            ),
+            (
+                AIAnalysisEvidenceSource.LEARNING_EVENT,
+                course_events,
+                30,
+                "LearningEvent",
             ),
             (
                 AIAnalysisEvidenceSource.REVIEW_FLAG,
                 flags,
+                10,
                 "AI 回答审核标记",
             ),
+            (
+                AIAnalysisEvidenceSource.MESSAGE_CITATION,
+                course_citations,
+                12,
+                "回答引用来源",
+            ),
+            (
+                AIAnalysisEvidenceSource.KNOWLEDGE_CHUNK,
+                course_chunks,
+                12,
+                "课程资料片段",
+            ),
+            (
+                AIAnalysisEvidenceSource.MASTERY_SNAPSHOT,
+                course_snapshots,
+                20,
+                "掌握度快照",
+            ),
         )
-        evidence_ids: list[UUID] = []
-        for source_index, (source_type, rows, label) in enumerate(
-            evidence_source_specs
-        ):
-            selected_rows = rows[
-                analysis_index * 3 + source_index :: max(len(rows) // 4, 1)
-            ][:4]
+        evidence_ids_by_type: dict[AIAnalysisEvidenceSource, list[UUID]] = {}
+        for source_index, (
+            source_type,
+            rows,
+            count,
+            label,
+        ) in enumerate(evidence_source_specs):
+            selected_rows = sample_rows(
+                list(rows),
+                count,
+                analysis_index + source_index,
+            )
+            evidence_ids_by_type[source_type] = []
             for row_index, row in enumerate(selected_rows):
                 evidence_id = _seed_id(
                     "analysis-evidence",
@@ -2103,26 +2187,144 @@ def _build_analyses(
                     source_type.value,
                     row_index,
                 )
-                evidence_ids.append(evidence_id)
+                evidence_ids_by_type[source_type].append(evidence_id)
+                source_id = row["id"]
+                student_id = row.get("user_id")
+                point_id = row.get("knowledge_point_id") or knowledge_point_id
+                description = f"用于支持“{focus}”的分析证据。"
+                snapshot_json: dict[str, object] = {
+                    "seed": DATASET_NAME,
+                    "sourceType": source_type.value,
+                    "sourceId": str(source_id),
+                }
+                if source_type == AIAnalysisEvidenceSource.CONVERSATION_MESSAGE:
+                    student_id = conversation_student.get(row["conversation_id"])
+                    point_id = message_point.get(row["id"]) or knowledge_point_id
+                    description = str(row["content"])[:500]
+                    label_text = f"学生对话：{row['role'].value}"
+                    snapshot_json.update(
+                        {
+                            "conversation_id": str(row["conversation_id"]),
+                            "role": row["role"].value,
+                            "content": str(row["content"])[:500],
+                        }
+                    )
+                elif source_type == AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT:
+                    description = "Quick Check 答对" if row["correct"] else "Quick Check 答错"
+                    label_text = "测验结果：答对" if row["correct"] else "测验结果：答错"
+                    snapshot_json.update(
+                        {
+                            "question_item_id": str(row["question_item_id"]),
+                            "selected_option_id": row["selected_option_id"],
+                            "correct": row["correct"],
+                        }
+                    )
+                elif source_type == AIAnalysisEvidenceSource.LEARNING_EVENT:
+                    description = row["evidence"]
+                    label_text = f"LearningEvent：{row['event_type'].value}"
+                    snapshot_json.update(
+                        {
+                            "event_type": row["event_type"].value,
+                            "weight": row["weight"],
+                            "metadata": row["metadata_json"],
+                        }
+                    )
+                elif source_type == AIAnalysisEvidenceSource.REVIEW_FLAG:
+                    student_id = row["student_id"]
+                    description = row.get("teacher_note") or row["reason"].value
+                    label_text = f"AI审核：{row['reason'].value}"
+                    snapshot_json.update(
+                        {
+                            "status": row["status"].value,
+                            "severity": row["severity"].value,
+                            "message_id": str(row["message_id"]),
+                        }
+                    )
+                elif source_type == AIAnalysisEvidenceSource.MESSAGE_CITATION:
+                    message_id = row["message_id"]
+                    conversation_id = message_conversation.get(message_id)
+                    student_id = conversation_student.get(conversation_id)
+                    point_id = message_point.get(message_id) or knowledge_point_id
+                    description = str(row["quote"])[:500]
+                    label_text = f"引用来源：第 {row['page_start']}-{row['page_end']} 页"
+                    snapshot_json.update(
+                        {
+                            "message_id": str(message_id),
+                            "chunk_id": str(row["chunk_id"]),
+                            "document_id": str(row["document_id"]),
+                            "page_start": row["page_start"],
+                            "page_end": row["page_end"],
+                        }
+                    )
+                elif source_type == AIAnalysisEvidenceSource.KNOWLEDGE_CHUNK:
+                    student_id = None
+                    point_id = chapter_point.get(row["chapter_id"]) or knowledge_point_id
+                    description = str(row["content"])[:500]
+                    label_text = f"课程资料：第 {row['page_start']} 页"
+                    snapshot_json.update(
+                        {
+                            "document_id": str(row["document_id"]),
+                            "chapter_id": str(row["chapter_id"]),
+                            "page_start": row["page_start"],
+                            "page_end": row["page_end"],
+                        }
+                    )
+                else:
+                    description = f"掌握度 {row['score']:.2f}"
+                    label_text = "掌握度快照"
+                    snapshot_json.update(
+                        {
+                            "score": row["score"],
+                            "source_event_id": (
+                                str(row["source_event_id"])
+                                if row.get("source_event_id")
+                                else None
+                            ),
+                        }
+                    )
                 evidence_rows.append(
                     {
                         "id": evidence_id,
                         "analysis_id": analysis_id,
                         "source_type": source_type,
-                        "source_id": row["id"],
-                        "student_id": row.get("user_id"),
-                        "knowledge_point_id": row.get("knowledge_point_id")
-                        or knowledge_point_id,
-                        "label": f"{label} {row_index + 1}",
-                        "description": f"用于支持“{focus}”的分析证据。",
-                        "snapshot_json": {
-                            "seed": DATASET_NAME,
-                            "sourceType": source_type.value,
-                            "sourceId": str(row["id"]),
-                        },
+                        "source_id": source_id,
+                        "student_id": student_id,
+                        "knowledge_point_id": point_id,
+                        "label": label_text,
+                        "description": description,
+                        "snapshot_json": snapshot_json,
                         "created_at": now - timedelta(days=8 - analysis_index),
                     }
                 )
+        if analysis_type == AIAnalysisType.SECONDARY:
+            previous_analysis_id = _analysis_id("class-overview")
+            previous_evidence_id = _seed_id(
+                "analysis-evidence",
+                analysis_id,
+                AIAnalysisEvidenceSource.INITIAL_ANALYSIS.value,
+                0,
+            )
+            evidence_ids_by_type[
+                AIAnalysisEvidenceSource.INITIAL_ANALYSIS
+            ] = [previous_evidence_id]
+            evidence_rows.append(
+                {
+                    "id": previous_evidence_id,
+                    "analysis_id": analysis_id,
+                    "source_type": AIAnalysisEvidenceSource.INITIAL_ANALYSIS,
+                    "source_id": previous_analysis_id,
+                    "student_id": None,
+                    "knowledge_point_id": knowledge_point_id,
+                    "label": "前序分析结果",
+                    "description": "引用首次分析结论继续二次分析。",
+                    "snapshot_json": {
+                        "seed": DATASET_NAME,
+                        "sourceType": AIAnalysisEvidenceSource.INITIAL_ANALYSIS.value,
+                        "sourceId": str(previous_analysis_id),
+                    },
+                    "created_at": now - timedelta(days=8 - analysis_index),
+                }
+            )
         if status == AIAnalysisStatus.COMPLETED:
             result_rows.append(
                 {
@@ -2146,23 +2348,60 @@ def _build_analyses(
                         {
                             "fact": "边界值分析平均掌握度低于课程整体平均。",
                             "evidence_ids": [
-                                str(evidence_ids[0]) if evidence_ids else None
+                                str(value)
+                                for value in evidence_ids_by_type.get(
+                                    AIAnalysisEvidenceSource.MASTERY_SNAPSHOT,
+                                    [],
+                                )[:2]
                             ],
                         },
                         {
                             "fact": "连续错误学生集中在测试设计与变更影响分析。",
                             "evidence_ids": [
-                                str(evidence_ids[-1]) if evidence_ids else None
+                                *[
+                                    str(value)
+                                    for value in evidence_ids_by_type.get(
+                                        AIAnalysisEvidenceSource.QUICK_CHECK_ATTEMPT,
+                                        [],
+                                    )[:1]
+                                ],
+                                *[
+                                    str(value)
+                                    for value in evidence_ids_by_type.get(
+                                        AIAnalysisEvidenceSource.LEARNING_EVENT,
+                                        [],
+                                    )[:1]
+                                ],
+                            ],
+                        },
+                        {
+                            "fact": "学生对话和引用来源共同解释了追问与材料依据。",
+                            "evidence_ids": [
+                                *[
+                                    str(value)
+                                    for value in evidence_ids_by_type.get(
+                                        AIAnalysisEvidenceSource.CONVERSATION_MESSAGE,
+                                        [],
+                                    )[:1]
+                                ],
+                                *[
+                                    str(value)
+                                    for value in evidence_ids_by_type.get(
+                                        AIAnalysisEvidenceSource.MESSAGE_CITATION,
+                                        [],
+                                    )[:1]
+                                ],
                             ],
                         },
                     ],
                     "evidence_summary": [
                         {
                             "sourceType": source_type.value,
-                            "count": row_count,
+                            "count": len(
+                                evidence_ids_by_type.get(source_type, [])
+                            ),
                         }
-                        for source_type, rows, _ in evidence_source_specs
-                        for row_count in [min(4, len(rows))]
+                        for source_type in evidence_ids_by_type
                     ],
                     "recommendation_payload": {
                         "strategyKey": "testing-focus",
@@ -2662,6 +2901,10 @@ async def seed_software_engineering_class(
         snapshots,
         attempts,
         reviews["flags"],
+        conversations,
+        messages,
+        citations,
+        chunks,
         now,
     )
 
