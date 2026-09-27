@@ -149,18 +149,23 @@ function NavLink({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const itemCenterY = useMotionValue(0);
   const focusScale = useSpring(1, SPRING);
+  const collapsedValue = useMotionValue(collapsed ? 1 : 0);
   const [focused, setFocused] = useState(false);
 
   useLayoutEffect(() => {
     const element = wrapperRef.current;
-    if (!collapsed || !element) return;
+    if (!element) return;
     return registerItem(element, itemCenterY);
-  }, [collapsed, itemCenterY, registerItem]);
+  }, [itemCenterY, registerItem]);
 
   useEffect(() => {
     const nextFocusScale = collapsed && !reducedMotion && focused ? FOCUS_SCALE : 1;
     focusScale.set(nextFocusScale);
   }, [collapsed, focusScale, focused, reducedMotion]);
+
+  useEffect(() => {
+    collapsedValue.set(collapsed ? 1 : 0);
+  }, [collapsed, collapsedValue]);
 
   const distanceY = useTransform<number, number>(
     [pointerY, itemCenterY],
@@ -169,42 +174,83 @@ function NavLink({
       return pointer - (center ?? 0);
     },
   );
-  const targetScale = useTransform<number, number>(distanceY, (distance) => {
-    const normalizedDistance = Math.min(Math.abs(distance) / FALLOFF, 1);
-    const proximity = 1 - normalizedDistance;
-    return 1 + (MAX_SCALE - 1) * Math.pow(proximity, PROXIMITY_EXPONENT);
-  });
+  const targetScale = useTransform<number, number>(
+    [distanceY, collapsedValue],
+    ([distance, isCollapsed]) => {
+      if (!isCollapsed) return 1;
+      const normalizedDistance = Math.min(Math.abs(distance) / FALLOFF, 1);
+      const proximity = 1 - normalizedDistance;
+      return 1 + (MAX_SCALE - 1) * Math.pow(proximity, PROXIMITY_EXPONENT);
+    },
+  );
   const proximityScale = useSpring(targetScale, SPRING);
   const scale = useTransform<number, number>(
     [proximityScale, focusScale],
     ([proximity, focus]) => Math.max(proximity ?? 1, focus ?? 1),
   );
 
+  const collapseTransition = {
+    duration: reducedMotion ? 0 : 0.2,
+    ease: EASE,
+  };
+  const iconShift = collapsed ? (nested ? -24 : 0) : 0;
+
   const link = (
     <Link
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? item.label : undefined}
       className={cn(
-        "relative flex items-center overflow-hidden rounded-lg text-sm text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
-        collapsed ? "size-10 justify-center" : "gap-3 px-3 py-2.5",
-        nested && !collapsed && "pl-9",
-        active && "bg-sidebar-accent text-sidebar-accent-foreground",
+        "relative flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-foreground/70 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
+        nested && "pl-9",
+        !collapsed && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        active && "text-sidebar-accent-foreground",
       )}
       href={item.href}
       onBlur={() => setFocused(false)}
       onFocus={() => setFocused(true)}
       title={collapsed ? item.label : undefined}
     >
-      {active ? <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" /> : null}
-      <MaterialSymbol
-        className={cn(
-          "shrink-0",
-          active ? "text-primary" : "text-sidebar-foreground/60",
-        )}
-        filled={active}
-        name={item.icon}
-        size={collapsed ? 22 : 18}
-      />
+      {active ? (
+        <motion.span
+          animate={{ left: collapsed ? 12 : 0, right: collapsed ? 12 : 0, opacity: collapsed ? 0 : 1 }}
+          className="absolute inset-y-0 z-0 rounded-lg bg-sidebar-accent"
+          initial={false}
+          transition={collapseTransition}
+        />
+      ) : null}
+      {active ? (
+        <motion.span
+          animate={{ opacity: collapsed ? 0 : 1 }}
+          className="absolute inset-y-2 left-0 z-10 w-0.5 rounded-full bg-primary"
+          initial={false}
+          transition={collapseTransition}
+        />
+      ) : null}
+      <motion.span
+        animate={{ x: iconShift }}
+        className="relative z-10 flex size-10 shrink-0 items-center justify-center"
+        initial={false}
+        style={{ scale: reducedMotion ? 1 : scale }}
+        transition={collapseTransition}
+      >
+        {active ? (
+          <motion.span
+            animate={{ opacity: collapsed ? 1 : 0 }}
+            className="absolute inset-0 rounded-lg bg-sidebar-accent"
+            initial={false}
+            transition={collapseTransition}
+          />
+        ) : null}
+        <MaterialSymbol
+          className={cn(
+            "relative z-10 shrink-0",
+            active ? "text-primary" : "text-sidebar-foreground/60",
+          )}
+          filled={active}
+          name={item.icon}
+          size={20}
+        />
+      </motion.span>
       {!collapsed ? (
         <SidebarLabel className="truncate" collapsed={collapsed} index={index} reducedMotion={reducedMotion}>
           {item.label}
@@ -214,24 +260,13 @@ function NavLink({
   );
 
   return (
-    <motion.div
-      className={cn(
-        "transform-gpu",
-        collapsed ? "mx-auto w-10" : "w-full",
-      )}
-      ref={wrapperRef}
-      style={{ scale: collapsed && !reducedMotion ? scale : 1 }}
-    >
-      {collapsed ? (
-        <Tooltip>
-          <TooltipTrigger render={link} />
-          <TooltipContent side="right" sideOffset={8}>
-            {item.label}
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        link
-      )}
+    <motion.div className="w-full transform-gpu" ref={wrapperRef}>
+      <Tooltip disabled={!collapsed}>
+        <TooltipTrigger render={link} />
+        <TooltipContent side="right" sideOffset={8}>
+          {item.label}
+        </TooltipContent>
+      </Tooltip>
     </motion.div>
   );
 }
@@ -312,6 +347,7 @@ export function Sidebar({
   };
 
   const handleToggle = () => {
+    pointerY.set(Number.POSITIVE_INFINITY);
     setExpandedFromCollapsed(collapsed);
     onToggle();
   };
@@ -357,24 +393,27 @@ export function Sidebar({
               </motion.div>
             ) : null}
           </AnimatePresence>
-          <Button
-            aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-            className={cn(
-              "absolute top-1/2 -translate-y-1/2",
-              collapsed ? "left-1/2 -translate-x-1/2" : "right-3",
-            )}
-            onClick={handleToggle}
-            size="icon-sm"
-            type="button"
-            variant="ghost"
+          <motion.div
+            animate={{ x: collapsed ? -14 : 0, y: "-50%" }}
+            className="absolute top-1/2 right-3"
+            initial={false}
+            transition={contentTransition}
           >
-            <MaterialSymbol name={collapsed ? "chevron_right" : "chevron_left"} size={18} />
-          </Button>
+            <Button
+              aria-label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+              onClick={handleToggle}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <MaterialSymbol name={collapsed ? "chevron_right" : "chevron_left"} size={18} />
+            </Button>
+          </motion.div>
         </div>
 
         <nav
           className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-y-auto py-4",
+            "flex min-h-0 flex-1 flex-col overflow-y-auto py-4 transition-[padding] duration-200 ease-out",
             collapsed ? "px-2" : "px-3",
           )}
           ref={navRef}
@@ -392,34 +431,29 @@ export function Sidebar({
               />
             ))}
 
-            {collapsed ? (
-              <section className="space-y-1 border-t border-sidebar-border pt-3">
-                {aiItems.map((item, index) => (
-                  <NavLink
-                    collapsed
-                    index={index + 1}
-                    item={item}
-                    key={item.href}
-                    pointerY={pointerY}
-                    reducedMotion={reducedMotion}
-                    registerItem={registerItem}
-                  />
-                ))}
-              </section>
-            ) : (
-              <motion.section
-                animate={{ opacity: 1, y: 0 }}
-                className="rounded-xl bg-blue-400/8 p-2"
-                initial={animateExpandedContent ? { opacity: 0, y: -6 } : false}
+            <section
+              className={cn(
+                "rounded-xl border-t transition-[padding,background-color,border-color] duration-200 ease-out",
+                collapsed
+                  ? "border-sidebar-border bg-transparent p-0 pt-3"
+                  : "border-transparent bg-blue-400/8 p-2",
+              )}
+            >
+              <motion.div
+                animate={{ height: collapsed ? 0 : "auto", opacity: collapsed ? 0 : 1 }}
+                aria-hidden={collapsed}
+                className={cn("overflow-hidden", collapsed && "pointer-events-none")}
+                initial={false}
                 transition={contentTransition}
               >
                 <button
                   aria-expanded={aiOpen}
-                  className="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+                  className="flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
                   onClick={() => setAiOpen((current) => !current)}
+                  tabIndex={collapsed ? -1 : undefined}
                   type="button"
                 >
-                  <MaterialSymbol className="shrink-0 text-primary" filled name="neurology" size={18} />
+                  <MaterialSymbol className="shrink-0 text-primary" filled name="neurology" size={20} />
                   <SidebarLabel className="flex-1" collapsed={collapsed} index={1} reducedMotion={reducedMotion}>
                     AI 教学
                   </SidebarLabel>
@@ -434,48 +468,38 @@ export function Sidebar({
                     <MaterialSymbol name="keyboard_arrow_down" size={18} />
                   </motion.span>
                 </button>
+              </motion.div>
 
-                <AnimatePresence initial={false}>
-                  {aiOpen ? (
-                    <motion.div
-                      animate={{ opacity: 1, y: 0 }}
-                      className="relative mt-1 space-y-1 before:absolute before:bottom-3 before:left-4 before:top-3 before:w-px before:bg-sidebar-border"
-                      exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-                      initial={animateExpandedContent ? (reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }) : false}
-                      key="ai-submenu"
-                      transition={contentTransition}
-                    >
-                      {aiItems.map((item, index) => (
-                        <motion.div
-                          animate={{ opacity: 1, x: 0 }}
-                          initial={
-                            animateExpandedContent
-                              ? reducedMotion
-                                ? { opacity: 0 }
-                                : { opacity: 0, x: -6 }
-                              : false
-                          }
-                          key={item.href}
-                          transition={{
-                            ...contentTransition,
-                            delay: animateExpandedContent && !reducedMotion ? 0.04 + index * 0.055 : 0,
-                          }}
-                        >
-                          <NavLink
-                            index={index + 2}
-                            item={item}
-                            nested
-                            pointerY={pointerY}
-                            reducedMotion={reducedMotion}
-                            registerItem={registerItem}
-                          />
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
-              </motion.section>
-            )}
+              <AnimatePresence initial={false}>
+                {collapsed || aiOpen ? (
+                  <motion.div
+                    animate={{ opacity: 1, y: 0 }}
+                    className={cn(
+                      "relative space-y-1",
+                      !collapsed &&
+                        "mt-1 before:absolute before:bottom-3 before:left-4 before:top-3 before:w-px before:bg-sidebar-border",
+                    )}
+                    exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
+                    initial={animateExpandedContent ? (reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }) : false}
+                    key="ai-submenu"
+                    transition={contentTransition}
+                  >
+                    {aiItems.map((item, index) => (
+                      <NavLink
+                        collapsed={collapsed}
+                        index={index + 2}
+                        item={item}
+                        key={item.href}
+                        nested
+                        pointerY={pointerY}
+                        reducedMotion={reducedMotion}
+                        registerItem={registerItem}
+                      />
+                    ))}
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </section>
 
             {moduleItems.map((item, index) => (
               <NavLink
@@ -491,7 +515,7 @@ export function Sidebar({
           </div>
         </nav>
 
-        <div className={cn("border-t border-sidebar-border py-4", collapsed ? "px-2" : "px-3")}>
+        <div className={cn("border-t border-sidebar-border py-4 transition-[padding] duration-200 ease-out", collapsed ? "px-2" : "px-3")}>
           <NavLink
             collapsed={collapsed}
             index={8}
