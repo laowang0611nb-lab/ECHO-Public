@@ -30,7 +30,7 @@ from database.models.planning import (
 )
 from database.models.review import AIReviewFlag
 from database.models.user import User
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -506,6 +506,34 @@ async def create_strategy_from_analysis(
     result.strategy_id = strategy.id
     await session.commit()
     return strategy
+
+
+async def reset_analysis_for_recovery(
+    session: AsyncSession,
+    analysis_id: UUID,
+) -> None:
+    analysis = await session.get(AIAnalysis, analysis_id)
+    if analysis is None:
+        return
+    await session.execute(
+        delete(AIAnalysisEvidence).where(AIAnalysisEvidence.analysis_id == analysis_id)
+    )
+    await session.execute(
+        delete(AIAnalysisStageEvent).where(AIAnalysisStageEvent.analysis_id == analysis_id)
+    )
+    await session.execute(
+        delete(AIAnalysisResult).where(AIAnalysisResult.analysis_id == analysis_id)
+    )
+    now = datetime.now(UTC)
+    analysis.status = AIAnalysisStatus.ANALYZING
+    analysis.stage = AIAnalysisStage.COLLECTING_PREVIOUS_ANALYSIS
+    analysis.progress_percent = STAGE_PERCENT[analysis.stage]
+    analysis.progress_message = STAGE_LABELS[analysis.stage]
+    analysis.heartbeat_at = now
+    analysis.started_at = now
+    analysis.completed_at = None
+    analysis.error_message = None
+    await session.commit()
 
 
 async def execute_analysis_record(
@@ -1147,10 +1175,15 @@ async def _collect_evidence(
     chunk_query = (
         select(KnowledgeChunk)
         .join(Document, Document.id == KnowledgeChunk.document_id)
+        .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
         .where(
             KnowledgeChunk.course_id == analysis.course_id,
             Document.status == DocumentStatus.READY,
             Document.trashed_at.is_(None),
+            or_(
+                KnowledgeChunk.chapter_id.is_(None),
+                Chapter.trashed_at.is_(None),
+            ),
         )
         .order_by(KnowledgeChunk.created_at.desc(), KnowledgeChunk.id.desc())
         .limit(20)

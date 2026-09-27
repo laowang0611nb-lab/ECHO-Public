@@ -466,6 +466,7 @@ Migrations:
 - `b6c7d8e9f0a1`: optional local ASR transcript on chat attachments.
 - `c7d8e9f0a1b2`: AI analysis stage, percent, heartbeat, idempotency key, and stage-event history.
 - `d8e9f0a1b2c3`: model-bound temporary media URL cache for chat attachments.
+- `e5f6a7b8c9d0`: insufficient-evidence reason and category fields on AI analysis results.
 
 The scaffold creates the SQLAlchemy async engine but does not connect to
 PostgreSQL until a feature that needs the database is invoked.

@@ -4,10 +4,15 @@ from uuid import UUID
 
 from database.db.session import async_session_factory
 from database.models.analysis import AIAnalysis, AIAnalysisStatus
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
-from app.services.analysis import execute_analysis_record, mark_analysis_failed
+from app.services.analysis import (
+    execute_analysis_record,
+    mark_analysis_failed,
+    reset_analysis_for_recovery,
+)
 from app.services.chat_provider import ChatProvider
 
 _ACTIVE_TASKS: dict[UUID, asyncio.Task[None]] = {}
@@ -34,6 +39,28 @@ class DatabaseAnalysisTaskScheduler:
         task.add_done_callback(
             lambda completed, current_id=analysis_id: self._cleanup(current_id, completed)
         )
+
+    async def recover(self) -> None:
+        async with self.session_factory() as session:
+            analysis_ids = list(
+                await session.scalars(
+                    select(AIAnalysis.id).where(AIAnalysis.status == AIAnalysisStatus.ANALYZING)
+                )
+            )
+            for analysis_id in analysis_ids:
+                await reset_analysis_for_recovery(session, analysis_id)
+        for analysis_id in analysis_ids:
+            await self.start(analysis_id)
+
+    async def shutdown(self) -> None:
+        tasks = list(_ACTIVE_TASKS.values())
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     @staticmethod
     def _cleanup(analysis_id: UUID, task: asyncio.Task[None]) -> None:

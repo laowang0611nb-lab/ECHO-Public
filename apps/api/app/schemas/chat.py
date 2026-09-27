@@ -4,7 +4,7 @@ from uuid import UUID
 
 from database.models.chat import MessageRole, MessageStatus
 from database.models.review import ReviewStatus
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 ChatAttachmentKind = Literal["image", "audio", "video"]
 
@@ -76,6 +76,14 @@ class MessageResponse(BaseModel):
     citations: list[CitationResponse] = Field(default_factory=list)
     attachments: list[ChatAttachmentResponse] = Field(default_factory=list, max_length=4)
 
+    @field_validator("client_request_id")
+    @classmethod
+    def normalize_client_request_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -96,7 +104,23 @@ class ChatStreamRequest(BaseModel):
     retrieval_limit: int = Field(default=5, ge=1, le=10)
     attachments: list[ChatAttachmentResponse] = Field(default_factory=list, max_length=4)
 
+    @field_validator("client_request_id")
+    @classmethod
+    def normalize_client_request_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
 
 class ChatContinueRequest(BaseModel):
     client_request_id: str | None = Field(default=None, max_length=128)
     retrieval_limit: int = Field(default=5, ge=1, le=10)
+
+    @field_validator("client_request_id")
+    @classmethod
+    def normalize_client_request_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None

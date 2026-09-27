@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.142"
+    app_version: str = "0.0.144"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     chat_video_normalization_fps: int = 10
     chat_video_max_dimension: int = 1280
     chat_model_file_expiry_hours: int = 48
+    chat_attachment_cleanup_interval_seconds: int = 3600
     avatar_max_upload_bytes: int = 2 * 1024 * 1024
     alibaba_cloud_access_key_id: str | None = Field(
         default=None,
@@ -188,6 +189,7 @@ class Settings(BaseSettings):
         "chat_video_normalization_fps",
         "chat_video_max_dimension",
         "chat_model_file_expiry_hours",
+        "chat_attachment_cleanup_interval_seconds",
     )
     @classmethod
     def require_positive_chat_attachment_limits(cls, value: int) -> int:

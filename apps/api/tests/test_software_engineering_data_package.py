@@ -84,9 +84,7 @@ def test_software_engineering_handoff_package_is_complete_and_valid(
 
     checksum_path = package_root / "checksums.sha256"
     assert checksum_path.is_file()
-    assert len(checksum_path.read_text(encoding="utf-8").splitlines()) == (
-        report["checksumCount"]
-    )
+    assert len(checksum_path.read_text(encoding="utf-8").splitlines()) == (report["checksumCount"])
 
     zip_path = package_root.with_suffix(".zip")
     zip_checksum_path = Path(f"{zip_path}.sha256")
@@ -95,11 +93,6 @@ def test_software_engineering_handoff_package_is_complete_and_valid(
     zip_checksum = zip_checksum_path.read_text(encoding="utf-8").split()[0]
     assert len(zip_checksum) == 64
 
-    manifest_on_disk = json.loads(
-        (package_root / "manifest.json").read_text(encoding="utf-8")
-    )
+    manifest_on_disk = json.loads((package_root / "manifest.json").read_text(encoding="utf-8"))
     assert manifest_on_disk["validation"]["status"] == "passed"
-    assert (
-        manifest_on_disk["target_teacher_email"]
-        == TARGET_TEACHER_EMAIL
-    )
+    assert manifest_on_disk["target_teacher_email"] == TARGET_TEACHER_EMAIL

@@ -39,14 +39,21 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import settings
 from app.main import app
-from app.schemas.analysis import AIAnalysisDraft
+from app.schemas.analysis import (
+    AIAnalysisCreateRequest,
+    AIAnalysisDraft,
+    AIAnalysisReanalyzeRequest,
+)
 from app.services.analysis import (
     EVIDENCE_QUOTAS,
     MAX_ANALYSIS_EVIDENCE,
     EvidenceDraft,
     _select_evidence,
 )
-from app.services.analysis_tasks import _ACTIVE_TASKS
+from app.services.analysis_tasks import (
+    _ACTIVE_TASKS,
+    DatabaseAnalysisTaskScheduler,
+)
 
 
 async def login(client: AsyncClient, email: str, role: str) -> dict[str, str]:
@@ -1199,3 +1206,103 @@ async def test_legacy_result_without_insufficient_detail_stays_readable(
     assert result["insufficient_reason"] is None
     assert result["insufficient_categories"] == []
     assert result["facts"][0]["fact"] == "旧记录事实"
+
+
+def test_blank_analysis_client_request_id_is_normalized_to_none() -> None:
+    assert (
+        AIAnalysisCreateRequest(
+            scope="whole_class",
+            client_request_id="   ",
+        ).client_request_id
+        is None
+    )
+    assert AIAnalysisReanalyzeRequest(client_request_id="").client_request_id is None
+
+
+async def test_analysis_excludes_chunks_from_soft_deleted_chapter(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "analysis-trash-teacher@example.com", "teacher")
+    student = await login(client, "analysis-trash-student@example.com", "student")
+    course = await create_course_with_students(client, teacher, [student])
+    course_id = UUID(course["id"])
+    chapter_id, point_id = await create_structure(
+        session_factory,
+        course_id,
+        UUID(teacher["id"]),
+    )
+    await add_learning_evidence(
+        session_factory,
+        course_id=course_id,
+        chapter_id=chapter_id,
+        point_id=point_id,
+        students=[UUID(student["id"])],
+    )
+    chat_provider.answer_builder = lambda messages: evidence_aware_answer(
+        messages,
+        UUID(student["id"]),
+    )
+    async with session_factory() as session:
+        chunk = await session.scalar(
+            select(KnowledgeChunk).where(KnowledgeChunk.chapter_id == chapter_id)
+        )
+        chapter = await session.get(Chapter, chapter_id)
+        assert chunk is not None and chapter is not None
+        chapter.trashed_at = datetime.now(UTC)
+        await session.commit()
+        chunk_id = chunk.id
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/ai-analysis",
+        headers=auth_headers(teacher),
+        json={"scope": "whole_class", "async": False},
+    )
+    assert response.status_code == 200, response.text
+    assert all(
+        not (item["source_type"] == "knowledge_chunk" and item["source_id"] == str(chunk_id))
+        for item in response.json()["evidence"]
+    )
+
+
+async def test_analysis_scheduler_recovers_interrupted_record(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "recovery-teacher@example.com", "teacher")
+    course = await create_course_with_students(client, teacher, [])
+    analysis_id = uuid4()
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        session.add(
+            AIAnalysis(
+                id=analysis_id,
+                course_id=UUID(course["id"]),
+                analysis_type=AIAnalysisType.INITIAL,
+                scope=AIAnalysisScope.WHOLE_CLASS,
+                student_ids=[],
+                time_range_days=28,
+                status=AIAnalysisStatus.ANALYZING,
+                stage=AIAnalysisStage.QUERYING_EVIDENCE,
+                progress_percent=30,
+                progress_message="查询关联学习证据",
+                heartbeat_at=now - timedelta(minutes=5),
+                created_by=UUID(teacher["id"]),
+                started_at=now - timedelta(minutes=5),
+            )
+        )
+        await session.commit()
+
+    scheduler = DatabaseAnalysisTaskScheduler(session_factory, chat_provider)
+    await scheduler.recover()
+    for _ in range(100):
+        async with session_factory() as session:
+            recovered = await session.get(AIAnalysis, analysis_id)
+            if recovered is not None and recovered.status == AIAnalysisStatus.COMPLETED:
+                break
+        await asyncio.sleep(0.01)
+    else:
+        raise AssertionError("interrupted analysis was not recovered")
+    await scheduler.shutdown()

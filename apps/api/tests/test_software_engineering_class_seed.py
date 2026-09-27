@@ -65,9 +65,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
         assert first["course"] == second["course"]
         assert first["counts"] == second["counts"]
         assert first["students"] == second["students"]
-        assert [
-            resource["sha256"] for resource in first["resources"]
-        ] == [
+        assert [resource["sha256"] for resource in first["resources"]] == [
             resource["sha256"] for resource in second["resources"]
         ]
 
@@ -116,9 +114,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
             )
             assert len(documents) == 4
             ready_documents = [
-                document
-                for document in documents
-                if document.status.value == "ready"
+                document for document in documents if document.status.value == "ready"
             ]
             assert len(ready_documents) == 3
             for document in documents:
@@ -176,25 +172,19 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
 
             event_types = set(
                 await session.scalars(
-                    select(LearningEvent.event_type).where(
-                        LearningEvent.course_id == course_id
-                    )
+                    select(LearningEvent.event_type).where(LearningEvent.course_id == course_id)
                 )
             )
             assert event_types == set(LearningEventType)
 
             review_statuses = set(
                 await session.scalars(
-                    select(AIReviewFlag.status).where(
-                        AIReviewFlag.course_id == course_id
-                    )
+                    select(AIReviewFlag.status).where(AIReviewFlag.course_id == course_id)
                 )
             )
             assert review_statuses == set(ReviewStatus)
 
-            sample_review_version = await session.scalar(
-                select(ReviewAnswerVersion).limit(1)
-            )
+            sample_review_version = await session.scalar(select(ReviewAnswerVersion).limit(1))
             assert sample_review_version is not None
             assert sample_review_version.citations
             assert set(sample_review_version.citations[0]) >= {
@@ -215,31 +205,31 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
 
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(Chapter).where(
-                        Chapter.course_id == course_id
-                    )
+                    select(func.count()).select_from(Chapter).where(Chapter.course_id == course_id)
                 )
                 == 12
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(KnowledgePoint).where(
-                        KnowledgePoint.course_id == course_id
-                    )
+                    select(func.count())
+                    .select_from(KnowledgePoint)
+                    .where(KnowledgePoint.course_id == course_id)
                 )
                 == 84
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(KnowledgeChunk).where(
-                        KnowledgeChunk.course_id == course_id
-                    )
+                    select(func.count())
+                    .select_from(KnowledgeChunk)
+                    .where(KnowledgeChunk.course_id == course_id)
                 )
                 == 140
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(DocumentPage).where(
+                    select(func.count())
+                    .select_from(DocumentPage)
+                    .where(
                         DocumentPage.document_id.in_(
                             select(Document.id).where(Document.course_id == course_id)
                         )
@@ -249,19 +239,19 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(Conversation).where(
-                        Conversation.course_id == course_id
-                    )
+                    select(func.count())
+                    .select_from(Conversation)
+                    .where(Conversation.course_id == course_id)
                 )
                 == 144
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(Message).where(
+                    select(func.count())
+                    .select_from(Message)
+                    .where(
                         Message.conversation_id.in_(
-                            select(Conversation.id).where(
-                                Conversation.course_id == course_id
-                            )
+                            select(Conversation.id).where(Conversation.course_id == course_id)
                         )
                     )
                 )
@@ -269,7 +259,9 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(MessageCitation).where(
+                    select(func.count())
+                    .select_from(MessageCitation)
+                    .where(
                         MessageCitation.message_id.in_(
                             select(Message.id).where(
                                 Message.conversation_id.in_(
@@ -285,33 +277,33 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(TeachingStrategy).where(
-                        TeachingStrategy.course_id == course_id
-                    )
+                    select(func.count())
+                    .select_from(TeachingStrategy)
+                    .where(TeachingStrategy.course_id == course_id)
                 )
                 == 3
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(ExecutionPlan).where(
-                        ExecutionPlan.course_id == course_id
-                    )
+                    select(func.count())
+                    .select_from(ExecutionPlan)
+                    .where(ExecutionPlan.course_id == course_id)
                 )
                 == 2
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(QuestionItem).where(
-                        QuestionItem.course_id == course_id
-                    )
+                    select(func.count())
+                    .select_from(QuestionItem)
+                    .where(QuestionItem.course_id == course_id)
                 )
                 == 30
             )
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(QuickCheckAttempt).where(
-                        QuickCheckAttempt.course_id == course_id
-                    )
+                    select(func.count())
+                    .select_from(QuickCheckAttempt)
+                    .where(QuickCheckAttempt.course_id == course_id)
                 )
                 == 480
             )
@@ -340,9 +332,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
             assert await session.get(Course, course_id) is None
             assert (
                 await session.scalar(
-                    select(func.count()).select_from(Course).where(
-                        Course.code == "UNRELSE1"
-                    )
+                    select(func.count()).select_from(Course).where(Course.code == "UNRELSE1")
                 )
                 == 1
             )
@@ -366,13 +356,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                 QuestionItem,
                 QuickCheckAttempt,
             ):
-                count = int(
-                    await session.scalar(
-                        select(func.count())
-                        .select_from(model)
-                    )
-                    or 0
-                )
+                count = int(await session.scalar(select(func.count()).select_from(model)) or 0)
                 assert count == 0
         assert not (storage_root / "courses" / str(course_id)).exists()
     finally:

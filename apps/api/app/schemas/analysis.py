@@ -18,6 +18,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    field_validator,
     model_validator,
 )
 
@@ -63,6 +64,14 @@ class AIAnalysisCreateRequest(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
+    @field_validator("client_request_id")
+    @classmethod
+    def normalize_client_request_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
     @model_validator(mode="after")
     def validate_scope(self) -> "AIAnalysisCreateRequest":
         if self.scope == AIAnalysisScope.WHOLE_CLASS and self.student_ids:
@@ -91,6 +100,14 @@ class AIAnalysisReanalyzeRequest(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    @field_validator("client_request_id")
+    @classmethod
+    def normalize_client_request_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 class AIAnalysisFactResponse(BaseModel):

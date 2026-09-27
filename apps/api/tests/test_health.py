@@ -1,3 +1,6 @@
+import tomllib
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from app.core.config import settings
@@ -15,3 +18,9 @@ def test_health() -> None:
         "version": settings.app_version,
         "environment": "development",
     }
+
+
+def test_runtime_version_matches_project_metadata() -> None:
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    metadata = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    assert settings.app_version == metadata["project"]["version"]

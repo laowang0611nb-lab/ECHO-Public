@@ -137,6 +137,10 @@ POST /api/v1/courses/{course_id}/knowledge-points/merge
 
 附件上传先写入 `chat_attachments`，成功响应返回 `attachment` 和 `expires_at`。发送消息时，`attachments` 只接受当前用户创建、尚未绑定且未过期的附件。消息提交后，附件绑定到用户消息；历史消息通过 `attachments` 返回元数据和文件 URL。
 
+学生消息保留完整 5000 字正文，但 `question_asked` 学习事件证据只保存前 2000 字，避免长消息或音频转写导致半保存。用户消息、附件绑定和学习事件在同一事务中提交，失败时整体回滚，`client_request_id` 可安全重试。空白 `client_request_id` 会规范化为 `null`。
+
+未绑定且超过有效期的聊天附件会由后台清理任务删除数据库记录、原文件和视频模型缓存文件；清理间隔默认 3600 秒。
+
 多模态 Chat Provider 输入使用 OpenAI 兼容内容块：图片使用 `image_url`，音频在转写后使用文本，视频使用 `video_url`。上传和消息持久化不代表模型一定具备对应理解能力；如果 Provider 不支持指定模态，会返回真实错误事件，不会伪造分析结果。
 
 音频处理按本地优先、远程兜底：`ECHO_ASR_ENABLED=true` 时先通过可选依赖 `faster-whisper` 转写；未启用或本地转写失败时，使用 `ECHO_ASR_REMOTE_MODEL`（默认 `qwen3-asr-flash`）把 Data URL 音频提交给百炼语音识别。转写结果保存到附件的 `transcript` 字段，并以 `[音频转写]` 文本块进入 RAG，不再把 base64 `input_audio` 交给主对话模型。

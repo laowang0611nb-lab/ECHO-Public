@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.dependencies import get_asr_provider, get_chat_attachment_storage
 from app.main import app
+from app.schemas.chat import ChatContinueRequest, ChatStreamRequest
 from app.services.chat import (
     _course_has_searchable_material,
     _stream_chat_response_contents,
@@ -250,6 +251,85 @@ async def test_multimodal_chat_attachment_upload_and_send(
     finally:
         app.dependency_overrides.pop(get_chat_attachment_storage, None)
         app.dependency_overrides.pop(get_asr_provider, None)
+
+
+async def test_long_student_message_is_atomic_and_retryable(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "long-message-teacher@example.com", "teacher")
+    student = await login(client, "long-message-student@example.com", "student")
+    course = await create_searchable_course(client, session_factory, teacher)
+    published = await client.post(
+        f"/api/v1/courses/{course['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    joined = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": published.json()["code"]},
+    )
+    assert joined.status_code == 200
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(student),
+        json={"title": "长消息"},
+    )
+    conversation_id = conversation.json()["id"]
+    content = "测" * 3000
+    payload = {
+        "content": content,
+        "client_request_id": "long-message-once",
+    }
+
+    first = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(student),
+        json=payload,
+    )
+    assert first.status_code == 200
+    assert "event: done" in first.text
+    assert "event: error" not in first.text
+
+    async with session_factory() as session:
+        event = await session.scalar(
+            select(LearningEvent).where(
+                LearningEvent.conversation_id == UUID(conversation_id),
+                LearningEvent.event_type == LearningEventType.QUESTION_ASKED,
+            )
+        )
+        assert event is not None
+        assert event.evidence is not None
+        assert len(event.evidence) <= 2000
+
+    retry = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(student),
+        json=payload,
+    )
+    assert retry.status_code == 200
+    assert "event: done" in retry.text
+    assert "event: error" not in retry.text
+
+    messages = await client.get(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=auth_headers(student),
+    )
+    user_messages = [message for message in messages.json() if message["role"] == "user"]
+    assert len(user_messages) == 1
+    assert user_messages[0]["content"] == content
+
+
+def test_blank_client_request_id_is_normalized_to_none() -> None:
+    assert (
+        ChatStreamRequest(
+            content="question",
+            client_request_id="   ",
+        ).client_request_id
+        is None
+    )
+    assert ChatContinueRequest(client_request_id="").client_request_id is None
 
 
 async def test_audio_attachment_uses_local_asr_transcript(

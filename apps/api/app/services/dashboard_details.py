@@ -5,7 +5,7 @@ from database.models.document import Document
 from database.models.knowledge import Chapter, KnowledgePoint
 from database.models.learning import LearningEvent, StudentKnowledgeState
 from database.models.user import User, UserRole
-from sqlalchemy import and_, distinct, func, select
+from sqlalchemy import and_, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.dashboard_details import (
@@ -210,6 +210,14 @@ async def get_student_learning_detail(
         .where(
             LearningEvent.course_id == course_id,
             LearningEvent.user_id == student_id,
+            or_(
+                LearningEvent.knowledge_point_id.is_(None),
+                and_(
+                    KnowledgePoint.id.is_not(None),
+                    Chapter.id.is_not(None),
+                    Document.id.is_not(None),
+                ),
+            ),
         )
         .order_by(LearningEvent.created_at.desc())
         .limit(50)

@@ -101,6 +101,8 @@ async def record_learning_event(
                 commit=commit,
             )
         except IntegrityError as exc:
+            if not commit:
+                raise LearningEventConflictError from exc
             await session.rollback()
             if payload.knowledge_point_id is None or attempt == 2:
                 raise LearningEventConflictError from exc

@@ -56,6 +56,13 @@ from app.services.search import search_course_chunks
 from app.services.storage import LocalDocumentStorage
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
+MAX_LEARNING_EVENT_EVIDENCE = 2000
+
+
+def _learning_event_evidence(value: str) -> str:
+    if len(value) <= MAX_LEARNING_EVENT_EVIDENCE:
+        return value
+    return value[: MAX_LEARNING_EVENT_EVIDENCE - 1] + "…"
 
 
 async def _course_has_searchable_material(session: AsyncSession, course_id: UUID) -> bool:
@@ -555,9 +562,6 @@ async def _stream_chat_response_contents(
     if not conversation.title:
         conversation.title = content[:80]
     conversation.updated_at = datetime.now(UTC)
-    await session.commit()
-    await session.refresh(user_message)
-
     chat_user = await session.get(User, user_id)
     is_student = chat_user is not None and chat_user.role == UserRole.STUDENT
     if is_student:
@@ -570,10 +574,13 @@ async def _stream_chat_response_contents(
                 message_id=user_message.id,
                 knowledge_point_id=resolved_knowledge_point_id,
                 event_type=LearningEventType.QUESTION_ASKED,
-                evidence=question_with_attachments,
+                evidence=_learning_event_evidence(question_with_attachments),
             ),
             require_student_membership=True,
+            commit=False,
         )
+    await session.commit()
+    await session.refresh(user_message)
 
     user_created_at = (
         user_message.created_at

@@ -21,7 +21,7 @@ been removed so there is one source of truth.
 ## Current Schema
 
 - Existing history head: `d9e0f1a2b3c4`
-- Current workflow head: `d8e9f0a1b2c3`
+- Current workflow head: `e5f6a7b8c9d0`
 - Added models: `UserCredential`, `AuthSession`, `TeacherProfile`,
   `StudentProfile`, `ReviewAnswerVersion`, `ReviewRegenerationRun`,
   `ReviewHistoryEntry`, `QuestionItem`, `ExternalResource`, `AIAnalysis`,

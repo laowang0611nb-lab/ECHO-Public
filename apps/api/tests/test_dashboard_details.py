@@ -177,6 +177,32 @@ async def test_teacher_drilldown_endpoints(
     assert hidden_point.status_code == 404
 
 
+async def test_soft_deleted_knowledge_point_is_removed_from_learning_evidence(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "drill-delete-teacher@example.com", "teacher")
+    student = await login(client, "drill-delete-student@example.com", "student")
+    course, _, point_id = await create_analytics_data(
+        client,
+        session_factory,
+        teacher,
+        student,
+    )
+    async with session_factory() as session:
+        point = await session.get(KnowledgePoint, point_id)
+        assert point is not None
+        point.trashed_at = datetime.now(UTC)
+        await session.commit()
+
+    learning = await client.get(
+        f"/api/v1/courses/{course['id']}/students/{student['id']}/learning",
+        headers=auth_headers(teacher),
+    )
+    assert learning.status_code == 200
+    assert learning.json()["recent_evidence"] == []
+
+
 async def test_student_cannot_use_drilldown(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
