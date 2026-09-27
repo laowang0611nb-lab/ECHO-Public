@@ -64,7 +64,7 @@ const MAX_SCALE = ITEM_TILE_MAX / ITEM_TILE_BASE;
 const FOCUS_SCALE = 1.18;
 const FALLOFF = 104;
 const PROXIMITY_EXPONENT = 2.8;
-const SPRING = { stiffness: 320, damping: 28, mass: 0.6 };
+const SPRING = { stiffness: 480, damping: 18, mass: 0.34 };
 const EASE = "easeOut" as const;
 
 function SidebarLabel({
