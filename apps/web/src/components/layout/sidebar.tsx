@@ -12,19 +12,6 @@ import {
   type MotionValue,
 } from "motion/react";
 import {
-  BookOpen,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  LayoutDashboard,
-  Library,
-  ShieldCheck,
-  Sparkles,
-  Users,
-  Waypoints,
-  type LucideIcon,
-} from "lucide-react";
-import {
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -37,26 +24,40 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+type MaterialSymbolName =
+  | "account_circle"
+  | "dashboard"
+  | "fact_check"
+  | "groups"
+  | "library_books"
+  | "menu_book"
+  | "monitoring"
+  | "neurology"
+  | "route"
+  | "chevron_left"
+  | "chevron_right"
+  | "keyboard_arrow_down";
+
 interface NavItem {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: MaterialSymbolName;
 }
 
 type RegisterNavItem = (element: HTMLDivElement, centerY: MotionValue<number>) => () => void;
 
-const primaryItems: NavItem[] = [{ href: "/dashboard", label: "总览 Dashboard", icon: LayoutDashboard }];
+const primaryItems: NavItem[] = [{ href: "/dashboard", label: "总览 Dashboard", icon: "dashboard" }];
 const aiItems: NavItem[] = [
-  { href: "/ai-insights", label: "AI 教学洞察", icon: Sparkles },
-  { href: "/ai-review", label: "AI 回答审核", icon: ShieldCheck },
-  { href: "/teaching-strategies", label: "教学策略", icon: Waypoints },
+  { href: "/ai-insights", label: "AI 教学洞察", icon: "monitoring" },
+  { href: "/ai-review", label: "AI 回答审核", icon: "fact_check" },
+  { href: "/teaching-strategies", label: "教学策略", icon: "route" },
 ];
 const moduleItems: NavItem[] = [
-  { href: "/courses", label: "课程管理", icon: BookOpen },
-  { href: "/students", label: "学生学情", icon: Users },
-  { href: "/knowledge", label: "知识库", icon: Library },
+  { href: "/courses", label: "课程管理", icon: "menu_book" },
+  { href: "/students", label: "学生学情", icon: "groups" },
+  { href: "/knowledge", label: "知识库", icon: "library_books" },
 ];
-const accountItem: NavItem = { href: "/me", label: "我的", icon: Users };
+const accountItem: NavItem = { href: "/me", label: "我的", icon: "account_circle" };
 
 const ITEM_TILE_BASE = 40;
 const ITEM_TILE_MAX = 64;
@@ -104,6 +105,28 @@ function SidebarLabel({
   );
 }
 
+function MaterialSymbol({
+  name,
+  className,
+  filled = false,
+  size = 18,
+}: {
+  name: MaterialSymbolName;
+  className?: string;
+  filled?: boolean;
+  size?: number;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("material-symbols-sharp select-none leading-none", className)}
+      style={{ fontSize: size, lineHeight: 1, fontVariationSettings: `"FILL" ${filled ? 1 : 0}` }}
+    >
+      {name}
+    </span>
+  );
+}
+
 function NavLink({
   item,
   nested = false,
@@ -123,7 +146,6 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-  const Icon = item.icon;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const itemCenterY = useMotionValue(0);
   const focusScale = useSpring(1, SPRING);
@@ -174,12 +196,14 @@ function NavLink({
       title={collapsed ? item.label : undefined}
     >
       {active ? <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-primary" /> : null}
-      <Icon
+      <MaterialSymbol
         className={cn(
           "shrink-0",
-          collapsed ? "size-5" : "size-4",
           active ? "text-primary" : "text-sidebar-foreground/60",
         )}
+        filled={active}
+        name={item.icon}
+        size={collapsed ? 22 : 18}
       />
       {!collapsed ? (
         <SidebarLabel className="truncate" collapsed={collapsed} index={index} reducedMotion={reducedMotion}>
@@ -344,7 +368,7 @@ export function Sidebar({
             type="button"
             variant="ghost"
           >
-            {collapsed ? <ChevronRight /> : <ChevronLeft />}
+            <MaterialSymbol name={collapsed ? "chevron_right" : "chevron_left"} size={18} />
           </Button>
         </div>
 
@@ -395,7 +419,7 @@ export function Sidebar({
                   onClick={() => setAiOpen((current) => !current)}
                   type="button"
                 >
-                  <Sparkles className="size-4 shrink-0 text-primary" />
+                  <MaterialSymbol className="shrink-0 text-primary" filled name="neurology" size={18} />
                   <SidebarLabel className="flex-1" collapsed={collapsed} index={1} reducedMotion={reducedMotion}>
                     AI 教学
                   </SidebarLabel>
@@ -407,7 +431,7 @@ export function Sidebar({
                     className="flex shrink-0"
                     transition={contentTransition}
                   >
-                    <ChevronDown className="size-4" />
+                    <MaterialSymbol name="keyboard_arrow_down" size={18} />
                   </motion.span>
                 </button>
 

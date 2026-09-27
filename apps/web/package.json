@@ -14,6 +14,7 @@
     "@echo/api-client": "workspace:*",
     "@echo/design-tokens": "workspace:*",
     "@echo/shared-types": "workspace:*",
+    "@material-symbols/font-400": "0.47.5",
     "@tanstack/react-query": "5.102.8",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",

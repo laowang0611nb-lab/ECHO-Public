@@ -566,6 +566,7 @@ const runtimeLicenses = [
   { name: "@base-ui/react", version: "1.8.0", license: "MIT", url: "https://base-ui.com" },
   { name: "Apache ECharts", version: "6.1.0", license: "Apache-2.0", url: "https://echarts.apache.org" },
   { name: "Motion", version: "13.3.0", license: "MIT", url: "https://motion.dev" },
+  { name: "Material Symbols Sharp", version: "0.47.5", license: "Apache-2.0", url: "https://github.com/marella/material-symbols" },
   { name: "Zustand", version: "5.0.15", license: "MIT", url: "https://zustand.docs.pmnd.rs" },
   { name: "Zod", version: "4.6.5", license: "MIT", url: "https://zod.dev" },
   { name: "Lucide React", version: "1.46.0", license: "ISC", url: "https://lucide.dev" },

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import "@material-symbols/font-400/sharp.css";
 import { QueryProvider } from "@/providers/query-provider";
 import { TeacherSessionProvider } from "@/providers/teacher-session-provider";
 import "./globals.css";
