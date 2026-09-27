@@ -272,7 +272,7 @@ function NavLink({
         />
       </motion.span>
       {!collapsed ? (
-        <SidebarLabel className="truncate" collapsed={collapsed} index={index} reducedMotion={reducedMotion}>
+        <SidebarLabel className="relative z-10 truncate" collapsed={collapsed} index={index} reducedMotion={reducedMotion}>
           {item.label}
         </SidebarLabel>
       ) : null}
