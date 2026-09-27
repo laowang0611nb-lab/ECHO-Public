@@ -1,4 +1,7 @@
 import type {
+  AIAnalysis,
+  AIAnalysisEvidenceSource,
+  AIAnalysisInsufficientCategory,
   DashboardLearningDifficulty,
   DashboardTeacherAction,
   ReviewFlagSummary,
@@ -26,6 +29,16 @@ export interface AiAnalysisOutcome {
   tone: AiTeachingTone;
   href?: string;
   insufficient: boolean;
+  tags?: string[];
+  facts?: AiFactDetail[];
+}
+
+export interface AiFactDetail {
+  id: string;
+  text: string;
+  sourceLabel: string;
+  evidenceCount: number;
+  href: string;
 }
 
 export interface AiFocusItem {
@@ -61,6 +74,7 @@ export interface AiTeachingModel {
   inactiveStudentCount: number;
   highRiskReviews: number;
   pendingReviews: number;
+  realAnalysis: AIAnalysis | null;
 }
 
 export function buildAiTeachingModel({
@@ -291,6 +305,7 @@ export function buildAiTeachingModel({
     inactiveStudentCount,
     highRiskReviews,
     pendingReviews,
+    realAnalysis: null,
   };
 }
 
@@ -334,4 +349,205 @@ function presentAction(action: DashboardTeacherAction, courseId: string) {
     description: "查看缺少近期学习证据的学生，并结合课堂观察安排后续支持。",
     href: `/students?courseId=${courseId}&tab=students&activity=inactive`,
   };
+}
+
+const evidenceSourceGroups: Record<AiEvidenceNode["id"], AIAnalysisEvidenceSource[]> = {
+  conversations: ["conversation_message"],
+  quizzes: ["quick_check_attempt"],
+  events: ["learning_event", "review_flag"],
+  citations: ["message_citation", "knowledge_chunk"],
+  mastery: ["mastery_snapshot", "initial_analysis"],
+};
+
+const evidenceReasonSourceGroups: Record<string, AIAnalysisEvidenceSource[]> = {
+  conversation: ["conversation_message"],
+  "quick-check": ["quick_check_attempt"],
+  "learning-event": ["learning_event", "review_flag"],
+  citations: ["message_citation", "knowledge_chunk"],
+  mastery: ["mastery_snapshot", "initial_analysis"],
+};
+
+const insufficientCategoryLabels: Record<AIAnalysisInsufficientCategory, string> = {
+  no_evidence: "无可用证据",
+  partial_coverage: "仅覆盖部分学生或知识点",
+  conflicting_evidence: "证据相互冲突",
+  missing_causal_evidence: "缺少因果链关键证据",
+  model_uncertain: "模型无法确认结论",
+};
+
+const evidenceSourceLabels: Record<AIAnalysisEvidenceSource, string> = {
+  initial_analysis: "前序分析",
+  learning_event: "LearningEvent",
+  mastery_snapshot: "掌握度快照",
+  quick_check_attempt: "测验结果",
+  conversation_message: "学生对话",
+  review_flag: "审核证据",
+  message_citation: "回答引用",
+  knowledge_chunk: "教材片段",
+};
+
+function factEvidenceHref(courseId: string, sourceType: AIAnalysisEvidenceSource) {
+  if (sourceType === "review_flag") return `/ai-review?courseId=${courseId}`;
+  if (sourceType === "message_citation" || sourceType === "knowledge_chunk") return `/knowledge?courseId=${courseId}&tab=resources`;
+  if (sourceType === "mastery_snapshot") return `/knowledge?courseId=${courseId}&tab=graph`;
+  if (sourceType === "initial_analysis") return `/ai-insights?courseId=${courseId}`;
+  return `/students?courseId=${courseId}&tab=behavior`;
+}
+
+export function applyAIAnalysisToTeachingModel(
+  base: AiTeachingModel,
+  analysis: AIAnalysis | null,
+): AiTeachingModel {
+  if (!analysis?.result) return { ...base, realAnalysis: analysis };
+  const result = analysis.result;
+  const evidenceById = new Map(analysis.evidence.map((item) => [item.id, item]));
+  const factDetails: AiFactDetail[] = result.facts.map((fact, index) => {
+    const sourceTypes = [...new Set(
+      fact.evidence_ids
+        .map((evidenceId) => evidenceById.get(evidenceId)?.source_type)
+        .filter((sourceType): sourceType is AIAnalysisEvidenceSource => Boolean(sourceType)),
+    )];
+    const primarySource = sourceTypes[0] ?? "learning_event";
+    return {
+      id: `fact-${index}`,
+      text: fact.fact,
+      sourceLabel: sourceTypes.map((sourceType) => evidenceSourceLabels[sourceType]).join("、") || "关联证据",
+      evidenceCount: fact.evidence_ids.length,
+      href: factEvidenceHref(analysis.course_id, primarySource),
+    };
+  });
+  const insufficientTags = result.insufficient_categories.map((category) => insufficientCategoryLabels[category]);
+  const insufficientReason = result.insufficient_reason
+    ?? (result.insufficient_evidence
+      ? "该记录生成于修复前，未保存模型的不足原因。"
+      : null);
+
+  const evidenceNodes = base.evidenceNodes.map((node) => ({
+    ...node,
+    value: `${analysis.evidence.filter((item) => evidenceSourceGroups[node.id].includes(item.source_type)).length} 条`,
+    description: analysis.evidence.length
+      ? `本次分析已关联 ${analysis.evidence.length} 条持久化证据。`
+      : node.description,
+  }));
+
+  const outcomes: AiAnalysisOutcome[] = result.insufficient_evidence
+    ? [
+        {
+          id: "knowledge-point",
+          label: "证据不足原因",
+          value: insufficientReason ?? "未保存模型的不足原因",
+          description: result.root_cause,
+          tags: insufficientTags.length ? insufficientTags : undefined,
+          tone: "neutral",
+          insufficient: true,
+        },
+        {
+          id: "student-scope",
+          label: "影响学生范围",
+          value: `${result.affected_student_ids.length} 名学生`,
+          description: "当前范围来自分析记录，不扩展为无证据个体结论。",
+          tone: "neutral",
+          insufficient: true,
+        },
+        {
+          id: "error-pattern",
+          label: "已保存事实",
+          value: `${result.facts.length} 条可追溯事实`,
+          description: result.facts.length
+            ? `本次记录包含 ${analysis.evidence.length} 条证据，以下事实均可回链。`
+            : "本次记录没有形成可回链事实。",
+          facts: factDetails,
+          tone: "neutral",
+          insufficient: true,
+        },
+        {
+          id: "strategy",
+          label: "教学策略建议",
+          value: "暂不可生成",
+          description: result.recommendation,
+          tone: "neutral",
+          insufficient: true,
+        },
+      ]
+    : [
+        {
+          id: "knowledge-point",
+          label: "结论与原因",
+          value: result.conclusion,
+          description: result.root_cause,
+          tone: "amber",
+          insufficient: false,
+        },
+        {
+          id: "student-scope",
+          label: "影响学生范围",
+          value: `${result.affected_student_ids.length} 名学生`,
+          description: analysis.student_ids.length
+            ? `分析范围为 ${analysis.student_ids.length} 名指定学生。`
+            : "分析范围覆盖当前课程全班学生。",
+          tone: "violet",
+          href: `/students?courseId=${analysis.course_id}&tab=students`,
+          insufficient: false,
+        },
+        {
+          id: "error-pattern",
+          label: "可追溯事实",
+          value: result.facts[0]?.fact ?? "暂无结构化事实",
+          description: result.facts.length
+            ? `${result.facts.length} 条事实均引用本次分析中的真实 evidence_id。`
+            : "没有形成可追溯事实。",
+          tone: "rose",
+          insufficient: result.facts.length === 0,
+        },
+        {
+          id: "strategy",
+          label: "教学策略建议",
+          value: result.recommendation,
+          description: result.strategy_id
+            ? "已生成建议状态的教学策略，仍需教师采纳和发布。"
+            : "可转换为建议状态的教学策略，由教师继续决定。",
+          tone: "blue",
+          href: result.strategy_id ? `/teaching-strategies/${result.strategy_id}` : undefined,
+          insufficient: false,
+        },
+      ];
+
+  const evidenceReasons = base.evidenceReasons.map((reason) => {
+    const sourceTypes = evidenceReasonSourceGroups[reason.id];
+    if (!sourceTypes) return reason;
+    const count = analysis.evidence.filter((item) => sourceTypes.includes(item.source_type)).length;
+    return count ? { ...reason, value: `${count} 条` } : reason;
+  });
+
+  const analysisFocusItems: AiFocusItem[] = result.insufficient_evidence
+    ? [
+        {
+          id: `analysis-${analysis.id}-evidence-gap`,
+          title: "需要补充可追溯证据",
+          description: result.recommendation,
+          evidence: `${analysis.evidence.length} 条证据 · ${result.affected_student_ids.length} 名学生`,
+          href: `/students?courseId=${analysis.course_id}&tab=behavior`,
+          tone: "neutral",
+        },
+      ]
+    : [];
+
+  analysisFocusItems.push(
+    ...outcomes
+      .filter((outcome) => outcome.href && !outcome.insufficient)
+      .map((outcome) => ({
+        id: outcome.id,
+        title: outcome.label,
+        description: outcome.description,
+        evidence: outcome.value,
+        href: outcome.href!,
+        tone: outcome.tone,
+      })),
+  );
+
+  const focusItems = [...analysisFocusItems, ...base.focusItems]
+    .filter((item, index, items) => items.findIndex((candidate) => candidate.id === item.id) === index)
+    .slice(0, 6);
+
+  return { ...base, evidenceNodes, outcomes, evidenceReasons, focusItems, realAnalysis: analysis };
 }

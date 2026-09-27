@@ -14,11 +14,23 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useReviewSummary } from "@/features/ai-review/queries";
-import { AnalysisConnectors } from "@/features/ai-insights/components/analysis-connectors";
 import { AnalysisEngine, type SecondaryAnalysisState } from "@/features/ai-insights/components/analysis-engine";
 import { AnalysisResultPanel } from "@/features/ai-insights/components/analysis-result-panel";
 import { EvidenceFlow } from "@/features/ai-insights/components/evidence-flow";
-import { buildAiTeachingModel, type AiTeachingTone } from "@/features/ai-insights/view-model";
+import { FlowBridge } from "@/features/ai-insights/components/flow-bridge";
+import {
+  useAIAnalysis,
+  useAIAnalysisList,
+  useAIAnalysisProgress,
+  useCreateAIAnalysis,
+  useCreateStrategyFromAIAnalysis,
+  useReanalyzeAIAnalysis,
+} from "@/features/ai-insights/queries";
+import {
+  applyAIAnalysisToTeachingModel,
+  buildAiTeachingModel,
+  type AiTeachingTone,
+} from "@/features/ai-insights/view-model";
 import { useTeacherDashboardOverview } from "@/features/dashboard/queries";
 import { localizeInsightSummary } from "@/features/dashboard/view-model";
 import { useKnowledgeBaseData } from "@/features/knowledge/queries";
@@ -27,8 +39,6 @@ import { useStudentAnalytics } from "@/features/students/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 import { cn } from "@/lib/utils";
-
-const ANALYSIS_PHASE_COUNT = 5;
 
 const focusToneClasses: Record<AiTeachingTone, string> = {
   blue: "border-blue-200 bg-blue-50/45",
@@ -39,35 +49,83 @@ const focusToneClasses: Record<AiTeachingTone, string> = {
   neutral: "border-border bg-muted/25",
 };
 
+function createClientRequestId(prefix: string) {
+  const randomId = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${randomId}`;
+}
+
 export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }) {
   const router = useRouter();
-  const { user } = useTeacherSession();
   const { courses, selectedCourseId, setSelectedCourseId } = useCourseWorkspace();
   const courseId = initialCourseId && courses.some((course) => course.id === initialCourseId)
     ? initialCourseId
     : selectedCourseId;
+
+  function handleCourseChange(value: string) {
+    setSelectedCourseId(value);
+    router.replace(`/ai-insights?courseId=${value}`, { scroll: false });
+  }
+
+  if (!courseId) {
+    return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，AI 教学会围绕当前课程真实学习证据展开。" title="尚未选择课程" />;
+  }
+
+  return (
+    <AiInsightsWorkspace
+      courseId={courseId}
+      courses={courses.map((course) => ({ id: course.id, name: course.name }))}
+      key={courseId}
+      onCourseChange={handleCourseChange}
+    />
+  );
+}
+
+function AiInsightsWorkspace({
+  courseId,
+  courses,
+  onCourseChange,
+}: {
+  courseId: string;
+  courses: Array<{ id: string; name: string }>;
+  onCourseChange: (value: string) => void;
+}) {
+  const router = useRouter();
+  const { user } = useTeacherSession();
+  const [analysisSelection, setAnalysisSelection] = useState<{ courseId: string; analysisId: string } | null>(null);
+  const [strategySelection, setStrategySelection] = useState<{
+    courseId: string;
+    analysisId: string;
+    strategyId: string;
+  } | null>(null);
   const dashboard = useTeacherDashboardOverview(user?.id, courseId);
   const students = useStudentAnalytics(courseId);
   const knowledge = useKnowledgeBaseData(courseId);
   const reviewSummary = useReviewSummary(courseId);
-  const [analysisState, setAnalysisState] = useState<SecondaryAnalysisState>("completed");
-  const [phaseIndex, setPhaseIndex] = useState(0);
-
-  useEffect(() => {
-    if (analysisState !== "analyzing") return;
-    const timer = window.setTimeout(() => {
-      if (phaseIndex >= ANALYSIS_PHASE_COUNT - 1) {
-        setAnalysisState("completed");
-        return;
-      }
-      setPhaseIndex((current) => current + 1);
-    }, 680);
-    return () => window.clearTimeout(timer);
-  }, [analysisState, phaseIndex]);
+  const analysisList = useAIAnalysisList(courseId);
+  const analysisItems = analysisList.data?.items ?? [];
+  const latestCompletedAnalysisId = analysisItems.find((item) => item.status === "completed")?.id
+    ?? analysisItems[0]?.id
+    ?? null;
+  const selectedAnalysisId = analysisSelection?.courseId === courseId
+    && analysisItems.some((item) => item.id === analysisSelection.analysisId)
+    ? analysisSelection.analysisId
+    : null;
+  const activeAnalysisId = selectedAnalysisId ?? latestCompletedAnalysisId;
+  const activeAnalysisSummary = analysisItems.find((item) => item.id === activeAnalysisId) ?? null;
+  const createAnalysis = useCreateAIAnalysis(courseId);
+  const reanalyzeAnalysis = useReanalyzeAIAnalysis(courseId);
+  const analysisQuery = useAIAnalysis(courseId, activeAnalysisId);
+  const progressQuery = useAIAnalysisProgress(courseId, activeAnalysisId);
+  const refetchAnalysis = analysisQuery.refetch;
+  const refetchAnalysisList = analysisList.refetch;
+  const createStrategy = useCreateStrategyFromAIAnalysis(courseId, activeAnalysisId);
+  const analysis = analysisQuery.data ?? null;
+  const progress = progressQuery.data ?? analysis?.progress ?? activeAnalysisSummary?.progress ?? null;
 
   const overview = dashboard.data;
   const resourceSummary = summarizeKnowledgeBase(knowledge.resources);
-  const model = useMemo(() => {
+  const baseModel = useMemo(() => {
     if (!courseId || !overview) return null;
     return buildAiTeachingModel({
       courseId,
@@ -81,18 +139,185 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
     });
   }, [courseId, overview, resourceSummary.failed, resourceSummary.pending, resourceSummary.processing, resourceSummary.ready, resourceSummary.total, reviewSummary.data, students.items]);
 
-  function handleCourseChange(value: string) {
-    setSelectedCourseId(value);
-    router.replace(`/ai-insights?courseId=${value}`, { scroll: false });
+  const model = useMemo(
+    () => (baseModel ? applyAIAnalysisToTeachingModel(baseModel, analysis) : null),
+    [analysis, baseModel],
+  );
+
+  const analysisPending = createAnalysis.isPending || reanalyzeAnalysis.isPending;
+  const pendingAnalysisType = reanalyzeAnalysis.isPending
+    ? "secondary"
+    : createAnalysis.isPending
+      ? "initial"
+      : null;
+  const analysisStatus = analysisPending
+    ? "analyzing"
+    : progressQuery.data?.status ?? analysis?.status ?? activeAnalysisSummary?.status ?? null;
+
+  useEffect(() => {
+    const status = progressQuery.data?.status;
+    if (!status || status === "analyzing") return;
+    void refetchAnalysis();
+    void refetchAnalysisList();
+  }, [progressQuery.data?.status, refetchAnalysis, refetchAnalysisList]);
+  const analysisType = pendingAnalysisType ?? analysis?.analysis_type ?? activeAnalysisSummary?.analysis_type ?? null;
+  const analysisState: SecondaryAnalysisState = analysisStatus === "analyzing"
+    ? "analyzing"
+    : analysisStatus === "failed"
+      ? "failed"
+      : analysisStatus === "completed"
+        ? "completed"
+        : "idle";
+  const analysisError = createAnalysis.error ?? reanalyzeAnalysis.error ?? createStrategy.error ?? analysisQuery.error ?? progressQuery.error;
+  const analysisDetailLoading = Boolean(activeAnalysisId) && (
+    (analysisQuery.isPending && !analysis)
+    || Boolean(progressQuery.data && analysis && analysis.status !== progressQuery.data.status)
+  );
+  const analysisEvidenceCount = analysis?.evidence.length ?? activeAnalysisSummary?.evidence_count ?? 0;
+  const insufficientEvidence = analysis?.result?.insufficient_evidence ?? activeAnalysisSummary?.insufficient_evidence ?? false;
+  const createdStrategyId = strategySelection?.courseId === courseId && strategySelection.analysisId === activeAnalysisId
+    ? strategySelection.strategyId
+    : null;
+  const strategyId = analysis?.result?.strategy_id ?? createdStrategyId;
+  const reanalyzeSourceId = analysis?.analysis_type === "secondary" ? analysis.previous_analysis_id : null;
+  const showReanalyze = Boolean(analysis?.status === "completed" && reanalyzeSourceId);
+  const actionLabel = (() => {
+    if (analysisStatus === "analyzing") {
+      return analysisType === "secondary" ? "正在进一步分析" : "正在开始分析";
+    }
+    if (analysisStatus === "failed") {
+      return analysisType === "secondary" ? "重新进行二次分析" : "重新开始分析";
+    }
+    if (analysisStatus === "completed") {
+      if (analysisType === "initial") return "进一步分析";
+      if (strategyId) return "查看教学策略";
+      if (insufficientEvidence) return "证据不足，暂不可生成策略";
+      return "转为教学策略";
+    }
+    return "开始分析";
+  })();
+  const actionPendingLabel =
+    reanalyzeAnalysis.isPending || (analysisState === "analyzing" && analysisType === "secondary")
+      ? "正在进一步分析..."
+      : createAnalysis.isPending || (analysisState === "analyzing" && analysisType === "initial")
+        ? "正在开始分析..."
+        : createStrategy.isPending
+          ? "正在生成教学策略..."
+          : "正在分析...";
+  const actionDisabled =
+    analysisList.isLoading
+    || analysisDetailLoading
+    || analysisStatus === "analyzing"
+    || (analysisStatus === "completed" && analysisType === "secondary" && !strategyId && insufficientEvidence);
+
+  function handleAnalysisAction() {
+    if (actionDisabled) return;
+
+
+    const startInitialAnalysis = () =>
+      createAnalysis.mutate(
+        {
+          scope: "whole_class",
+          time_range_days: 28,
+          focus: "识别当前课程最需要教师行动的问题",
+          async: true,
+          client_request_id: createClientRequestId("web-initial"),
+        },
+        {
+          onSuccess: (created) =>
+            setAnalysisSelection({ courseId, analysisId: created.id }),
+        },
+      );
+
+    if (!analysis) {
+      startInitialAnalysis();
+      return;
+    }
+
+    if (analysis.status === "failed") {
+      if (analysis.analysis_type === "secondary" && analysis.previous_analysis_id) {
+        reanalyzeAnalysis.mutate(
+          {
+            analysisId: analysis.previous_analysis_id,
+            payload: {
+              focus: "进一步确认错误原因与影响学生范围",
+              time_range_days: 42,
+              async: true,
+              client_request_id: createClientRequestId("web-secondary"),
+            },
+          },
+          {
+            onSuccess: (created) =>
+              setAnalysisSelection({ courseId, analysisId: created.id }),
+          },
+        );
+      } else {
+        startInitialAnalysis();
+      }
+      return;
+    }
+
+    if (analysis.status === "analyzing") return;
+
+    if (analysis.analysis_type === "initial") {
+      reanalyzeAnalysis.mutate(
+        {
+          analysisId: analysis.id,
+          payload: {
+            focus: "进一步确认错误原因与影响学生范围",
+            time_range_days: 42,
+            async: true,
+            client_request_id: createClientRequestId("web-secondary"),
+          },
+        },
+        {
+          onSuccess: (created) =>
+            setAnalysisSelection({ courseId, analysisId: created.id }),
+        },
+      );
+      return;
+    }
+
+    if (strategyId) {
+      router.push(`/teaching-strategies/${strategyId}`);
+      return;
+    }
+
+    if (analysis.status === "completed" && !insufficientEvidence) {
+      createStrategy.mutate({}, {
+        onSuccess: (strategy) =>
+          setStrategySelection({
+            courseId,
+            analysisId: analysis.id,
+            strategyId: strategy.id,
+          }),
+      });
+    }
   }
 
-  if (!courseId) {
-    return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，AI 教学会围绕当前课程真实学习证据展开。" title="尚未选择课程" />;
+  function handleReanalyze() {
+    if (!reanalyzeSourceId || analysisState === "analyzing" || reanalyzeAnalysis.isPending || analysisPending) return;
+    reanalyzeAnalysis.mutate(
+      {
+        analysisId: reanalyzeSourceId,
+        payload: {
+          focus: "基于最新学习证据重新确认原因、影响范围和教学建议",
+          time_range_days: 42,
+          async: true,
+          client_request_id: createClientRequestId("web-reanalyze"),
+        },
+      },
+      {
+        onSuccess: (created) =>
+          setAnalysisSelection({ courseId, analysisId: created.id }),
+      },
+    );
   }
-  if (dashboard.isLoading || students.isLoading || knowledge.isLoading || reviewSummary.isLoading) {
+
+  if (dashboard.isLoading || students.isLoading || knowledge.isLoading || reviewSummary.isLoading || analysisList.isLoading) {
     return <LoadingState label="正在准备 AI 教学证据..." />;
   }
-  if (dashboard.isError || students.isError || knowledge.isError || reviewSummary.isError) {
+  if (dashboard.isError || students.isError || knowledge.isError || reviewSummary.isError || analysisList.isError) {
     return (
       <ErrorState
         description="AI 教学证据加载失败，请确认后端服务后重试。"
@@ -101,6 +326,7 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
           students.refetch();
           knowledge.refetch();
           void reviewSummary.refetch();
+          void analysisList.refetch();
         }}
       />
     );
@@ -108,6 +334,21 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
   if (!overview || !model) {
     return <EmptyState description="当前课程还没有可用于 AI 教学的证据。" title="暂无分析证据" />;
   }
+
+  const statusTone = analysisState === "analyzing"
+    ? "info"
+    : analysisState === "failed"
+      ? "danger"
+      : analysisState === "completed"
+        ? "success"
+        : "neutral";
+  const statusLabel = analysisState === "analyzing"
+    ? analysisType === "secondary" ? "二次分析进行中" : "初次分析进行中"
+    : analysisState === "failed"
+      ? analysisType === "secondary" ? "二次分析失败" : "初次分析失败"
+      : analysisState === "completed"
+        ? analysisType === "secondary" ? "二次分析结果" : "初次分析结果"
+        : "等待首次分析";
 
   return (
     <div className="space-y-5">
@@ -119,7 +360,7 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
             </Link>
             <Select
               items={courses.map((course) => ({ value: course.id, label: course.name }))}
-              onValueChange={(value) => value && handleCourseChange(value)}
+              onValueChange={(value) => value && onCourseChange(value)}
               value={courseId}
             >
               <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
@@ -132,36 +373,48 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
         title="AI 教学主页"
       />
 
-      <section className="relative overflow-hidden rounded-xl border-2 border-blue-100 bg-gradient-to-br from-white via-blue-50/55 to-cyan-50/45 px-4 py-5 xl:px-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <section className="relative overflow-hidden rounded-xl border-2 border-blue-100 bg-gradient-to-br from-white via-blue-50/55 to-cyan-50/45 px-4 py-4 xl:px-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />AI 二次分析工作台</p>
             <p className="mt-1 text-xs text-muted-foreground">证据 → 初次分析 → 进一步分析 → 原因 → 建议 → 行动</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <StatusBadge tone={analysisState === "analyzing" ? "info" : "success"}>
-              {analysisState === "analyzing" ? "二次分析进行中" : "当前分析结果"}
+            <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
+            <StatusBadge tone="neutral">
+              {analysisEvidenceCount > 0
+                ? `${analysisEvidenceCount} 条持久化证据`
+                : analysisStatus === "analyzing" ? "正在收集证据" : "等待证据分析"}
             </StatusBadge>
-            <StatusBadge tone="neutral">{`基于 ${model.evidenceNodes.length} 类证据`}</StatusBadge>
           </div>
         </div>
-        <div className="relative grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.76fr)_minmax(0,1fr)] xl:items-stretch">
-          <AnalysisConnectors analyzing={analysisState === "analyzing"} />
+        <div className="relative grid gap-3 xl:h-[480px] xl:grid-cols-[minmax(0,1fr)_36px_minmax(320px,0.76fr)_36px_minmax(0,1fr)] xl:items-stretch">
           <EvidenceFlow analyzing={analysisState === "analyzing"} nodes={model.evidenceNodes} />
+          <FlowBridge active={analysisState === "analyzing"} />
           <AnalysisEngine
-            onAnalyze={() => {
-              setPhaseIndex(0);
-              setAnalysisState("analyzing");
-            }}
-            phaseIndex={phaseIndex}
+            actionDisabled={actionDisabled}
+            actionLabel={actionLabel}
+            actionPendingLabel={actionPendingLabel}
+            actionPending={analysisPending || createStrategy.isPending}
+            modelName={analysis?.result?.model_name}
+            onAction={handleAnalysisAction}
+            onReanalyze={showReanalyze ? handleReanalyze : undefined}
+            progress={progress}
+            reanalyzePending={reanalyzeAnalysis.isPending}
             state={analysisState}
           />
+          <FlowBridge active={analysisState === "analyzing"} />
           <AnalysisResultPanel analyzing={analysisState === "analyzing"} outcomes={model.outcomes} />
         </div>
+        {analysisError || analysis?.error_message ? (
+          <p className="mt-3 rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {analysis?.error_message ?? (analysisError instanceof Error ? analysisError.message : "AI 分析操作失败。")}
+          </p>
+        ) : null}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-        <Card className="gap-4 py-5">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] xl:items-start">
+        <Card className="gap-4 self-start py-5">
           <CardHeader className="px-5">
             <CardTitle>当前关注</CardTitle>
             <p className="text-xs text-muted-foreground">只展示当前可以追溯到真实学习证据的事项。</p>
@@ -178,7 +431,7 @@ export function AiInsightsPage({ initialCourseId }: { initialCourseId?: string }
           </CardContent>
         </Card>
 
-        <Card className="gap-4 py-5">
+        <Card className="gap-4 self-start py-5">
           <CardHeader className="px-5">
             <CardTitle>为什么得到这个结论</CardTitle>
             <p className="text-xs text-muted-foreground">每条结论都可以回查证据来源，不生成无依据推断。</p>

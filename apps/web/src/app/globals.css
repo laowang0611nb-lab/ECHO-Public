@@ -145,3 +145,12 @@
 .field-input::placeholder {
   color: #98a1b2;
 }
+
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
