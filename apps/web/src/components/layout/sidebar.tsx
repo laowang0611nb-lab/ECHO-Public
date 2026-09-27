@@ -58,11 +58,11 @@ const moduleItems: NavItem[] = [
 ];
 const accountItem: NavItem = { href: "/me", label: "我的", icon: Users };
 
-const ITEM_TILE_BASE = 44;
-const ITEM_TILE_MAX = 58;
+const ITEM_TILE_BASE = 40;
+const ITEM_TILE_MAX = 63;
 const MAX_SCALE = ITEM_TILE_MAX / ITEM_TILE_BASE;
-const FOCUS_SCALE = 1.08;
-const FALLOFF = 72;
+const FOCUS_SCALE = 1.12;
+const FALLOFF = 104;
 const SPRING = { stiffness: 320, damping: 28, mass: 0.6 };
 const EASE = "easeOut" as const;
 
@@ -163,7 +163,7 @@ function NavLink({
       aria-label={collapsed ? item.label : undefined}
       className={cn(
         "relative flex items-center overflow-hidden rounded-lg text-sm text-sidebar-foreground/70 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
-        collapsed ? "size-11 justify-center" : "gap-3 px-3 py-2.5",
+        collapsed ? "size-10 justify-center" : "gap-3 px-3 py-2.5",
         nested && !collapsed && "pl-9",
         active && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
@@ -192,7 +192,7 @@ function NavLink({
     <motion.div
       className={cn(
         "transform-gpu",
-        collapsed ? "mx-auto w-11" : "w-full",
+        collapsed ? "mx-auto w-10" : "w-full",
       )}
       ref={wrapperRef}
       style={{ scale }}
