@@ -1016,17 +1016,26 @@ async def _collect_evidence(
         )
 
     if point_id is not None:
+        # PostgreSQL cannot apply DISTINCT to rows holding json columns, so the
+        # message ids are deduplicated first and the rows are fetched by id.
+        linked_message_ids = (
+            select(LearningEvent.message_id)
+            .where(
+                LearningEvent.course_id == analysis.course_id,
+                LearningEvent.knowledge_point_id == point_id,
+                LearningEvent.message_id.is_not(None),
+            )
+            .distinct()
+        )
         message_query = (
             select(Message, Conversation)
             .join(Conversation, Conversation.id == Message.conversation_id)
-            .join(LearningEvent, LearningEvent.message_id == Message.id)
             .where(
                 Conversation.course_id == analysis.course_id,
                 Conversation.user_id.in_(student_ids),
-                LearningEvent.knowledge_point_id == point_id,
                 Message.created_at >= start,
+                Message.id.in_(linked_message_ids),
             )
-            .distinct()
             .order_by(Message.created_at.desc(), Message.id.desc())
             .limit(50)
         )
