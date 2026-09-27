@@ -63,6 +63,7 @@ const ITEM_TILE_BASE = 40;
 const ITEM_TILE_MAX = 72;
 const MAX_SCALE = ITEM_TILE_MAX / ITEM_TILE_BASE;
 const FOCUS_SCALE = 1.18;
+const EXPANDED_HOVER_SCALE = 1.06;
 const FALLOFF = 104;
 const PROXIMITY_EXPONENT = 2.8;
 const SPRING = { stiffness: 480, damping: 18, mass: 0.34 };
@@ -149,7 +150,9 @@ function NavLink({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const itemCenterY = useMotionValue(0);
   const focusScale = useSpring(1, SPRING);
+  const hoverScale = useSpring(1, SPRING);
   const collapsedValue = useMotionValue(collapsed ? 1 : 0);
+  const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
 
   useLayoutEffect(() => {
@@ -162,6 +165,12 @@ function NavLink({
     const nextFocusScale = collapsed && !reducedMotion && focused ? FOCUS_SCALE : 1;
     focusScale.set(nextFocusScale);
   }, [collapsed, focusScale, focused, reducedMotion]);
+
+  useEffect(() => {
+    const nextHoverScale =
+      !collapsed && !reducedMotion && (hovered || focused) ? EXPANDED_HOVER_SCALE : 1;
+    hoverScale.set(nextHoverScale);
+  }, [collapsed, focused, hoverScale, hovered, reducedMotion]);
 
   useEffect(() => {
     collapsedValue.set(collapsed ? 1 : 0);
@@ -185,15 +194,16 @@ function NavLink({
   );
   const proximityScale = useSpring(targetScale, SPRING);
   const scale = useTransform<number, number>(
-    [proximityScale, focusScale],
-    ([proximity, focus]) => Math.max(proximity ?? 1, focus ?? 1),
+    [proximityScale, focusScale, hoverScale],
+    ([proximity, focus, hover]) => Math.max(proximity ?? 1, focus ?? 1, hover ?? 1),
   );
 
   const collapseTransition = {
     duration: reducedMotion ? 0 : 0.2,
     ease: EASE,
   };
-  const iconShift = collapsed ? (nested ? -24 : 0) : 0;
+  const expandedHighlighted = !collapsed && (hovered || focused);
+  const iconShift = reducedMotion ? 0 : collapsed ? (nested ? -24 : 0) : expandedHighlighted ? 4 : 0;
 
   const link = (
     <Link
@@ -202,14 +212,24 @@ function NavLink({
       className={cn(
         "relative flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-foreground/70 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
         nested && "pl-9",
-        !collapsed && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+        !collapsed && "hover:text-sidebar-accent-foreground",
         active && "text-sidebar-accent-foreground",
       )}
       href={item.href}
       onBlur={() => setFocused(false)}
       onFocus={() => setFocused(true)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       title={collapsed ? item.label : undefined}
     >
+      {!collapsed ? (
+        <motion.span
+          animate={{ opacity: expandedHighlighted ? 1 : 0, x: expandedHighlighted ? 0 : -4 }}
+          className="absolute inset-0 z-0 rounded-lg bg-sidebar-accent"
+          initial={false}
+          transition={collapseTransition}
+        />
+      ) : null}
       {active ? (
         <motion.span
           animate={{ left: collapsed ? 12 : 0, right: collapsed ? 12 : 0, opacity: collapsed ? 0 : 1 }}
