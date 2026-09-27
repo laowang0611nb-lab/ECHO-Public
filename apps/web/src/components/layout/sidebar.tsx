@@ -59,10 +59,11 @@ const moduleItems: NavItem[] = [
 const accountItem: NavItem = { href: "/me", label: "我的", icon: Users };
 
 const ITEM_TILE_BASE = 40;
-const ITEM_TILE_MAX = 63;
+const ITEM_TILE_MAX = 64;
 const MAX_SCALE = ITEM_TILE_MAX / ITEM_TILE_BASE;
-const FOCUS_SCALE = 1.12;
+const FOCUS_SCALE = 1.18;
 const FALLOFF = 104;
+const PROXIMITY_EXPONENT = 2.8;
 const SPRING = { stiffness: 320, damping: 28, mass: 0.6 };
 const EASE = "easeOut" as const;
 
@@ -146,11 +147,11 @@ function NavLink({
       return pointer - (center ?? 0);
     },
   );
-  const targetScale = useTransform(
-    distanceY,
-    [-FALLOFF, 0, FALLOFF],
-    [1, collapsed && !reducedMotion ? MAX_SCALE : 1, 1],
-  );
+  const targetScale = useTransform<number, number>(distanceY, (distance) => {
+    const normalizedDistance = Math.min(Math.abs(distance) / FALLOFF, 1);
+    const proximity = 1 - normalizedDistance;
+    return 1 + (MAX_SCALE - 1) * Math.pow(proximity, PROXIMITY_EXPONENT);
+  });
   const proximityScale = useSpring(targetScale, SPRING);
   const scale = useTransform<number, number>(
     [proximityScale, focusScale],
@@ -195,7 +196,7 @@ function NavLink({
         collapsed ? "mx-auto w-10" : "w-full",
       )}
       ref={wrapperRef}
-      style={{ scale }}
+      style={{ scale: collapsed && !reducedMotion ? scale : 1 }}
     >
       {collapsed ? (
         <Tooltip>
