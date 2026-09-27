@@ -60,7 +60,7 @@ const moduleItems: NavItem[] = [
 const accountItem: NavItem = { href: "/me", label: "我的", icon: "account_circle" };
 
 const ITEM_TILE_BASE = 40;
-const ITEM_TILE_MAX = 64;
+const ITEM_TILE_MAX = 72;
 const MAX_SCALE = ITEM_TILE_MAX / ITEM_TILE_BASE;
 const FOCUS_SCALE = 1.18;
 const FALLOFF = 104;
