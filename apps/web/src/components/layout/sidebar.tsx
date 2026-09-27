@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   AnimatePresence,
   motion,
@@ -12,6 +12,7 @@ import {
   type MotionValue,
 } from "motion/react";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -68,6 +69,10 @@ const FALLOFF = 104;
 const PROXIMITY_EXPONENT = 2.8;
 const SPRING = { stiffness: 480, damping: 18, mass: 0.34 };
 const EASE = "easeOut" as const;
+
+function isActivePath(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 function SidebarLabel({
   children,
@@ -128,25 +133,27 @@ function MaterialSymbol({
   );
 }
 
-function NavLink({
+const NavLink = memo(function NavLink({
   item,
+  active,
   nested = false,
   collapsed = false,
   index = 0,
   pointerY,
   registerItem,
   reducedMotion,
+  onPrefetch,
 }: {
   item: NavItem;
+  active: boolean;
   nested?: boolean;
   collapsed?: boolean;
   index?: number;
   pointerY: MotionValue<number>;
   registerItem: RegisterNavItem;
   reducedMotion: boolean;
+  onPrefetch: (href: string) => void;
 }) {
-  const pathname = usePathname();
-  const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const itemCenterY = useMotionValue(0);
   const focusScale = useSpring(1, SPRING);
@@ -217,8 +224,14 @@ function NavLink({
       )}
       href={item.href}
       onBlur={() => setFocused(false)}
-      onFocus={() => setFocused(true)}
-      onMouseEnter={() => setHovered(true)}
+      onFocus={() => {
+        setFocused(true);
+        onPrefetch(item.href);
+      }}
+      onMouseEnter={() => {
+        setHovered(true);
+        onPrefetch(item.href);
+      }}
       onMouseLeave={() => setHovered(false)}
       title={collapsed ? item.label : undefined}
     >
@@ -289,7 +302,7 @@ function NavLink({
       </Tooltip>
     </motion.div>
   );
-}
+});
 
 export function Sidebar({
   collapsed,
@@ -298,9 +311,12 @@ export function Sidebar({
   collapsed: boolean;
   onToggle: () => void;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [aiOpen, setAiOpen] = useState(true);
   const reducedMotion = useReducedMotion() ?? false;
   const pointerY = useMotionValue(Number.POSITIVE_INFINITY);
+  const prefetchedRoutes = useRef(new Set<string>());
   const itemRegistry = useRef(new Map<HTMLDivElement, MotionValue<number>>());
   const measureFrame = useRef<number | null>(null);
   const navRef = useRef<HTMLElement>(null);
@@ -334,6 +350,15 @@ export function Sidebar({
       itemRegistry.current.delete(element);
     };
   }, []);
+
+  const prefetchRoute = useCallback(
+    (href: string) => {
+      if (prefetchedRoutes.current.has(href)) return;
+      prefetchedRoutes.current.add(href);
+      router.prefetch(href);
+    },
+    [router],
+  );
 
   useLayoutEffect(() => {
     scheduleMeasure();
@@ -441,10 +466,12 @@ export function Sidebar({
           <div className="flex flex-col gap-2" ref={navContentRef}>
             {primaryItems.map((item, index) => (
               <NavLink
+                active={isActivePath(pathname, item.href)}
                 collapsed={collapsed}
                 index={index}
                 item={item}
                 key={item.href}
+                onPrefetch={prefetchRoute}
                 pointerY={pointerY}
                 reducedMotion={reducedMotion}
                 registerItem={registerItem}
@@ -506,11 +533,13 @@ export function Sidebar({
                   >
                     {aiItems.map((item, index) => (
                       <NavLink
+                        active={isActivePath(pathname, item.href)}
                         collapsed={collapsed}
                         index={index + 2}
                         item={item}
                         key={item.href}
                         nested
+                        onPrefetch={prefetchRoute}
                         pointerY={pointerY}
                         reducedMotion={reducedMotion}
                         registerItem={registerItem}
@@ -523,10 +552,12 @@ export function Sidebar({
 
             {moduleItems.map((item, index) => (
               <NavLink
+                active={isActivePath(pathname, item.href)}
                 collapsed={collapsed}
                 index={index + 5}
                 item={item}
                 key={item.href}
+                onPrefetch={prefetchRoute}
                 pointerY={pointerY}
                 reducedMotion={reducedMotion}
                 registerItem={registerItem}
@@ -537,9 +568,11 @@ export function Sidebar({
 
         <div className={cn("border-t border-sidebar-border py-4 transition-[padding] duration-200 ease-out", collapsed ? "px-2" : "px-3")}>
           <NavLink
+            active={isActivePath(pathname, accountItem.href)}
             collapsed={collapsed}
             index={8}
             item={accountItem}
+            onPrefetch={prefetchRoute}
             pointerY={pointerY}
             reducedMotion={reducedMotion}
             registerItem={registerItem}
