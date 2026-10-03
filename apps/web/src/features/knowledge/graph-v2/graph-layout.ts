@@ -1,0 +1,77 @@
+import { graphSeed } from "./graph-adapter";
+import type { GraphBounds, GraphDisplayModel, GraphLayoutModel, GraphLayoutNode, GraphViewport } from "./graph-types";
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function radiusForDepth(depth: number, scale: number) {
+  if (depth <= 0) {
+    return 0;
+  }
+  const base = 126 + 76 * Math.sqrt(Math.min(depth, 8));
+  const extension = depth > 8 ? 26 * Math.log2(depth - 7) : 0;
+  return (base + extension) * scale;
+}
+
+function boundsFor(nodes: GraphLayoutNode[]): GraphBounds {
+  if (!nodes.length) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0, width: 0, height: 0 };
+  }
+  const xs = nodes.map((node) => node.x);
+  const ys = nodes.map((node) => node.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+}
+
+export function layoutGraph(display: GraphDisplayModel, viewport: GraphViewport): GraphLayoutModel {
+  const width = Math.max(320, viewport.width || 960);
+  const height = Math.max(320, viewport.height || 640);
+  const scale = clamp(Math.min(width / 1120, height / 720), 0.72, 1.22);
+  const horizontalAspect = clamp(width / 1180, 0.84, 1.16);
+  const verticalAspect = clamp(height / 720, 0.82, 1.16);
+  const nodes: GraphLayoutNode[] = display.nodes.map((node) => {
+    if (node.isFocus || node.depth === 0) {
+      return { ...node, x: 0, y: 0, radius: 0, angle: node.baseAngle };
+    }
+    const organicJitter = (graphSeed(node.id, 17) - 0.5) * 0.075;
+    const radiusJitter = (graphSeed(node.id, 29) - 0.5) * 0.08;
+    const angle = node.baseAngle + organicJitter;
+    const radius = radiusForDepth(node.radialBand, scale) * (1 + radiusJitter);
+    return {
+      ...node,
+      angle,
+      radius,
+      x: Math.cos(angle) * radius * horizontalAspect,
+      y: Math.sin(angle) * radius * verticalAspect,
+    };
+  });
+
+  return {
+    nodes,
+    nodeById: new Map(nodes.map((node) => [node.id, node])),
+    bounds: boundsFor(nodes),
+    viewport: { width, height },
+    scale,
+  };
+}
+
+export function orbitPositions(layout: GraphLayoutModel, angle: number) {
+  const positions: Record<string, [number, number]> = {};
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  for (const node of layout.nodes) {
+    if (node.isFocus || node.depth === 0 || node.radius === 0) {
+      positions[node.id] = [node.x, node.y];
+      continue;
+    }
+    positions[node.id] = [
+      node.x * cos - node.y * sin,
+      node.x * sin + node.y * cos,
+    ];
+  }
+  return positions;
+}

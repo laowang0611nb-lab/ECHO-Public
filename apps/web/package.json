@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@antv/g6": "5.1.1",
     "@base-ui/react": "1.8.0",
     "@echo/api-client": "workspace:*",
     "@echo/design-tokens": "workspace:*",

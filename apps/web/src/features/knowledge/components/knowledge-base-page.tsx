@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KnowledgeGraphPreview } from "@/features/knowledge/components/knowledge-graph-preview";
+import { KnowledgeGraphView } from "@/features/knowledge/graph-v2/knowledge-graph-view";
 import { ExternalResourcesTab, QuestionItemsTab } from "@/features/knowledge/components/resource-management-tabs";
 import { ResourceKindIcon } from "@/features/knowledge/components/resource-kind-icon";
 import { knowledgeQueryKeys, useExternalResources, useKnowledgeBaseData, useKnowledgeGraph, useQuestionItems, useTrashedResources } from "@/features/knowledge/queries";
@@ -267,15 +268,16 @@ export function KnowledgeBasePage({
           ) : null}
 
           {activeTab === "graph" ? (
-            <Card className="gap-5 py-5">
-              <CardHeader className="px-5">
-                <CardTitle>课程知识图谱预览</CardTitle>
-                <p className="text-sm text-muted-foreground">来自真实知识关系接口，当前同时展示章节层级、知识点和已存在的关系数量。</p>
-              </CardHeader>
-              <CardContent className="px-5">
-                <KnowledgeGraphPreview chapters={data.chapters} courseId={courseId} courseName={course?.name ?? "课程"} graph={graphQuery.data} />
-              </CardContent>
-            </Card>
+            <KnowledgeGraphView
+              chapters={data.chapters}
+              courseId={courseId}
+              courseName={course?.name ?? "课程"}
+              graph={graphQuery.data}
+              isError={graphQuery.isError}
+              isLoading={graphQuery.isPending}
+              key={courseId}
+              onRetry={() => void graphQuery.refetch()}
+            />
           ) : null}
 
           {activeTab === "textbooks" ? (

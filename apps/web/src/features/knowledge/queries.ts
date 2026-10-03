@@ -1,6 +1,7 @@
 import type {
   Chapter,
   Course,
+  CourseDashboard,
   CourseDocument,
   DocumentMetadataUpdateRequest,
   DocumentCitationPage,
@@ -229,6 +230,33 @@ export function useKnowledgePointErrorPatterns(courseId: string | null, pointId:
     staleTime: 30_000,
   });
 }
+
+export function useKnowledgePointAnalytics(courseId: string | null, pointId: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<KnowledgePointAnalytics>({
+    queryKey: knowledgeQueryKeys.pointAnalytics(
+      userId ?? "anonymous",
+      courseId ?? "none",
+      pointId ?? "none",
+    ),
+    queryFn: () => apiClient.getKnowledgePointAnalytics(userId!, courseId!, pointId!),
+    enabled: Boolean(userId && courseId && pointId),
+    staleTime: 30_000,
+  });
+}
+
+export function useKnowledgeCourseDashboard(courseId: string | null) {
+  const { user } = useTeacherSession();
+  const userId = user?.id;
+  return useQuery<CourseDashboard>({
+    queryKey: ["teacher", "knowledge", "course-dashboard", userId ?? "anonymous", courseId ?? "none"] as const,
+    queryFn: () => apiClient.getCourseDashboard(userId!, courseId!),
+    enabled: Boolean(userId && courseId),
+    staleTime: 30_000,
+  });
+}
+
 
 export function useQuestionItems(courseId: string | null, pointId?: string | null) {
   const { user } = useTeacherSession();
