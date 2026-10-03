@@ -170,7 +170,10 @@ export class KnowledgeGraphController {
       },
       edge: {
         type: "line",
-        style: (datum) => this.edgeDatumStyle((datum.data as GraphEdgeMeta | undefined)?.relation ?? "related"),
+        style: (datum) => {
+          const meta = datum.data as GraphEdgeMeta | undefined;
+          return this.edgeDatumStyle(meta?.relation ?? "related", meta?.kind === "semantic");
+        },
         state: {
           "edge-focus": {
             opacity: 0.92,
@@ -335,7 +338,7 @@ export class KnowledgeGraphController {
         weight: 1,
         evidenceCount: 0,
       } satisfies GraphEdgeMeta as unknown as Record<string, unknown>,
-      style: this.edgeDatumStyle(edge.relation),
+      style: this.edgeDatumStyle(edge.relation, false),
     }));
 
     const semanticEdges: EdgeData[] = this.source.semanticEdges.map((edge) => ({
@@ -350,7 +353,7 @@ export class KnowledgeGraphController {
         weight: edge.weight,
         evidenceCount: edge.evidenceCount,
       } satisfies GraphEdgeMeta as unknown as Record<string, unknown>,
-      style: this.edgeDatumStyle(edge.type),
+      style: this.edgeDatumStyle(edge.type, true),
     }));
 
     return { nodes, edges: [...displayEdges, ...semanticEdges] };
@@ -408,7 +411,10 @@ export class KnowledgeGraphController {
     };
   }
 
-  private edgeDatumStyle(relation: GraphDisplayModel["edges"][number]["relation"]) {
+  private edgeDatumStyle(
+    relation: GraphDisplayModel["edges"][number]["relation"],
+    showDirection = false,
+  ) {
     const prerequisite = relation === "prerequisite";
     const peripheral = relation === "peripheral";
     return {
@@ -416,8 +422,9 @@ export class KnowledgeGraphController {
       lineWidth: prerequisite ? 1.5 : 1,
       opacity: peripheral ? 0.22 : 0.46,
       lineDash: relation === "related" || peripheral ? [5, 6] : [],
-      endArrow: prerequisite,
-      endArrowSize: prerequisite ? 7 : 0,
+      // Display-tree direction is layout-only; semantic reveal edges keep the real direction.
+      endArrow: prerequisite && showDirection,
+      endArrowSize: prerequisite && showDirection ? 7 : 0,
       cursor: "default" as const,
     };
   }
@@ -531,38 +538,55 @@ export class KnowledgeGraphController {
   }
 
   async fitView() {
-    if (!this.graph) {
+    const graph = this.graph;
+    if (!graph) {
       return;
     }
-    this.orbitAngle = 0;
-    this.stopOrbit();
-    this.setMode("focused");
-    this.display = this.buildDisplay();
-    this.layout = layoutGraph(this.display, this.viewport);
-    this.graph.setData(this.graphData(this.layout, this.display));
-    await this.graph.draw();
-    this.applyVisualState();
-    const { width, height } = this.viewport;
-    const sideReserve = width >= 1024 ? 360 : 64;
-    const fitWidth = Math.max(240, width - sideReserve);
-    const fitHeight = Math.max(240, height - 160);
-    const targetZoom = graphClamp(
-      Math.min(
-        fitWidth / Math.max(this.layout.bounds.width, 1),
-        fitHeight / Math.max(this.layout.bounds.height, 1),
-      ),
-      MIN_ZOOM,
-      MAX_ZOOM,
-    );
-    const animation = { duration: this.reducedMotion ? 160 : 620 };
-    await this.graph.zoomTo(targetZoom, animation);
-    await this.graph.translateTo(
-      [width * (width >= 1024 ? 0.43 : 0.5), height / 2],
-      animation,
-    );
-    this.zoomCompensation = targetZoom;
-    this.callbacks.onZoomChange?.(targetZoom);
-    this.interactionUntil = performance.now() + IDLE_RESUME_MS;
+    try {
+      this.orbitAngle = 0;
+      this.stopOrbit();
+      this.setMode("focused");
+      this.display = this.buildDisplay();
+      this.layout = layoutGraph(this.display, this.viewport);
+      graph.setData(this.graphData(this.layout, this.display));
+      await graph.draw();
+      if (this.destroyed || this.graph !== graph) {
+        return;
+      }
+      this.applyVisualState();
+      const { width, height } = this.viewport;
+      const sideReserve = width >= 1024 ? 360 : 64;
+      const fitWidth = Math.max(240, width - sideReserve);
+      const fitHeight = Math.max(240, height - 160);
+      const targetZoom = graphClamp(
+        Math.min(
+          fitWidth / Math.max(this.layout.bounds.width, 1),
+          fitHeight / Math.max(this.layout.bounds.height, 1),
+        ),
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
+      const animation = { duration: this.reducedMotion ? 160 : 620 };
+      await graph.zoomTo(targetZoom, animation);
+      if (this.destroyed || this.graph !== graph) {
+        return;
+      }
+      await graph.translateTo(
+        [width * (width >= 1024 ? 0.43 : 0.5), height / 2],
+        animation,
+      );
+      if (this.destroyed || this.graph !== graph) {
+        return;
+      }
+      this.zoomCompensation = targetZoom;
+      this.callbacks.onZoomChange?.(targetZoom);
+      this.interactionUntil = performance.now() + IDLE_RESUME_MS;
+      if (!this.reducedMotion && this.mode === "focused") {
+        this.startOrbit();
+      }
+    } catch (error: unknown) {
+      this.reportRenderError(error);
+    }
   }
 
   private async centerCamera(animate: boolean): Promise<void> {

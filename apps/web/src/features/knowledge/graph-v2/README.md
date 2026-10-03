@@ -21,6 +21,8 @@ The backend graph can contain many-to-many semantic relations. The display tree 
 - remaining ties use chapter order, point order, label, and ID;
 - raw semantic edges remain in `GraphSourceModel.semanticEdges` and are revealed only for the active node.
 
+Display-tree edges are layout-only and do not carry source/target direction. Only semantic reveal edges are directional, so a prerequisite arrow always preserves the API's original direction.
+
 This prevents the default canvas from becoming edge soup while preserving the real data graph.
 
 ## LOD And Motion
@@ -56,6 +58,7 @@ The derived value is never written back to the database and is not presented as 
 - Clicking a node in free view returns to focused mode.
 - Reset returns to the current focus.
 - Fit view calculates a bounded zoom from the real layout bounds and recenters the focus.
+- Fit view pauses orbit only while fitting and resumes it after the idle delay.
 - Fullscreen changes only the graph panel.
 
 ## Extension Points
