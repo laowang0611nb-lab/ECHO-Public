@@ -214,19 +214,6 @@ export function KnowledgeGraphView({
     }
   }
 
-  if (isLoading || !source) {
-    return (
-      <GraphPanelShell title="知识图谱" description="正在组织真实知识点与关系…">
-        <div className="flex h-full items-center justify-center">
-          <div className="flex items-center gap-3 text-sm text-[#a9bfdd]">
-            <span className="size-4 animate-spin rounded-full border-2 border-[#4b9cff]/30 border-t-[#4b9cff]" />
-            正在构建学习网络
-          </div>
-        </div>
-      </GraphPanelShell>
-    );
-  }
-
   if (isError) {
     return (
       <GraphPanelShell title="知识图谱" description="真实关系数据暂时不可用">
@@ -238,6 +225,19 @@ export function KnowledgeGraphView({
               <RotateCcw data-icon="inline-start" />
               重新加载
             </Button>
+          </div>
+        </div>
+      </GraphPanelShell>
+    );
+  }
+
+  if (isLoading || !source) {
+    return (
+      <GraphPanelShell title="知识图谱" description="正在组织真实知识点与关系…">
+        <div className="flex h-full items-center justify-center">
+          <div className="flex items-center gap-3 text-sm text-[#a9bfdd]">
+            <span className="size-4 animate-spin rounded-full border-2 border-[#4b9cff]/30 border-t-[#4b9cff]" />
+            正在构建学习网络
           </div>
         </div>
       </GraphPanelShell>
