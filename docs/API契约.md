@@ -532,7 +532,7 @@ DELETE /api/v1/courses/{course_id}/resources/{resource_id}?permanent=true
 GET /api/v1/courses/{course_id}/knowledge-graph?chapterId=&pointId=
 ```
 
-回收站覆盖普通资源、章节、知识点、习题和外部资源。永久删除必须显式传 `permanent=true`，并返回受影响引用数量。图谱节点和边全部来自数据库，不使用前端模拟关系。
+回收站覆盖普通资源、章节、知识点、习题和外部资源。永久删除必须显式传 `permanent=true`，并返回受影响引用数量。图谱节点和边全部来自数据库，不使用前端模拟关系。知识关系按兼容白名单映射：`prerequisite_of`/`prerequisite` 输出 `prerequisite`，`related_to`/`related`/`applied_in` 和未知值确定性输出 `related`。
 
 软删除的文档、章节和知识点不再参与 RAG、结构读取、图谱、长期证据或资源关联；删除父文档或章节后，其子项在恢复父级前保持隐藏。非课程成员访问教师资源返回 `403`，课程不存在返回 `404`，恢复知识点产生名称冲突返回 `409`。PATCH 请求显式传入非空字段的 `null` 返回 `422`。
 

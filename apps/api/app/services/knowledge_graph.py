@@ -18,6 +18,15 @@ from app.schemas.teacher_resources import (
 from app.services.teacher_access import TeacherContentNotFoundError, ensure_teacher
 
 
+def _normalize_relation_type(relation_type: str) -> str:
+    if relation_type in {"prerequisite", "prerequisite_of"}:
+        return "prerequisite"
+    if relation_type in {"related", "related_to", "applied_in"}:
+        # applied_in keeps the current compatible projection without expanding the shared enum.
+        return "related"
+    return "related"
+
+
 def _edge(
     edge_type: str,
     source: UUID,
@@ -155,7 +164,7 @@ async def get_knowledge_graph(
             or relation.target_knowledge_point_id not in nodes
         ):
             continue
-        relation_type = "prerequisite" if relation.relation_type == "prerequisite" else "related"
+        relation_type = _normalize_relation_type(relation.relation_type)
         edges.append(
             _edge(
                 relation_type,

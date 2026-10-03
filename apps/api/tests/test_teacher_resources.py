@@ -5,7 +5,12 @@ from uuid import UUID, uuid4
 import pytest
 from database.models.chat import Conversation, Message, MessageCitation, MessageRole
 from database.models.document import Document, DocumentPage
-from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
+from database.models.knowledge import (
+    Chapter,
+    KnowledgeChunk,
+    KnowledgePoint,
+    KnowledgeRelation,
+)
 from database.models.learning import (
     LearningEvent,
     LearningEventType,
@@ -16,6 +21,9 @@ from httpx import AsyncClient
 from pypdf import PdfWriter
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.schemas.teacher_resources import KnowledgeGraphEdge
+from app.services.knowledge_graph import _normalize_relation_type
 
 
 def make_pdf(page_count: int = 2) -> bytes:
@@ -712,6 +720,144 @@ async def test_knowledge_analytics_rejects_soft_deleted_document(
     )
     assert trend.status_code == 404
     assert errors.status_code == 404
+
+
+async def test_knowledge_graph_normalizes_relation_types_and_point_filter(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "graph-relations@example.com", "teacher")
+    student = await login(client, "graph-relations-student@example.com", "student")
+    course = await create_course_and_student(client, teacher, student)
+    document = await create_ready_document(client, teacher, course)
+    course_id = UUID(course["id"])
+    chapter_id = uuid4()
+    point_ids = [uuid4() for _ in range(6)]
+
+    async with session_factory() as session:
+        session.add(
+            Chapter(
+                id=chapter_id,
+                course_id=course_id,
+                document_id=UUID(str(document["id"])),
+                title="Graph Relations",
+                order_index=0,
+            )
+        )
+        for index, point_id in enumerate(point_ids):
+            session.add(
+                KnowledgePoint(
+                    id=point_id,
+                    course_id=course_id,
+                    chapter_id=chapter_id,
+                    name=f"Graph Point {index + 1}",
+                    order_index=index,
+                )
+            )
+        session.add_all(
+            [
+                KnowledgeRelation(
+                    course_id=course_id,
+                    source_knowledge_point_id=point_ids[0],
+                    target_knowledge_point_id=point_ids[1],
+                    relation_type="prerequisite_of",
+                ),
+                KnowledgeRelation(
+                    course_id=course_id,
+                    source_knowledge_point_id=point_ids[1],
+                    target_knowledge_point_id=point_ids[2],
+                    relation_type="prerequisite",
+                ),
+                KnowledgeRelation(
+                    course_id=course_id,
+                    source_knowledge_point_id=point_ids[2],
+                    target_knowledge_point_id=point_ids[3],
+                    relation_type="related_to",
+                ),
+                KnowledgeRelation(
+                    course_id=course_id,
+                    source_knowledge_point_id=point_ids[3],
+                    target_knowledge_point_id=point_ids[1],
+                    relation_type="related",
+                ),
+                KnowledgeRelation(
+                    course_id=course_id,
+                    source_knowledge_point_id=point_ids[0],
+                    target_knowledge_point_id=point_ids[4],
+                    relation_type="applied_in",
+                ),
+                KnowledgeRelation(
+                    course_id=course_id,
+                    source_knowledge_point_id=point_ids[2],
+                    target_knowledge_point_id=point_ids[5],
+                    relation_type="custom_unknown",
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-graph",
+        headers=auth_headers(teacher),
+    )
+    assert response.status_code == 200
+    semantic_edges = {
+        (edge["type"], UUID(edge["source"]), UUID(edge["target"]))
+        for edge in response.json()["edges"]
+        if edge["type"] in {"prerequisite", "related"}
+    }
+    assert semantic_edges == {
+        ("prerequisite", point_ids[0], point_ids[1]),
+        ("prerequisite", point_ids[1], point_ids[2]),
+        ("related", point_ids[2], point_ids[3]),
+        ("related", point_ids[3], point_ids[1]),
+        ("related", point_ids[0], point_ids[4]),
+        ("related", point_ids[2], point_ids[5]),
+    }
+
+    filtered = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-graph?pointId={point_ids[1]}",
+        headers=auth_headers(teacher),
+    )
+    assert filtered.status_code == 200
+    filtered_node_ids = {UUID(node["id"]) for node in filtered.json()["nodes"]}
+    filtered_edges = {
+        (edge["type"], UUID(edge["source"]), UUID(edge["target"]))
+        for edge in filtered.json()["edges"]
+        if edge["type"] in {"prerequisite", "related"}
+    }
+    assert {point_ids[0], point_ids[1], point_ids[2], point_ids[3]} <= filtered_node_ids
+    assert ("prerequisite", point_ids[0], point_ids[1]) in filtered_edges
+    assert ("prerequisite", point_ids[1], point_ids[2]) in filtered_edges
+    assert ("related", point_ids[3], point_ids[1]) in filtered_edges
+    assert point_ids[4] not in filtered_node_ids
+    assert point_ids[5] not in filtered_node_ids
+
+
+@pytest.mark.parametrize(
+    ("relation_type", "expected"),
+    (
+        ("prerequisite_of", "prerequisite"),
+        ("prerequisite", "prerequisite"),
+        ("related_to", "related"),
+        ("related", "related"),
+        ("applied_in", "related"),
+        ("unknown_relation", "related"),
+    ),
+)
+def test_knowledge_relation_type_normalization(
+    relation_type: str,
+    expected: str,
+) -> None:
+    normalized = _normalize_relation_type(relation_type)
+    edge = KnowledgeGraphEdge(
+        id=f"{normalized}:source:target",
+        source=uuid4(),
+        target=uuid4(),
+        type=normalized,
+    )
+    assert normalized == expected
+    assert edge.type == expected
 
 
 def test_teacher_resource_openapi_paths() -> None:

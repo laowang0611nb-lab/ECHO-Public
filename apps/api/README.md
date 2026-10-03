@@ -383,6 +383,9 @@ GET  /api/v1/courses/{course_id}/documents/{document_id}/citations
 Teacher-facing resource lists use cursor pagination. The PDF file endpoint supports
 HTTP Range. Page evidence includes real dimensions and only returns bounding
 boxes when they exist in chunk metadata.
+The knowledge graph maps `prerequisite_of` and legacy `prerequisite` values to
+`prerequisite`, and maps `related_to`, legacy `related`, `applied_in`, and unknown
+relation values to `related` for backward-compatible deterministic projection.
 Seed repeatable teacher student analytics demo data:
 
 ```powershell
