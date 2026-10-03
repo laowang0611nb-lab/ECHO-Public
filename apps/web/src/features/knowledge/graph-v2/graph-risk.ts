@@ -1,14 +1,18 @@
-import type { CourseDashboard, HighRiskKnowledgePoint, KnowledgePointAnalytics } from "@echo/shared-types";
+import type { CourseDashboard, KnowledgePointAnalytics } from "@echo/shared-types";
 
 import type { GraphPointRecord, GraphRiskLevel } from "./graph-types";
 
 export function riskMapFromDashboard(
   points: GraphPointRecord[],
-  highRisk: HighRiskKnowledgePoint[] | undefined,
+  dashboard: CourseDashboard | undefined,
 ): Map<string, GraphRiskLevel> {
-  const map = new Map(points.map((point) => [point.id, "normal" as GraphRiskLevel]));
-  for (const item of highRisk ?? []) {
-    if (map.has(item.knowledge_point_id)) {
+  const pointIds = new Set(points.map((point) => point.id));
+  const baseline: GraphRiskLevel = dashboard ? "normal" : "unknown";
+  const map = new Map<string, GraphRiskLevel>(
+    points.map((point) => [point.id, baseline]),
+  );
+  for (const item of dashboard?.high_risk_knowledge_points ?? []) {
+    if (pointIds.has(item.knowledge_point_id)) {
       map.set(item.knowledge_point_id, "high");
     }
   }
@@ -23,7 +27,7 @@ export function derivePointRisk(
     return "high";
   }
   if (!analytics || analytics.average_mastery === null || analytics.students.length === 0) {
-    return current ?? "unknown";
+    return "unknown";
   }
   const mastery = analytics.average_mastery;
   const affected = analytics.affected_students;

@@ -27,6 +27,7 @@ export interface GraphChapterRecord {
   id: string;
   title: string;
   order: number;
+  documentId: string | null;
 }
 
 export interface GraphPointRecord {
@@ -35,8 +36,10 @@ export interface GraphPointRecord {
   chapterId: string | null;
   chapterTitle: string | null;
   chapterOrder: number;
+  chapterDocumentId: string | null;
   orderIndex: number;
   semanticDegree: number;
+  evidenceCount: number;
 }
 
 export interface GraphSemanticEdge {
@@ -62,6 +65,7 @@ export interface GraphSourceModel {
   semanticEdges: GraphSemanticEdge[];
   adjacency: ReadonlyMap<string, GraphAdjacency[]>;
   chapters: GraphChapterRecord[];
+  indexedChapters: GraphChapterRecord[];
   defaultFocusId: string | null;
 }
 
@@ -71,6 +75,7 @@ export interface GraphDisplayNode extends GraphPointRecord {
   displayRelation: GraphDisplayRelation | null;
   displayEdgeId: string | null;
   siblingIndex: number;
+  subtreeSize: number;
   branchId: string;
   baseAngle: number;
   radialBand: number;
@@ -88,29 +93,18 @@ export interface GraphDisplayEdge {
 }
 
 export type GraphRiskLevel = "normal" | "elevated" | "medium" | "high" | "unknown";
+
 export type KnowledgeGraphMode = "focused" | "focusing" | "free" | "paused";
+
 export type KnowledgeGraphFilter = "all" | "high-risk";
 
-export interface GraphPointRecord {
-  chapterDocumentId: string | null;
-  evidenceCount: number;
-}
-
-export interface GraphChapterRecord {
-  documentId: string | null;
-}
-
-export interface GraphSourceModel {
-  indexedChapters: GraphChapterRecord[];
-}
-
-export interface GraphDisplayNode {
-  subtreeSize: number;
-}
-
 export interface GraphControllerCallbacks {
+  onNodeClick: (id: string) => void;
   onNodeHover: (id: string | null, client?: GraphPoint) => void;
+  onBackgroundClick: () => void;
+  onZoomChange?: (zoom: number) => void;
   onModeChange?: (mode: KnowledgeGraphMode) => void;
+  onRenderError?: (error: unknown) => void;
 }
 
 export interface GraphControllerOptions {
@@ -125,13 +119,25 @@ export interface GraphControllerOptions {
 
 export interface GraphNodeMeta {
   kind: "knowledge-point";
+  type: "knowledge_point";
   pointId: string;
+  label: string;
+  chapterId: string | null;
+  chapterTitle: string | null;
+  depth: number;
+  semanticDegree: number;
   evidenceCount: number;
+  displayRelation: GraphDisplayRelation | null;
+  isFocus: boolean;
+  isConnected: boolean;
   risk: GraphRiskLevel;
 }
 
 export interface GraphEdgeMeta {
   kind: "display" | "semantic";
+  relation: GraphDisplayRelation;
+  semanticEdgeId: string | null;
+  isDisplayOnly: boolean;
   weight: number;
   evidenceCount: number;
 }
@@ -178,29 +184,4 @@ export interface GraphLayoutModel {
   scale: number;
 }
 
-export interface GraphControllerCallbacks {
-  onNodeClick: (id: string) => void;
-  onBackgroundClick: () => void;
-  onZoomChange?: (zoom: number) => void;
-  onRenderError?: (error: unknown) => void;
-}
-
 export type GraphLabelLevel = "focus" | "medium" | "near";
-
-export interface GraphNodeMeta {
-  type: "knowledge_point";
-  label: string;
-  chapterId: string | null;
-  chapterTitle: string | null;
-  depth: number;
-  semanticDegree: number;
-  displayRelation: GraphDisplayRelation | null;
-  isFocus: boolean;
-  isConnected: boolean;
-}
-
-export interface GraphEdgeMeta {
-  relation: GraphDisplayRelation;
-  semanticEdgeId: string | null;
-  isDisplayOnly: boolean;
-}

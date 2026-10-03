@@ -36,7 +36,7 @@ export function KnowledgeGraphAnalyticsCard({
       {point ? (
         <motion.aside
           animate={{ opacity: 1, x: 0 }}
-          className="pointer-events-auto absolute right-4 top-4 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/12 bg-[#f8fbff]/96 p-4 text-foreground shadow-[0_18px_50px_rgba(3,10,24,0.28)] backdrop-blur"
+          className="pointer-events-auto absolute right-4 top-20 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/12 bg-[#f8fbff]/96 p-4 text-foreground shadow-[0_18px_50px_rgba(3,10,24,0.28)] backdrop-blur lg:top-4"
           exit={{ opacity: 0, x: 12 }}
           initial={{ opacity: 0, x: 12 }}
           key={point.id}

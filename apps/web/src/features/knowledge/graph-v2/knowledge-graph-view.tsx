@@ -68,15 +68,22 @@ export function KnowledgeGraphView({
     if (!source) {
       return null;
     }
-    return preferredFocusId && source.pointById.has(preferredFocusId) ? preferredFocusId : source.defaultFocusId;
-  }, [preferredFocusId, source]);
+    if (preferredFocusId && source.pointById.has(preferredFocusId)) {
+      return preferredFocusId;
+    }
+    const storedFocusId = typeof window === "undefined" ? null : window.localStorage.getItem(`${LAST_FOCUS_PREFIX}.${courseId}`);
+    if (storedFocusId && source.pointById.has(storedFocusId)) {
+      return storedFocusId;
+    }
+    return source.defaultFocusId;
+  }, [courseId, preferredFocusId, source]);
   const focusId = focusOverride && source?.pointById.has(focusOverride) ? focusOverride : initialFocusId;
   const selectedId = selectedOverride && source?.pointById.has(selectedOverride) ? selectedOverride : focusId;
 
   const analyticsQuery = useKnowledgePointAnalytics(courseId, selectedId ?? focusId);
   const baseRiskMap = useMemo(
-    () => riskMapFromDashboard(source?.points ?? [], dashboardQuery.data?.high_risk_knowledge_points),
-    [dashboardQuery.data?.high_risk_knowledge_points, source?.points],
+    () => riskMapFromDashboard(source?.points ?? [], dashboardQuery.data),
+    [dashboardQuery.data, source?.points],
   );
   const riskMap = useMemo(() => {
     const map = new Map(baseRiskMap);
@@ -87,7 +94,9 @@ export function KnowledgeGraphView({
     return map;
   }, [analyticsQuery.data, baseRiskMap]);
   const selectedPoint = selectedId ? source?.pointById.get(selectedId) ?? null : null;
-  const selectedRisk = selectedId ? riskMap.get(selectedId) ?? "unknown" : "unknown";
+  const selectedRisk = selectedId
+    ? derivePointRisk(analyticsQuery.data, riskMap.get(selectedId))
+    : "unknown";
 
   useEffect(() => {
     focusIdRef.current = focusId;
@@ -108,6 +117,7 @@ export function KnowledgeGraphView({
       return;
     }
     const rect = element.getBoundingClientRect();
+    setRenderError(null);
     const controller = new KnowledgeGraphController({
       container: element,
       source,
@@ -207,10 +217,15 @@ export function KnowledgeGraphView({
     if (!wrapperRef.current) {
       return;
     }
-    if (document.fullscreenElement === wrapperRef.current) {
-      await document.exitFullscreen();
-    } else {
-      await wrapperRef.current.requestFullscreen();
+    try {
+      if (document.fullscreenElement === wrapperRef.current) {
+        await document.exitFullscreen();
+      } else {
+        await wrapperRef.current.requestFullscreen();
+      }
+      setRenderError(null);
+    } catch (error) {
+      setRenderError(error instanceof Error ? error.message : "无法切换全屏视图");
     }
   }
 
@@ -296,7 +311,7 @@ export function KnowledgeGraphView({
         <ToolbarButton label="回到焦点" onClick={() => controllerRef.current?.resetView()}>
           <Crosshair />
         </ToolbarButton>
-        <ToolbarButton label="适应画布" onClick={() => controllerRef.current?.resetView()}>
+        <ToolbarButton label="适应画布" onClick={() => controllerRef.current?.fitView()}>
           <ScanSearch />
         </ToolbarButton>
         <ToolbarButton label={fullscreen ? "退出全屏" : "全屏查看"} onClick={() => void toggleFullscreen()}>

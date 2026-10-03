@@ -38,6 +38,7 @@ Labels are rendered by G6 in the graph layer. There is no per-frame DOM label ov
 ## Risk Presentation
 
 Global high-risk status comes from the real course dashboard's `high_risk_knowledge_points`. The selected point's card uses the real `KnowledgePointAnalytics` response. If the API does not provide an explicit risk level, the card derives a view-only level:
+Until the dashboard request succeeds, non-selected points stay `unknown` rather than being presented as normal. Once the dashboard is available, points outside its high-risk list use `normal`.
 
 - `high`: average mastery below 55 or at least 8 affected students;
 - `medium`: average mastery below 65 or at least 5 affected students;
@@ -54,6 +55,7 @@ The derived value is never written back to the database and is not presented as 
 - Dragging or zooming enters free view and stops automatic orbit.
 - Clicking a node in free view returns to focused mode.
 - Reset returns to the current focus.
+- Fit view calculates a bounded zoom from the real layout bounds and recenters the focus.
 - Fullscreen changes only the graph panel.
 
 ## Extension Points

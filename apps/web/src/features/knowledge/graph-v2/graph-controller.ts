@@ -68,6 +68,7 @@ export class KnowledgeGraphController {
   private zoomCompensation = 1;
   private zoomCompensationTimer: ReturnType<typeof setTimeout> | null = null;
   private visualStateTimer: ReturnType<typeof setTimeout> | null = null;
+  private transitionGeneration = 0;
   private destroyed = false;
   private readonly onVisibilityChange = () => {
     if (document.visibilityState !== "visible") {
@@ -245,21 +246,31 @@ export class KnowledgeGraphController {
       const zoom = this.safeZoom();
       if (zoom < MIN_ZOOM || zoom > MAX_ZOOM) {
         const bounded = graphClamp(zoom, MIN_ZOOM, MAX_ZOOM);
-        void this.graph?.zoomTo(bounded, { duration: this.reducedMotion ? 60 : 140 });
+        const graph = this.graph;
+        if (graph) {
+          void graph.zoomTo(bounded, { duration: this.reducedMotion ? 60 : 140 }).catch((error) => this.reportRenderError(error));
+        }
       }
       this.scheduleZoomCompensation();
       this.callbacks.onZoomChange?.(zoom);
     });
 
-    void this.graph.render().then(() => {
-      this.applyVisualState();
-      this.centerCamera(false);
-      if (!this.reducedMotion) {
-        this.startOrbit();
-      }
-    }).catch((error: unknown) => {
-      this.callbacks.onRenderError?.(error);
-    });
+    void this.graph.render()
+      .then(() => {
+        if (this.destroyed) {
+          return;
+        }
+        this.applyVisualState();
+        return this.centerCamera(false);
+      })
+      .then(() => {
+        if (!this.destroyed && !this.reducedMotion) {
+          this.startOrbit();
+        }
+      })
+      .catch((error: unknown) => {
+        this.reportRenderError(error);
+      });
     document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
@@ -269,6 +280,16 @@ export class KnowledgeGraphController {
     } catch {
       return 1;
     }
+  }
+
+  private reportRenderError(error: unknown) {
+    if (!this.destroyed) {
+      this.callbacks.onRenderError?.(error);
+    }
+  }
+
+  private isTransitionCurrent(generation: number) {
+    return !this.destroyed && generation === this.transitionGeneration && this.graph !== null;
   }
 
   private buildDisplay(): GraphDisplayModel {
@@ -417,6 +438,7 @@ export class KnowledgeGraphController {
     if (!this.graph) {
       return;
     }
+    const generation = ++this.transitionGeneration;
     this.setMode("focusing");
     this.stopOrbit();
     this.display = this.buildDisplay();
@@ -426,10 +448,16 @@ export class KnowledgeGraphController {
     this.orbitAngle = 0;
     void this.graph.draw()
       .then(() => {
+        if (!this.isTransitionCurrent(generation)) {
+          return;
+        }
         this.applyVisualState();
         return this.centerCamera(true);
       })
       .then(() => {
+        if (!this.isTransitionCurrent(generation)) {
+          return;
+        }
         this.setMode("focused");
         this.interactionUntil = performance.now() + IDLE_RESUME_MS;
         if (!this.reducedMotion) {
@@ -437,7 +465,10 @@ export class KnowledgeGraphController {
         }
       })
       .catch((error: unknown) => {
-        this.callbacks.onRenderError?.(error);
+        if (!this.isTransitionCurrent(generation)) {
+          return;
+        }
+        this.reportRenderError(error);
         this.setMode("focused");
       });
   }
@@ -471,12 +502,23 @@ export class KnowledgeGraphController {
     this.layout = layoutGraph(this.display, viewport);
     this.graph.setData(this.graphData(this.layout, this.display));
     this.scaleLabelsForZoom(this.safeZoom());
-    void this.graph.draw().then(() => {
-      if (this.mode === "focused") {
-        void this.centerCamera(false);
-      }
-      this.applyVisualState();
-    });
+    void this.graph.draw()
+      .then(() => {
+        if (this.destroyed) {
+          return;
+        }
+        if (this.mode === "focused") {
+          return this.centerCamera(false);
+        }
+      })
+      .then(() => {
+        if (!this.destroyed) {
+          this.applyVisualState();
+        }
+      })
+      .catch((error: unknown) => {
+        this.reportRenderError(error);
+      });
   }
 
   resetView() {
@@ -486,6 +528,41 @@ export class KnowledgeGraphController {
     this.orbitAngle = 0;
     this.setMode("focused");
     this.setFocus(this.focusId, true);
+  }
+
+  async fitView() {
+    if (!this.graph) {
+      return;
+    }
+    this.orbitAngle = 0;
+    this.stopOrbit();
+    this.setMode("focused");
+    this.display = this.buildDisplay();
+    this.layout = layoutGraph(this.display, this.viewport);
+    this.graph.setData(this.graphData(this.layout, this.display));
+    await this.graph.draw();
+    this.applyVisualState();
+    const { width, height } = this.viewport;
+    const sideReserve = width >= 1024 ? 360 : 64;
+    const fitWidth = Math.max(240, width - sideReserve);
+    const fitHeight = Math.max(240, height - 160);
+    const targetZoom = graphClamp(
+      Math.min(
+        fitWidth / Math.max(this.layout.bounds.width, 1),
+        fitHeight / Math.max(this.layout.bounds.height, 1),
+      ),
+      MIN_ZOOM,
+      MAX_ZOOM,
+    );
+    const animation = { duration: this.reducedMotion ? 160 : 620 };
+    await this.graph.zoomTo(targetZoom, animation);
+    await this.graph.translateTo(
+      [width * (width >= 1024 ? 0.43 : 0.5), height / 2],
+      animation,
+    );
+    this.zoomCompensation = targetZoom;
+    this.callbacks.onZoomChange?.(targetZoom);
+    this.interactionUntil = performance.now() + IDLE_RESUME_MS;
   }
 
   private async centerCamera(animate: boolean): Promise<void> {
@@ -552,8 +629,8 @@ export class KnowledgeGraphController {
       const active = edge.source === activeId || edge.target === activeId;
       edgeStates[`semantic:${edge.id}`] = [active ? "semantic-active" : "semantic-hidden"];
     }
-    void this.graph.setElementState(nodeStates, true);
-    void this.graph.setElementState(edgeStates, true);
+    void this.graph.setElementState(nodeStates, true).catch((error: unknown) => this.reportRenderError(error));
+    void this.graph.setElementState(edgeStates, true).catch((error: unknown) => this.reportRenderError(error));
   }
 
   private scheduleVisualState(delay = 50) {
@@ -577,7 +654,7 @@ export class KnowledgeGraphController {
         style: this.nodeDatumStyle(node, zoom),
       })),
     );
-    void this.graph.draw();
+    void this.graph.draw().catch((error: unknown) => this.reportRenderError(error));
   }
 
   private scheduleZoomCompensation() {
@@ -609,7 +686,7 @@ export class KnowledgeGraphController {
         style: this.nodeDatumStyle(node, zoom),
       })),
     );
-    void this.graph.draw();
+    void this.graph.draw().catch((error: unknown) => this.reportRenderError(error));
   }
 
   private touchInteraction() {
@@ -653,9 +730,12 @@ export class KnowledgeGraphController {
           this.orbitLastPosition = now;
           const positions = orbitPositions(this.layout, this.orbitAngle);
           this.orbitMoving = true;
-          void this.graph.translateElementTo(positions, false).finally(() => {
-            this.orbitMoving = false;
-          });
+          void this.graph
+            .translateElementTo(positions, false)
+            .catch((error: unknown) => this.reportRenderError(error))
+            .finally(() => {
+              this.orbitMoving = false;
+            });
         }
       }
       this.orbitFrame = requestAnimationFrame(step);
@@ -672,6 +752,7 @@ export class KnowledgeGraphController {
   }
 
   destroy() {
+    this.transitionGeneration += 1;
     this.destroyed = true;
     this.stopOrbit();
     if (this.zoomCompensationTimer) {
