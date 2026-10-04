@@ -140,6 +140,7 @@ export interface GraphEdgeMeta {
   isDisplayOnly: boolean;
   weight: number;
   evidenceCount: number;
+  transitionOpacity?: number | null;
 }
 
 export interface GraphHoverState {

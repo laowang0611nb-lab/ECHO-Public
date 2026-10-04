@@ -10,7 +10,7 @@ import {
 } from "@antv/g6";
 
 import { buildGraphDisplay, graphClamp } from "./graph-adapter";
-import { layoutGraph, orbitPositions } from "./graph-layout";
+import { buildLocalHandoffTargets, layoutGraph, orbitPositions } from "./graph-layout";
 import { GRAPH_THEME, riskColor, riskHalo } from "./graph-theme";
 import type {
   GraphControllerCallbacks,
@@ -152,17 +152,7 @@ export class KnowledgeGraphController {
         type: "circle",
         style: (datum) => this.nodeStyleFromDatum(datum),
         state: {
-          focus: {
-            size: 24,
-            lineWidth: 3,
-            stroke: GRAPH_THEME.primaryStrong,
-            halo: true,
-            haloStroke: GRAPH_THEME.focusHalo,
-            haloLineWidth: 20,
-            haloOpacity: 0.74,
-            labelFill: GRAPH_THEME.text,
-            labelFontWeight: 700,
-          },
+          focus: {},
           hovered: {
             size: 19,
             lineWidth: 2.4,
@@ -210,10 +200,7 @@ export class KnowledgeGraphController {
       },
       edge: {
         type: "line",
-        style: (datum) => {
-          const meta = datum.data as GraphEdgeMeta | undefined;
-          return this.edgeDatumStyle(meta?.relation ?? "related", meta?.kind === "semantic");
-        },
+        style: (datum) => this.edgeStyleFromDatum(datum),
         state: {
           "edge-focus": {
             opacity: 0.92,
@@ -390,7 +377,7 @@ export class KnowledgeGraphController {
         id: node.id,
         type: "circle",
         data: meta as unknown as Record<string, unknown>,
-        style: this.nodeDatumStyle(node, zoom, 0),
+        style: this.nodeDatumStyle(node, zoom, node.id === this.focusId ? 1 : 0),
       };
     });
 
@@ -441,7 +428,7 @@ export class KnowledgeGraphController {
         depth: layoutNode?.depth ?? Number(meta?.depth ?? 0),
       },
       this.safeZoom(),
-      0,
+      id === this.focusId ? 1 : 0,
     );
   }
 
@@ -468,15 +455,15 @@ export class KnowledgeGraphController {
     const normalLabelSize = node.depth <= 1 ? 12.5 : 12;
     const normalLabelWidth = node.depth <= 1 ? 112 : 96;
     return {
-      size: mix(normalSize, 22, amount),
+      size: mix(normalSize, 24, amount),
       fill: riskColor(risk),
       stroke: risk === "normal" ? GRAPH_THEME.primaryStrong : riskColor(risk),
-      lineWidth: mix(1.2, 2.6, amount),
+      lineWidth: mix(1.2, 3, amount),
       opacity: 1,
       halo: amount > 0.01 || risk === "high",
       haloStroke: amount > 0.55 ? GRAPH_THEME.focusHalo : riskHalo(risk),
-      haloLineWidth: mix(risk === "high" ? 10 : 0, 18, amount),
-      haloOpacity: mix(risk === "high" ? 0.38 : 0, 0.72, amount),
+      haloLineWidth: mix(risk === "high" ? 10 : 0, 20, amount),
+      haloOpacity: mix(risk === "high" ? 0.38 : 0, 0.74, amount),
       label: true,
       labelText: truncateLabel(node.label),
       labelPlacement: "bottom" as const,
@@ -494,16 +481,26 @@ export class KnowledgeGraphController {
     };
   }
 
+  private edgeStyleFromDatum(datum: EdgeData) {
+    const meta = datum.data as GraphEdgeMeta | undefined;
+    return this.edgeDatumStyle(
+      meta?.relation ?? "related",
+      meta?.kind === "semantic",
+      typeof meta?.transitionOpacity === "number" ? meta.transitionOpacity : undefined,
+    );
+  }
+
   private edgeDatumStyle(
     relation: GraphDisplayModel["edges"][number]["relation"],
     showDirection = false,
+    transitionOpacity?: number,
   ) {
     const prerequisite = relation === "prerequisite";
     const peripheral = relation === "peripheral";
     return {
       stroke: prerequisite ? GRAPH_THEME.edgePrerequisite : GRAPH_THEME.edgeRelated,
       lineWidth: prerequisite ? 1.5 : 1,
-      opacity: peripheral ? 0.22 : 0.46,
+      opacity: transitionOpacity ?? (peripheral ? 0.22 : 0.46),
       lineDash: relation === "related" || peripheral ? [5, 6] : [],
       // Display-tree direction is layout-only; semantic reveal edges keep the real direction.
       endArrow: prerequisite && showDirection,
@@ -513,6 +510,9 @@ export class KnowledgeGraphController {
   }
 
   setFocus(id: string, force = false) {
+    if (this.mode === "focusing") {
+      return;
+    }
     if (!force && id === this.focusId && this.pendingFocusId === null) {
       return;
     }
@@ -530,19 +530,15 @@ export class KnowledgeGraphController {
     this.startLocalFocusHandoff(id);
   }
 
-  // Focused-mode navigation is a local A/B swap. The camera and every other
-  // node remain untouched; free-view navigation uses a camera recovery path.
+  // Focused-mode navigation is an elastic local handoff. A and B lead the
+  // movement; nearby display-tree nodes follow by a small symmetric falloff.
   private startLocalFocusHandoff(id: string) {
     const graph = this.graph;
     const fromId = this.focusId;
-    if (!graph || id === fromId) {
-      return;
-    }
+    if (!graph || id === fromId) return;
     const fromNode = this.layout.nodeById.get(fromId);
     const toNode = this.layout.nodeById.get(id);
-    if (!fromNode || !toNode) {
-      return;
-    }
+    if (!fromNode || !toNode) return;
     this.stopHandoff();
     this.stopOrbit();
     const generation = ++this.transitionGeneration;
@@ -554,10 +550,18 @@ export class KnowledgeGraphController {
       this.callbacks.onNodeHover(null);
     }
 
-    const fromStart = this.readLivePosition(fromId);
-    const toStart = this.readLivePosition(id);
-    this.commitPosition(fromId, fromStart);
-    this.commitPosition(id, toStart);
+    const startPoints: Record<string, [number, number]> = {};
+    for (const node of this.layout.nodes) {
+      startPoints[node.id] = this.readLivePosition(node.id);
+    }
+    const fromStart = startPoints[fromId];
+    const toStart = startPoints[id];
+    if (!fromStart || !toStart) return;
+    const local = buildLocalHandoffTargets(startPoints, this.display.edges, fromId, id);
+    const { targets, affectedIds } = local;
+    if (!targets[fromId] || !targets[id]) return;
+    this.commitPositions(startPoints);
+
     const dx = toStart[0] - fromStart[0];
     const dy = toStart[1] - fromStart[1];
     const distance = Math.hypot(dx, dy);
@@ -565,65 +569,130 @@ export class KnowledgeGraphController {
     const curve = Math.min(28, Math.max(10, distance * 0.12));
     const duration = this.reducedMotion ? 180 : 720;
     const startedAt = performance.now();
+    const semanticStates = Object.fromEntries(this.source.semanticEdges.map((edge) => [`semantic:${edge.id}`, []]));
     graph.setOptions({ animation: false });
-    void graph.setElementState({ [fromId]: [], [id]: [] }, false).catch((error: unknown) => this.reportRenderError(error));
+    graph.updateEdgeData(this.semanticEdgeUpdates(null));
+    void graph.setElementState({ [fromId]: [], [id]: [], ...semanticStates }, false).catch((error: unknown) => this.reportRenderError(error));
+
     const step = (now: number) => {
-      if (!this.isTransitionCurrent(generation) || this.pendingFocusId !== id) {
-        return;
-      }
+      if (!this.isTransitionCurrent(generation) || this.pendingFocusId !== id) return;
       const progress = Math.min(1, Math.max(0, (now - startedAt) / duration));
       const eased = 1 - Math.pow(1 - progress, 3);
       const arc = Math.sin(Math.PI * progress) * curve;
-      const fromPoint: [number, number] = [
-        mix(fromStart[0], toStart[0], eased) + perpendicular[0] * arc,
-        mix(fromStart[1], toStart[1], eased) + perpendicular[1] * arc,
-      ];
-      const toPoint: [number, number] = [
-        mix(toStart[0], fromStart[0], eased) - perpendicular[0] * arc,
-        mix(toStart[1], fromStart[1], eased) - perpendicular[1] * arc,
-      ];
-      graph.updateNodeData([
-        { id: fromId, style: this.nodeDatumStyle({ ...fromNode, x: fromPoint[0], y: fromPoint[1] }, this.safeZoom(), 1 - eased) },
-        { id, style: this.nodeDatumStyle({ ...toNode, x: toPoint[0], y: toPoint[1] }, this.safeZoom(), eased) },
-      ]);
-      this.commitPosition(fromId, fromPoint);
-      this.commitPosition(id, toPoint);
+      const framePoints: Record<string, [number, number]> = {};
+      const frameNodes: NodeData[] = [];
+      for (const nodeId of affectedIds) {
+        const node = this.layout.nodeById.get(nodeId);
+        const start = startPoints[nodeId];
+        const target = targets[nodeId];
+        if (!node || !start || !target) continue;
+        let point: [number, number];
+        if (nodeId === fromId) {
+          point = [
+            mix(fromStart[0], toStart[0], eased) + perpendicular[0] * arc,
+            mix(fromStart[1], toStart[1], eased) + perpendicular[1] * arc,
+          ];
+        } else if (nodeId === id) {
+          point = [
+            mix(toStart[0], fromStart[0], eased) - perpendicular[0] * arc,
+            mix(toStart[1], fromStart[1], eased) - perpendicular[1] * arc,
+          ];
+        } else {
+          point = [mix(start[0], target[0], eased), mix(start[1], target[1], eased)];
+        }
+        const focusAmount = nodeId === fromId ? 1 - eased : nodeId === id ? eased : 0;
+        framePoints[nodeId] = point;
+        frameNodes.push({ id: nodeId, style: this.nodeDatumStyle({ ...node, x: point[0], y: point[1] }, this.safeZoom(), focusAmount) });
+      }
+      graph.updateNodeData(frameNodes);
+      graph.updateEdgeData(this.semanticTransitionEdges(progress, fromId, id));
+      this.commitPositions(framePoints);
       void graph.draw().catch((error: unknown) => this.reportRenderError(error));
       if (progress < 1) {
         this.handoffFrame = requestAnimationFrame(step);
         return;
       }
       this.handoffFrame = null;
-      this.completeLocalFocusHandoff(fromId, id, fromStart, toStart, generation);
+      this.completeLocalFocusHandoff(id, targets, affectedIds, generation);
     };
     this.handoffFrame = requestAnimationFrame(step);
   }
 
+  private semanticEdgeUpdates(transitionOpacity: number | null) {
+    return this.source.semanticEdges.map((edge) => ({
+      id: `semantic:${edge.id}`,
+      data: {
+        kind: "semantic",
+        relation: edge.type,
+        semanticEdgeId: edge.id,
+        isDisplayOnly: false,
+        weight: edge.weight,
+        evidenceCount: edge.evidenceCount,
+        transitionOpacity,
+      } satisfies GraphEdgeMeta as unknown as Record<string, unknown>,
+    }));
+  }
+
+  private invalidateSemanticStateCache() {
+    for (const edge of this.source.semanticEdges) {
+      this.stateCache.delete(`semantic:${edge.id}`);
+    }
+  }
+
+  private semanticTransitionEdges(progress: number, fromId: string, toId: string) {
+    return this.source.semanticEdges.map((edge) => {
+      const oldFocus = edge.source === fromId || edge.target === fromId;
+      const newFocus = edge.source === toId || edge.target === toId;
+      const direct = (edge.source === fromId && edge.target === toId) || (edge.source === toId && edge.target === fromId);
+      let opacity = 0;
+      if (direct) {
+        opacity = 0.82;
+      } else if (oldFocus) {
+        opacity = 0.82 * Math.max(0, 1 - Math.min(1, progress / 0.7));
+      } else if (newFocus) {
+        opacity = 0.82 * Math.max(0, Math.min(1, (progress - 0.72) / 0.28));
+      }
+      return {
+        id: `semantic:${edge.id}`,
+        data: {
+          kind: "semantic",
+          relation: edge.type,
+          semanticEdgeId: edge.id,
+          isDisplayOnly: false,
+          weight: edge.weight,
+          evidenceCount: edge.evidenceCount,
+          transitionOpacity: opacity,
+        } satisfies GraphEdgeMeta as unknown as Record<string, unknown>,
+      };
+    });
+  }
+
   private completeLocalFocusHandoff(
-    fromId: string,
     toId: string,
-    fromStart: [number, number],
-    toStart: [number, number],
+    targets: Record<string, [number, number]>,
+    affectedIds: string[],
     generation: number,
   ) {
-    if (!this.isTransitionCurrent(generation)) {
-      return;
-    }
+    if (!this.isTransitionCurrent(generation)) return;
     const graph = this.graph;
-    const fromNode = this.layout.nodeById.get(fromId);
-    const toNode = this.layout.nodeById.get(toId);
-    if (!graph || !fromNode || !toNode) {
-      return;
+    if (!graph) return;
+    const finalNodes: NodeData[] = [];
+    for (const nodeId of affectedIds) {
+      const node = this.layout.nodeById.get(nodeId);
+      const target = targets[nodeId];
+      if (!node || !target) continue;
+      this.commitPosition(nodeId, target);
+      finalNodes.push({
+        id: nodeId,
+        style: this.nodeDatumStyle({ ...node, x: target[0], y: target[1] }, this.safeZoom(), nodeId === toId ? 1 : 0),
+      });
     }
-    this.commitPosition(fromId, toStart);
-    this.commitPosition(toId, fromStart);
     this.focusId = toId;
+    graph.updateEdgeData(this.semanticEdgeUpdates(null));
     this.selectedId = toId;
+    this.invalidateSemanticStateCache();
     this.pendingFocusId = null;
-    graph.updateNodeData([
-      { id: fromId, style: this.nodeDatumStyle({ ...fromNode, x: toStart[0], y: toStart[1] }, this.safeZoom(), 0) },
-      { id: toId, style: this.nodeDatumStyle({ ...toNode, x: fromStart[0], y: fromStart[1] }, this.safeZoom(), 0) },
-    ]);
+    graph.updateNodeData(finalNodes);
     this.callbacks.onFocusCommit?.(toId);
     graph.setOptions({
       animation: { duration: this.reducedMotion ? 180 : 780, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
@@ -687,6 +756,11 @@ export class KnowledgeGraphController {
       cancelAnimationFrame(this.handoffFrame);
       this.handoffFrame = null;
     }
+    this.graph?.setOptions({
+      animation: { duration: this.reducedMotion ? 180 : 780, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    });
+    this.graph?.updateEdgeData(this.semanticEdgeUpdates(null));
+    this.invalidateSemanticStateCache();
     this.pendingFocusId = null;
   }
 
@@ -1043,7 +1117,7 @@ export class KnowledgeGraphController {
     graph.updateNodeData(
       nodes.map((node) => ({
         id: node.id,
-        style: this.nodeDatumStyle(this.positionedNode(node), zoom),
+        style: this.nodeDatumStyle(this.positionedNode(node), zoom, node.id === this.focusId ? 1 : 0),
       })),
     );
     void graph
@@ -1085,7 +1159,7 @@ export class KnowledgeGraphController {
     this.graph.updateNodeData(
       this.layout.nodes.map((node) => ({
         id: node.id,
-        style: this.nodeDatumStyle(this.positionedNode(node), zoom),
+        style: this.nodeDatumStyle(this.positionedNode(node), zoom, node.id === this.focusId ? 1 : 0),
       })),
     );
     void this.graph.draw().catch((error: unknown) => this.reportRenderError(error));

@@ -65,6 +65,89 @@ export function layoutGraph(display: GraphDisplayModel, viewport: GraphViewport)
   };
 }
 
+export interface LocalHandoffTargets {
+  targets: Record<string, [number, number]>;
+  influence: Record<string, number>;
+  affectedIds: string[];
+}
+
+// Build a reversible, symmetric displacement field over the current display
+// tree. A and B exchange slots exactly; nearby display-tree nodes follow by
+// a small falloff amount so local edges do not tear during the handoff.
+export function buildLocalHandoffTargets(
+  points: Readonly<Record<string, [number, number]>>,
+  edges: ReadonlyArray<{ source: string; target: string }>,
+  fromId: string,
+  toId: string,
+): LocalHandoffTargets {
+  const from = points[fromId];
+  const to = points[toId];
+  if (!from || !to || fromId === toId) {
+    return { targets: {}, influence: {}, affectedIds: [] };
+  }
+
+  const adjacency = new Map<string, string[]>();
+  for (const edge of edges) {
+    const outgoing = adjacency.get(edge.source) ?? [];
+    outgoing.push(edge.target);
+    adjacency.set(edge.source, outgoing);
+    const incoming = adjacency.get(edge.target) ?? [];
+    incoming.push(edge.source);
+    adjacency.set(edge.target, incoming);
+  }
+
+  const distances = (startId: string) => {
+    const result = new Map<string, number>([[startId, 0]]);
+    const queue: string[] = [startId];
+    while (queue.length) {
+      const current = queue.shift()!;
+      const nextDistance = (result.get(current) ?? 0) + 1;
+      for (const neighbor of adjacency.get(current) ?? []) {
+        if (result.has(neighbor)) continue;
+        result.set(neighbor, nextDistance);
+        queue.push(neighbor);
+      }
+    }
+    return result;
+  };
+
+  const fromDistance = distances(fromId);
+  const toDistance = distances(toId);
+  const falloff = (distance: number) => {
+    if (distance <= 0) return 1;
+    if (distance === 1) return 0.48;
+    if (distance === 2) return 0.14;
+    return 0;
+  };
+  const delta: [number, number] = [to[0] - from[0], to[1] - from[1]];
+  const targets: Record<string, [number, number]> = {};
+  const influence: Record<string, number> = {};
+  const affectedIds: string[] = [];
+  for (const id of Object.keys(points)) {
+    const point = points[id];
+    if (!point) continue;
+    let coefficient = 0;
+    let target: [number, number];
+    if (id === fromId) {
+      coefficient = 1;
+      target = [to[0], to[1]];
+    } else if (id === toId) {
+      coefficient = -1;
+      target = [from[0], from[1]];
+    } else {
+      const a = falloff(fromDistance.get(id) ?? Number.POSITIVE_INFINITY);
+      const b = falloff(toDistance.get(id) ?? Number.POSITIVE_INFINITY);
+      coefficient = Math.max(-0.42, Math.min(0.42, a - b));
+      if (Math.abs(coefficient) < 0.002) continue;
+      target = [point[0] + coefficient * delta[0], point[1] + coefficient * delta[1]];
+    }
+    targets[id] = target;
+    influence[id] = coefficient;
+    affectedIds.push(id);
+  }
+  return { targets, influence, affectedIds };
+}
+
 // Rotate the CURRENT live node positions around the current focus pivot by a
 // step angle. The radial layout is only built on creation/structural changes,
 // so orbiting must use the rendered coordinates instead of the base layout.
