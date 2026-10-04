@@ -72,6 +72,9 @@ export class KnowledgeGraphController {
   private destroyed = false;
   private paused = false;
   private pendingResize = false;
+  private ready = false;
+  private renderFrame: number | null = null;
+  private renderPromise: Promise<void> | null = null;
   private readonly onVisibilityChange = () => {
     if (document.visibilityState !== "visible") {
       this.stopOrbit();
@@ -260,22 +263,43 @@ export class KnowledgeGraphController {
       this.callbacks.onZoomChange?.(zoom);
     });
 
-    void this.graph.render()
-      .then(() => {
-        if (this.destroyed) {
-          return;
-        }
-        this.applyVisualState();
-        return this.centerCamera(false);
-      })
-      .then(() => {
-        if (!this.destroyed && !this.reducedMotion) {
-          this.startOrbit();
-        }
-      })
-      .catch((error: unknown) => {
-        this.reportRenderError(error);
-      });
+    // Defer the first render one frame so a mount/unmount in the same tick (React StrictMode) never leaves G6 mid-prepare.
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      const graph = this.graph;
+      if (!graph || this.destroyed) {
+        return;
+      }
+      const renderPromise = graph.render();
+      this.renderPromise = renderPromise;
+      void renderPromise
+        .then(() => {
+          if (this.destroyed) {
+            return;
+          }
+          this.ready = true;
+          if (this.pendingResize) {
+            this.pendingResize = false;
+            this.applyResize();
+            return;
+          }
+          this.applyVisualState();
+          return this.centerCamera(false);
+        })
+        .then(() => {
+          if (!this.destroyed && !this.reducedMotion) {
+            this.startOrbit();
+          }
+        })
+        .catch((error: unknown) => {
+          this.reportRenderError(error);
+        })
+        .finally(() => {
+          if (this.renderPromise === renderPromise) {
+            this.renderPromise = null;
+          }
+        });
+    });
     document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
@@ -435,7 +459,7 @@ export class KnowledgeGraphController {
     if (!force && id === this.focusId) {
       return;
     }
-    if (!this.source.pointById.has(id) || !this.graph) {
+    if (!this.source.pointById.has(id) || !this.graph || !this.ready) {
       return;
     }
     this.focusId = id;
@@ -505,12 +529,14 @@ export class KnowledgeGraphController {
 
   setSelected(id: string | null) {
     this.selectedId = id;
-    this.scheduleVisualState(0);
+    if (this.ready) {
+      this.scheduleVisualState(0);
+    }
   }
 
   setRiskMap(riskById: ReadonlyMap<string, GraphRiskLevel>) {
     this.riskById = riskById;
-    if (!this.graph) {
+    if (!this.graph || !this.ready) {
       return;
     }
     this.refreshNodeStyles();
@@ -519,7 +545,9 @@ export class KnowledgeGraphController {
 
   setFilter(filter: KnowledgeGraphFilter) {
     this.filter = filter;
-    this.applyVisualState();
+    if (this.ready) {
+      this.applyVisualState();
+    }
   }
 
   setPaused(paused: boolean) {
@@ -554,7 +582,7 @@ export class KnowledgeGraphController {
     if (!this.graph) {
       return;
     }
-    if (this.paused) {
+    if (!this.ready || this.paused) {
       this.pendingResize = true;
       return;
     }
@@ -563,7 +591,7 @@ export class KnowledgeGraphController {
 
   private applyResize() {
     const graph = this.graph;
-    if (!graph) {
+    if (!graph || !this.ready) {
       return;
     }
     const viewport = this.viewport;
@@ -592,7 +620,7 @@ export class KnowledgeGraphController {
   }
 
   resetView() {
-    if (!this.graph) {
+    if (!this.graph || !this.ready) {
       return;
     }
     this.orbitAngle = 0;
@@ -602,7 +630,7 @@ export class KnowledgeGraphController {
 
   async fitView() {
     const graph = this.graph;
-    if (!graph) {
+    if (!graph || !this.ready) {
       return;
     }
     try {
@@ -815,7 +843,7 @@ export class KnowledgeGraphController {
   }
 
   private startOrbit() {
-    if (this.paused || this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
+    if (!this.ready || this.paused || this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
       return;
     }
     this.orbitLastTime = performance.now();
@@ -858,6 +886,11 @@ export class KnowledgeGraphController {
   destroy() {
     this.transitionGeneration += 1;
     this.destroyed = true;
+    this.ready = false;
+    if (this.renderFrame !== null) {
+      cancelAnimationFrame(this.renderFrame);
+      this.renderFrame = null;
+    }
     this.stopOrbit();
     if (this.zoomCompensationTimer) {
       clearTimeout(this.zoomCompensationTimer);
@@ -868,7 +901,17 @@ export class KnowledgeGraphController {
       this.visualStateTimer = null;
     }
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
-    this.graph?.destroy();
+    const graph = this.graph;
     this.graph = null;
+    const renderPromise = this.renderPromise;
+    this.renderPromise = null;
+    if (graph) {
+      if (renderPromise) {
+        // G6 logs an error when destroy lands between render() and its prepare step; let prepare finish first.
+        void renderPromise.catch(() => undefined).finally(() => graph.destroy());
+      } else {
+        graph.destroy();
+      }
+    }
   }
 }

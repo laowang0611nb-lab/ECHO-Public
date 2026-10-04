@@ -7,6 +7,7 @@ This module renders the teacher knowledge graph as a focus-rooted knowledge netw
 - `graph-adapter.ts` turns the API graph into a knowledge-point-only source model and a deterministic display tree.
 - `graph-layout.ts` computes a stable radial/organic layout from real container dimensions. It does not run force simulation and does not use random numbers.
 - `graph-controller.ts` owns the single G6 instance, focus transitions, camera, free view, orbit, hover states, semantic-edge reveal, and label LOD.
+- The first G6 render is deferred one frame, and `destroy()` waits for an in-flight render, so mount/unmount cycles (React StrictMode, fast route changes) never trip G6's destroyed-instance guard.
 - `knowledge-graph-view.tsx` owns route state, course switching, filters, fullscreen, loading/empty/error states, and the analytics card.
 - `analytics-card.tsx` renders only fields returned by the real `KnowledgePointAnalytics` API.
 
