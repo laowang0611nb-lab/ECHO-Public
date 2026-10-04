@@ -61,9 +61,12 @@ The derived value is never written back to the database and is not presented as 
 - While the sidebar collapses or expands, canvas rendering pauses and the graph is briefly blurred, then redraws once at the new size.
 - Clicking the focused node opens the existing `buildPointHref` detail route.
 - Dragging or zooming enters free view and stops automatic orbit.
+- Zoom is bound to Shift + wheel; a plain wheel leaves the viewport untouched.
 - Clicking a node in free view returns to focused mode.
 - Reset returns to the current focus.
 - Fit view calculates a bounded zoom from the real layout bounds and recenters the focus.
+- Ring radii use a fixed band table: the first ring sits 35% closer to the focus, outer rings keep a slightly wider stride.
+- The analytics card collapses to a single 38px row via the chevron next to the risk badge, matching the toolbar height.
 - Fit view pauses orbit only while fitting and resumes it after the idle delay.
 - Fullscreen changes only the graph panel.
 - Fullscreen resizes both canvas axes: the graph renders into a full-bleed inner wrapper so the G6 container cannot collapse to the canvas height.

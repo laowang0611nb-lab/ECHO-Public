@@ -2,7 +2,8 @@
 
 import type { KnowledgePointAnalytics } from "@echo/shared-types";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, ArrowUpRight, BookOpen, LoaderCircle, RefreshCw, UsersRound } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpen, ChevronDown, ChevronUp, LoaderCircle, RefreshCw, UsersRound } from "lucide-react";
+import { useState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -31,38 +32,69 @@ export function KnowledgeGraphAnalyticsCard({
   filterActive: boolean;
   onRetry: () => void;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
   return (
     <AnimatePresence mode="wait">
       {point ? (
         <motion.aside
           animate={{ opacity: 1, x: 0 }}
-          className="pointer-events-auto absolute right-4 top-20 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/12 bg-[#f8fbff]/96 p-4 text-foreground shadow-[0_18px_50px_rgba(3,10,24,0.28)] backdrop-blur lg:top-4"
+          className={cn(
+            "pointer-events-auto absolute right-4 top-20 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/12 bg-[#f8fbff]/96 text-foreground shadow-[0_18px_50px_rgba(3,10,24,0.28)] backdrop-blur transition-[padding] duration-200 lg:top-4",
+            collapsed ? "px-3 py-1.5" : "p-4",
+          )}
           exit={{ opacity: 0, x: 12 }}
           initial={{ opacity: 0, x: 12 }}
           key={point.id}
           transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="flex items-start justify-between gap-3">
+          <div className={cn("flex justify-between gap-3", collapsed ? "items-center" : "items-start")}>
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">知识点学情</p>
-              <h3 className="mt-1 text-base font-semibold leading-6">{analytics?.name ?? point.label}</h3>
-            </div>
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                risk === "high"
-                  ? "bg-violet-100 text-violet-700"
-                  : risk === "medium"
-                    ? "bg-red-50 text-red-600"
-                    : risk === "elevated"
-                      ? "bg-orange-50 text-orange-600"
-                      : "bg-blue-50 text-blue-700",
+              {collapsed ? (
+                <h3 className="truncate text-sm font-semibold leading-5">{analytics?.name ?? point.label}</h3>
+              ) : (
+                <>
+                  <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">知识点学情</p>
+                  <h3 className="mt-1 text-base font-semibold leading-6">{analytics?.name ?? point.label}</h3>
+                </>
               )}
-            >
-              {riskLabel(risk)}
-            </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                  risk === "high"
+                    ? "bg-violet-100 text-violet-700"
+                    : risk === "medium"
+                      ? "bg-red-50 text-red-600"
+                      : risk === "elevated"
+                        ? "bg-orange-50 text-orange-600"
+                        : "bg-blue-50 text-blue-700",
+                )}
+              >
+                {riskLabel(risk)}
+              </span>
+              <button
+                aria-expanded={!collapsed}
+                aria-label={collapsed ? "展开学情卡片" : "收起学情卡片"}
+                className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={() => setCollapsed((current) => !current)}
+                type="button"
+              >
+                {collapsed ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
+              </button>
+            </div>
           </div>
 
+          <AnimatePresence initial={false}>
+            {!collapsed ? (
+              <motion.div
+                animate={{ height: "auto", opacity: 1 }}
+                className="overflow-hidden"
+                exit={{ height: 0, opacity: 0 }}
+                initial={{ height: 0, opacity: 0 }}
+                key="analytics-body"
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              >
           {filterActive && risk !== "high" ? (
             <p className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs leading-5 text-orange-700">
               当前焦点未命中“高风险”筛选，已保留在图中用于对照。
@@ -121,6 +153,9 @@ export function KnowledgeGraphAnalyticsCard({
             查看详细学情
             <ArrowUpRight className="size-4" />
           </Link>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </motion.aside>
       ) : null}
     </AnimatePresence>

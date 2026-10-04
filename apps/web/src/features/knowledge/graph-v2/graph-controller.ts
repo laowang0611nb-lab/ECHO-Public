@@ -87,6 +87,25 @@ export class KnowledgeGraphController {
     }
   };
 
+  // Shift + wheel pans the wheel delta to deltaX on most platforms, which G6's built-in trigger ignores.
+  private readonly onWheel = (event: WheelEvent) => {
+    if (!event.shiftKey || this.destroyed || this.paused || !this.ready || !this.graph) {
+      return;
+    }
+    const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+    if (!delta) {
+      return;
+    }
+    event.preventDefault();
+    const graph = this.graph;
+    const next = graphClamp(this.safeZoom() * (delta < 0 ? 1.12 : 1 / 1.12), MIN_ZOOM, MAX_ZOOM);
+    const rect = this.container.getBoundingClientRect();
+    void graph
+      .zoomTo(next, { duration: this.reducedMotion ? 80 : 180 }, [event.clientX - rect.left, event.clientY - rect.top])
+      .catch((error: unknown) => this.reportRenderError(error));
+    this.enterFreeView();
+  };
+
   constructor(options: GraphControllerOptions) {
     this.container = options.container;
     this.source = options.source;
@@ -215,6 +234,7 @@ export class KnowledgeGraphController {
         {
           type: "zoom-canvas",
           key: "graph-zoom-canvas",
+          trigger: ["pinch"],
           animation: { duration: this.reducedMotion ? 80 : 180 },
           onFinish: () => this.enterFreeView(),
         },
@@ -310,6 +330,7 @@ export class KnowledgeGraphController {
         });
     });
     document.addEventListener("visibilitychange", this.onVisibilityChange);
+    this.container.addEventListener("wheel", this.onWheel, { passive: false });
   }
 
   private safeZoom() {
@@ -986,6 +1007,7 @@ export class KnowledgeGraphController {
       this.visualStateTimer = null;
     }
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    this.container.removeEventListener("wheel", this.onWheel);
     const graph = this.graph;
     this.graph = null;
     const renderPromise = this.renderPromise;

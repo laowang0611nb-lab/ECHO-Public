@@ -5,13 +5,19 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+// First ring sits 35% closer to the focus so branch chains read as connected;
+// outer rings keep a slightly wider stride.
+const BAND_RADII = [0, 131, 167, 196, 219, 239, 256, 272, 287];
+
 function radiusForDepth(depth: number, scale: number) {
   if (depth <= 0) {
     return 0;
   }
-  const base = 126 + 76 * Math.sqrt(Math.min(depth, 8));
-  const extension = depth > 8 ? 26 * Math.log2(depth - 7) : 0;
-  return (base + extension) * scale;
+  if (depth < BAND_RADII.length) {
+    return BAND_RADII[depth] * scale;
+  }
+  const outermost = BAND_RADII[BAND_RADII.length - 1];
+  return (outermost + 30 * Math.log2(depth - 7)) * scale;
 }
 
 function boundsFor(nodes: GraphLayoutNode[]): GraphBounds {
