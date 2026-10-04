@@ -74,6 +74,7 @@ export class KnowledgeGraphController {
   private pendingResize = false;
   private ready = false;
   private pendingRiskRefresh = false;
+  private pointerInside = false;
   private stateCache = new Map<string, string>();
   private renderFrame: number | null = null;
   private renderPromise: Promise<void> | null = null;
@@ -512,7 +513,7 @@ export class KnowledgeGraphController {
           return;
         }
         graph.setOptions({
-          animation: { duration: this.reducedMotion ? 160 : 520, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          animation: { duration: this.reducedMotion ? 160 : 820, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
         });
         const morph = graph.translateElementTo(targets, true).catch((error: unknown) => this.reportRenderError(error));
         return Promise.all([morph, this.centerCamera(true)]);
@@ -720,7 +721,7 @@ export class KnowledgeGraphController {
     }
     const zoom = this.safeZoom();
     const targetZoom = zoom < 0.88 ? 0.96 : graphClamp(zoom, MIN_ZOOM, MAX_ZOOM);
-    const animation = animate ? { duration: this.reducedMotion ? 160 : 520 } : false;
+    const animation = animate ? { duration: this.reducedMotion ? 160 : 820 } : false;
     if (targetZoom !== zoom) {
       await graph.zoomTo(targetZoom, animation);
       if (this.destroyed || this.graph !== graph) {
@@ -910,15 +911,31 @@ export class KnowledgeGraphController {
     this.callbacks.onModeChange?.(mode);
   }
 
+  setPointerInside(inside: boolean) {
+    if (this.pointerInside === inside) {
+      return;
+    }
+    this.pointerInside = inside;
+    if (inside) {
+      this.stopOrbit();
+      return;
+    }
+    // Leaving the panel resumes the orbit immediately instead of waiting for the idle delay.
+    this.interactionUntil = 0;
+    if (this.mode === "focused" && !this.reducedMotion) {
+      this.startOrbit();
+    }
+  }
+
   private startOrbit() {
-    if (!this.ready || this.paused || this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
+    if (!this.ready || this.paused || this.pointerInside || this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
       return;
     }
     this.orbitLastTime = performance.now();
     this.orbitLastPosition = this.orbitLastTime;
     const step = (now: number) => {
       this.orbitFrame = null;
-      if (this.destroyed || this.paused || !this.graph || this.mode !== "focused") {
+      if (this.destroyed || this.paused || this.pointerInside || !this.graph || this.mode !== "focused") {
         return;
       }
       const delta = Math.min(60, Math.max(0, now - this.orbitLastTime));

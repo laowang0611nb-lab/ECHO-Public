@@ -177,6 +177,7 @@ export function KnowledgeGraphView({
     });
     controllerRef.current = controller;
     controller.mount();
+    controller.setPointerInside(wrapperRef.current?.matches(":hover") ?? false);
     const resizeObserver = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) {
@@ -285,6 +286,8 @@ export function KnowledgeGraphView({
         "relative overflow-hidden rounded-xl border border-[#213c62] bg-[#081527] shadow-[0_18px_60px_rgba(8,21,39,0.22)] transition-[height,border-radius] duration-300",
         fullscreen ? "h-screen rounded-none border-0" : "h-full min-h-[420px]",
       )}
+      onPointerEnter={() => controllerRef.current?.setPointerInside(true)}
+      onPointerLeave={() => controllerRef.current?.setPointerInside(false)}
       ref={wrapperRef}
     >
       <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(rgba(84,128,185,0.075)_1px,transparent_1px),linear-gradient(90deg,rgba(84,128,185,0.075)_1px,transparent_1px)] bg-[size:32px_32px] opacity-55" />

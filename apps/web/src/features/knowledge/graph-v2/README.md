@@ -38,6 +38,8 @@ Labels are rendered by G6 in the graph layer. There is no per-frame DOM label ov
 - Orbit has one rAF owner and completes one cycle in about 160 seconds.
 - Zoom is clamped to 10%-200%.
 - Orbit pauses during focus transitions, drag, zoom, hover, hidden pages, and `prefers-reduced-motion`.
+- Orbit only runs while the pointer is outside the graph panel; entering the panel stops it and leaving resumes it immediately.
+- The re-root morph and camera animation run for about 0.82s (0.16s under `prefers-reduced-motion`).
 - During a re-root only the position morph and camera animation run: hover handling pauses, element-state updates are merged into one diffed call, and risk-driven style refreshes are deferred until the transition settles.
 
 ## Risk Presentation
