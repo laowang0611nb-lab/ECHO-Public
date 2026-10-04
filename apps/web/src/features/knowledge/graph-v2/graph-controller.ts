@@ -73,6 +73,8 @@ export class KnowledgeGraphController {
   private paused = false;
   private pendingResize = false;
   private ready = false;
+  private pendingRiskRefresh = false;
+  private stateCache = new Map<string, string>();
   private renderFrame: number | null = null;
   private renderPromise: Promise<void> | null = null;
   private readonly onVisibilityChange = () => {
@@ -229,6 +231,9 @@ export class KnowledgeGraphController {
       if (!isNodeEvent(elementEvent)) {
         return;
       }
+      if (this.mode === "focusing") {
+        return;
+      }
       const id = String(elementEvent.target.id);
       this.hoveredId = id;
       this.touchInteraction();
@@ -237,6 +242,9 @@ export class KnowledgeGraphController {
       this.scheduleVisualState(0);
     });
     this.graph.on(NodeEvent.POINTER_LEAVE, () => {
+      if (this.mode === "focusing") {
+        return;
+      }
       this.hoveredId = null;
       this.callbacks.onNodeHover(null);
       this.touchInteraction();
@@ -479,6 +487,10 @@ export class KnowledgeGraphController {
     }
     this.setMode("focusing");
     this.stopOrbit();
+    if (this.hoveredId !== null) {
+      this.hoveredId = null;
+      this.callbacks.onNodeHover(null);
+    }
     this.display = this.buildDisplay();
     this.layout = layoutGraph(this.display, this.viewport);
     const startNodes = this.layout.nodes.map((node) => {
@@ -492,6 +504,7 @@ export class KnowledgeGraphController {
     // Render the new tree at the old positions first, then glide every node to its new slot.
     graph.setOptions({ animation: false });
     graph.setData(this.graphData({ ...this.layout, nodes: startNodes }, this.display));
+    this.stateCache.clear();
     this.orbitAngle = 0;
     void graph.draw()
       .then(() => {
@@ -517,6 +530,10 @@ export class KnowledgeGraphController {
         if (!this.reducedMotion) {
           this.startOrbit();
         }
+        if (this.pendingRiskRefresh) {
+          this.pendingRiskRefresh = false;
+          window.setTimeout(() => this.refreshNodeStyles(), 150);
+        }
       })
       .catch((error: unknown) => {
         if (!this.isTransitionCurrent(generation)) {
@@ -535,12 +552,29 @@ export class KnowledgeGraphController {
   }
 
   setRiskMap(riskById: ReadonlyMap<string, GraphRiskLevel>) {
+    const changed = new Set<string>();
+    for (const [id, level] of riskById) {
+      if (this.riskById.get(id) !== level) {
+        changed.add(id);
+      }
+    }
+    for (const [id, level] of this.riskById) {
+      if (!riskById.has(id) && level !== "normal") {
+        changed.add(id);
+      }
+    }
     this.riskById = riskById;
     if (!this.graph || !this.ready) {
       return;
     }
-    this.refreshNodeStyles();
-    this.applyVisualState();
+    if (this.mode === "focusing") {
+      this.pendingRiskRefresh = true;
+      return;
+    }
+    if (changed.size) {
+      this.refreshNodeStyles(changed);
+    }
+    this.applyVisualState(false);
   }
 
   setFilter(filter: KnowledgeGraphFilter) {
@@ -599,6 +633,7 @@ export class KnowledgeGraphController {
     this.display = this.buildDisplay();
     this.layout = layoutGraph(this.display, viewport);
     graph.setData(this.graphData(this.layout, this.display));
+    this.stateCache.clear();
     this.scaleLabelsForZoom(this.safeZoom());
     void graph.draw()
       .then(() => {
@@ -640,6 +675,7 @@ export class KnowledgeGraphController {
       this.display = this.buildDisplay();
       this.layout = layoutGraph(this.display, this.viewport);
       graph.setData(this.graphData(this.layout, this.display));
+      this.stateCache.clear();
       await graph.draw();
       if (this.destroyed || this.graph !== graph) {
         return;
@@ -755,12 +791,31 @@ export class KnowledgeGraphController {
       const active = edge.source === activeId || edge.target === activeId;
       edgeStates[`semantic:${edge.id}`] = [active ? "semantic-active" : "semantic-hidden"];
     }
-    void this.graph.setElementState(nodeStates, animated).catch((error: unknown) => this.reportRenderError(error));
-    void this.graph.setElementState(edgeStates, animated).catch((error: unknown) => this.reportRenderError(error));
+    const payload: Record<string, string[]> = {};
+    const nextCache = new Map<string, string>();
+    for (const [id, states] of Object.entries(nodeStates)) {
+      const key = states.join("|");
+      nextCache.set(id, key);
+      if (this.stateCache.get(id) !== key) {
+        payload[id] = states;
+      }
+    }
+    for (const [id, states] of Object.entries(edgeStates)) {
+      const key = states.join("|");
+      nextCache.set(id, key);
+      if (this.stateCache.get(id) !== key) {
+        payload[id] = states;
+      }
+    }
+    this.stateCache = nextCache;
+    if (!Object.keys(payload).length) {
+      return;
+    }
+    void this.graph.setElementState(payload, animated).catch((error: unknown) => this.reportRenderError(error));
   }
 
   private scheduleVisualState(delay = 50) {
-    if (this.paused) {
+    if (this.paused || this.mode === "focusing") {
       return;
     }
     if (this.visualStateTimer) {
@@ -772,18 +827,31 @@ export class KnowledgeGraphController {
     }, delay);
   }
 
-  private refreshNodeStyles() {
-    if (!this.graph) {
+  private refreshNodeStyles(ids?: ReadonlySet<string>) {
+    const graph = this.graph;
+    if (!graph || !this.ready) {
       return;
     }
     const zoom = this.safeZoom();
-    this.graph.updateNodeData(
-      this.layout.nodes.map((node) => ({
+    const nodes = ids ? this.layout.nodes.filter((node) => ids.has(node.id)) : this.layout.nodes;
+    if (!nodes.length) {
+      return;
+    }
+    graph.setOptions({ animation: false });
+    graph.updateNodeData(
+      nodes.map((node) => ({
         id: node.id,
         style: this.nodeDatumStyle(node, zoom),
       })),
     );
-    void this.graph.draw().catch((error: unknown) => this.reportRenderError(error));
+    void graph
+      .draw()
+      .catch((error: unknown) => this.reportRenderError(error))
+      .finally(() => {
+        graph.setOptions({
+          animation: { duration: this.reducedMotion ? 180 : 780, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+        });
+      });
   }
 
   private scheduleZoomCompensation() {
