@@ -513,6 +513,64 @@ export function graphSeed(value: string, salt = 0) {
   return deterministicUnit(value, salt);
 }
 
+// Re-root the EXISTING display tree metadata (depth / parent / branch / focus)
+// onto a new visual focus without choosing a new spanning tree, changing the
+// undirected display-edge set, or touching any node position or angle.
+export function rerootDisplayMetadata(
+  display: GraphDisplayModel,
+  requestedFocusId: string,
+): GraphDisplayModel {
+  const focusId = display.nodeById.has(requestedFocusId) ? requestedFocusId : display.focusId;
+  if (!focusId || focusId === display.focusId) {
+    return display;
+  }
+  const adjacency = new Map<string, string[]>();
+  for (const edge of display.edges) {
+    const outgoing = adjacency.get(edge.source) ?? [];
+    outgoing.push(edge.target);
+    adjacency.set(edge.source, outgoing);
+    const incoming = adjacency.get(edge.target) ?? [];
+    incoming.push(edge.source);
+    adjacency.set(edge.target, incoming);
+  }
+  const depth = new Map<string, number>([[focusId, 0]]);
+  const parent = new Map<string, string | null>([[focusId, null]]);
+  const branch = new Map<string, string>([[focusId, "root"]]);
+  const queue: string[] = [focusId];
+  while (queue.length) {
+    const currentId = queue.shift()!;
+    const neighbors = [...(adjacency.get(currentId) ?? [])].sort(stableCompare);
+    for (const neighborId of neighbors) {
+      if (depth.has(neighborId)) {
+        continue;
+      }
+      depth.set(neighborId, (depth.get(currentId) ?? 0) + 1);
+      parent.set(neighborId, currentId);
+      branch.set(neighborId, currentId === focusId ? neighborId : branch.get(currentId) ?? neighborId);
+      queue.push(neighborId);
+    }
+  }
+  const nodes = display.nodes.map((node) => {
+    const nextDepth = depth.get(node.id);
+    if (nextDepth === undefined) {
+      return node;
+    }
+    return {
+      ...node,
+      depth: nextDepth,
+      displayParentId: parent.get(node.id) ?? null,
+      branchId: branch.get(node.id) ?? node.branchId,
+      isFocus: node.id === focusId,
+    };
+  });
+  return {
+    ...display,
+    focusId,
+    nodes,
+    nodeById: new Map(nodes.map((node) => [node.id, node])),
+  };
+}
+
 export function graphClamp(value: number, min: number, max: number) {
   return clamp(value, min, max);
 }

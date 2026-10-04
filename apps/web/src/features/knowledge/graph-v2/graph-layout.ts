@@ -65,18 +65,24 @@ export function layoutGraph(display: GraphDisplayModel, viewport: GraphViewport)
   };
 }
 
-export function orbitPositions(layout: GraphLayoutModel, angle: number) {
+// Rotate the CURRENT live node positions around the current focus pivot by a
+// step angle. The radial layout is only built on creation/structural changes,
+// so orbiting must use the rendered coordinates instead of the base layout.
+export function orbitPositions(
+  points: Readonly<Record<string, [number, number]>>,
+  pivot: [number, number],
+  angle: number,
+) {
   const positions: Record<string, [number, number]> = {};
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
-  for (const node of layout.nodes) {
-    if (node.isFocus || node.depth === 0 || node.radius === 0) {
-      positions[node.id] = [node.x, node.y];
-      continue;
-    }
-    positions[node.id] = [
-      node.x * cos - node.y * sin,
-      node.x * sin + node.y * cos,
+  const [pivotX, pivotY] = pivot;
+  for (const [id, [x, y]] of Object.entries(points)) {
+    const dx = x - pivotX;
+    const dy = y - pivotY;
+    positions[id] = [
+      pivotX + dx * cos - dy * sin,
+      pivotY + dx * sin + dy * cos,
     ];
   }
   return positions;

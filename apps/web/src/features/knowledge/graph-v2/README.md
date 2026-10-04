@@ -1,6 +1,8 @@
 # Knowledge Graph V2
 
-This module renders the teacher knowledge graph as a focus-rooted knowledge network.
+This module renders the teacher knowledge graph as a focus-centered knowledge network with a stable layout root.
+
+The graph keeps a stable spatial layout while focus changes. Moving focus is a camera/style handoff on the same world map, not a re-layout, so the user's mental map stays intact.
 
 ## Architecture
 
@@ -16,11 +18,12 @@ This module renders the teacher knowledge graph as a focus-rooted knowledge netw
 The backend graph can contain many-to-many semantic relations. The display tree is layout-only:
 
 - every visible node has at most one `displayParentId`;
-- the focus node is the root;
+- the initial layout root is the tree root, independent from the current visual focus;
 - traversal is breadth-first and deterministic;
 - prerequisite relations are preferred when a parent must be selected;
 - remaining ties use chapter order, point order, label, and ID;
 - raw semantic edges remain in `GraphSourceModel.semanticEdges` and are revealed only for the active node.
+- ordinary focus changes re-root only display metadata (`depth`, `displayParentId`, `branchId`, `isFocus`) over the existing undirected tree; positions and the displayed edge set do not change.
 
 Display-tree edges are layout-only and do not carry source/target direction. Only semantic reveal edges are directional, so a prerequisite arrow always preserves the API's original direction.
 
@@ -36,11 +39,12 @@ Labels are rendered by G6 in the graph layer. There is no per-frame DOM label ov
 - Near zoom shows more depth and degree.
 - Text stays horizontal and is compensated to keep a stable screen size.
 - Orbit has one rAF owner and completes one cycle in about 160 seconds.
+- Orbit rotates live rendered positions around the current focus node's live position; the focus node stays fixed as the pivot.
 - Zoom is clamped to 10%-200%.
 - Orbit pauses during focus transitions, drag, zoom, hover, hidden pages, and `prefers-reduced-motion`.
 - Orbit only runs while the pointer is outside the graph panel; entering the panel stops it and leaving resumes it immediately.
-- The re-root morph and camera animation run for about 0.82s (0.16s under `prefers-reduced-motion`).
-- During a re-root only the position morph and camera animation run: hover handling pauses, element-state updates are merged into one diffed call, and risk-driven style refreshes are deferred until the transition settles.
+- A focus handoff runs for about 0.82s (0.16s under `prefers-reduced-motion`): the camera pans the clicked node to the focus anchor while focus/related element states cross-fade.
+- The layout is not rebuilt for a focus handoff; orbit resumes after the idle delay around the new focus position.
 
 ## Risk Presentation
 
@@ -57,21 +61,21 @@ The derived value is never written back to the database and is not presented as 
 
 ## Interaction
 
-- Clicking a different node rebuilds the display tree while every node glides from its previous layout position to the new slot, with the camera animating at the same time.
+- Clicking a different node preserves all world positions and animates only the camera plus focus styles; the previous focus glides away and shrinks while the new focus moves to the anchor.
 - While the sidebar collapses or expands, canvas rendering pauses and the graph is briefly blurred, then redraws once at the new size.
 - Clicking the focused node opens the existing `buildPointHref` detail route.
 - Dragging or zooming enters free view and stops automatic orbit.
 - Zoom is bound to Shift + wheel; a plain wheel leaves the viewport untouched.
 - Clicking a node in free view returns to focused mode.
 - Reset returns to the current focus.
-- Fit view calculates a bounded zoom from the real layout bounds and recenters the focus.
+- Fit view calculates a bounded zoom from the current live bounds and recenters the focus without rebuilding the layout.
 - Ring radii use a fixed band table: the first ring sits 35% closer to the focus, outer rings keep a slightly wider stride.
 - The analytics card collapses to a single 38px row via the chevron next to the risk badge, matching the toolbar height.
 - Fit view pauses orbit only while fitting and resumes it after the idle delay.
 - Fullscreen changes only the graph panel.
 - Fullscreen resizes both canvas axes: the graph renders into a full-bleed inner wrapper so the G6 container cannot collapse to the canvas height.
-- Re-root centering measures the focus node's current screen position, so free-view pan and zoom no longer push the new focus off-center.
-- The focus morph runs alone; element states apply after it settles instead of animating on top of the position and camera transitions.
+- Focus centering measures the clicked node's live graph position, so free-view pan and zoom no longer push the new focus off-center.
+- The camera handoff runs alone; element states are applied once per handoff instead of triggering a second global position transition.
 
 ## Extension Points
 
