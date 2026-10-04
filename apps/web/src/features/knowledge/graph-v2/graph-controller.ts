@@ -26,9 +26,9 @@ import type {
   KnowledgeGraphMode,
 } from "./graph-types";
 
-const MIN_ZOOM = 0.72;
-const MAX_ZOOM = 1.8;
-const ORBIT_PERIOD = 120_000;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 2;
+const ORBIT_PERIOD = 160_000;
 const IDLE_RESUME_MS = 2_400;
 
 function truncateLabel(label: string | null | undefined, max = 12) {
@@ -70,6 +70,8 @@ export class KnowledgeGraphController {
   private visualStateTimer: ReturnType<typeof setTimeout> | null = null;
   private transitionGeneration = 0;
   private destroyed = false;
+  private paused = false;
+  private pendingResize = false;
   private readonly onVisibilityChange = () => {
     if (document.visibilityState !== "visible") {
       this.stopOrbit();
@@ -442,29 +444,50 @@ export class KnowledgeGraphController {
   }
 
   private createFocusTransition() {
-    if (!this.graph) {
+    const graph = this.graph;
+    if (!graph) {
       return;
     }
     const generation = ++this.transitionGeneration;
+    const previousPositions = new Map<string, [number, number]>();
+    for (const node of this.layout.nodes) {
+      previousPositions.set(node.id, [node.x, node.y]);
+    }
     this.setMode("focusing");
     this.stopOrbit();
     this.display = this.buildDisplay();
     this.layout = layoutGraph(this.display, this.viewport);
-    this.graph.setData(this.graphData(this.layout, this.display));
-    this.scaleLabelsForZoom(this.safeZoom());
+    const startNodes = this.layout.nodes.map((node) => {
+      const previous = previousPositions.get(node.id) ?? [0, 0];
+      return { ...node, x: previous[0], y: previous[1] };
+    });
+    const targets: Record<string, [number, number]> = {};
+    for (const node of this.layout.nodes) {
+      targets[node.id] = [node.x, node.y];
+    }
+    // Render the new tree at the old positions first, then glide every node to its new slot.
+    graph.setOptions({ animation: false });
+    graph.setData(this.graphData({ ...this.layout, nodes: startNodes }, this.display));
     this.orbitAngle = 0;
-    void this.graph.draw()
+    void graph.draw()
       .then(() => {
         if (!this.isTransitionCurrent(generation)) {
           return;
         }
+        graph.setOptions({
+          animation: { duration: this.reducedMotion ? 180 : 620, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+        });
+        const morph = graph.translateElementTo(targets, true).catch((error: unknown) => this.reportRenderError(error));
         this.applyVisualState();
-        return this.centerCamera(true);
+        return Promise.all([morph, this.centerCamera(true)]);
       })
       .then(() => {
         if (!this.isTransitionCurrent(generation)) {
           return;
         }
+        graph.setOptions({
+          animation: { duration: this.reducedMotion ? 180 : 780, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+        });
         this.setMode("focused");
         this.interactionUntil = performance.now() + IDLE_RESUME_MS;
         if (!this.reducedMotion) {
@@ -499,17 +522,57 @@ export class KnowledgeGraphController {
     this.applyVisualState();
   }
 
+  setPaused(paused: boolean) {
+    if (this.paused === paused) {
+      return;
+    }
+    this.paused = paused;
+    if (paused) {
+      this.stopOrbit();
+      if (this.visualStateTimer) {
+        clearTimeout(this.visualStateTimer);
+        this.visualStateTimer = null;
+      }
+      if (this.zoomCompensationTimer) {
+        clearTimeout(this.zoomCompensationTimer);
+        this.zoomCompensationTimer = null;
+      }
+      return;
+    }
+    if (this.pendingResize) {
+      this.pendingResize = false;
+      this.applyResize();
+    }
+    if (this.mode === "focused" && !this.reducedMotion) {
+      this.orbitLastTime = performance.now();
+      this.startOrbit();
+    }
+  }
+
   resize(viewport: GraphViewport) {
     this.viewport = viewport;
     if (!this.graph) {
       return;
     }
-    this.graph.resize(viewport.width, viewport.height);
+    if (this.paused) {
+      this.pendingResize = true;
+      return;
+    }
+    this.applyResize();
+  }
+
+  private applyResize() {
+    const graph = this.graph;
+    if (!graph) {
+      return;
+    }
+    const viewport = this.viewport;
+    graph.resize(viewport.width, viewport.height);
     this.display = this.buildDisplay();
     this.layout = layoutGraph(this.display, viewport);
-    this.graph.setData(this.graphData(this.layout, this.display));
+    graph.setData(this.graphData(this.layout, this.display));
     this.scaleLabelsForZoom(this.safeZoom());
-    void this.graph.draw()
+    void graph.draw()
       .then(() => {
         if (this.destroyed) {
           return;
@@ -658,6 +721,9 @@ export class KnowledgeGraphController {
   }
 
   private scheduleVisualState(delay = 50) {
+    if (this.paused) {
+      return;
+    }
     if (this.visualStateTimer) {
       clearTimeout(this.visualStateTimer);
     }
@@ -682,6 +748,9 @@ export class KnowledgeGraphController {
   }
 
   private scheduleZoomCompensation() {
+    if (this.paused) {
+      return;
+    }
     if (this.zoomCompensationTimer) {
       clearTimeout(this.zoomCompensationTimer);
     }
@@ -735,14 +804,14 @@ export class KnowledgeGraphController {
   }
 
   private startOrbit() {
-    if (this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
+    if (this.paused || this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
       return;
     }
     this.orbitLastTime = performance.now();
     this.orbitLastPosition = this.orbitLastTime;
     const step = (now: number) => {
       this.orbitFrame = null;
-      if (this.destroyed || !this.graph || this.mode !== "focused") {
+      if (this.destroyed || this.paused || !this.graph || this.mode !== "focused") {
         return;
       }
       const delta = Math.min(60, Math.max(0, now - this.orbitLastTime));

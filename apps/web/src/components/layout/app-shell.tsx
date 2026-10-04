@@ -1,22 +1,45 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import { Header } from "@/components/layout/header";
 import { PageMotion } from "@/components/layout/page-motion";
 import { Sidebar } from "@/components/layout/sidebar";
+import { setSidebarTransitioning } from "@/components/layout/sidebar-transition";
+
+const SIDEBAR_TRANSITION_MS = 260;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const transitionTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (transitionTimer.current !== null) {
+      window.clearTimeout(transitionTimer.current);
+    }
+    setSidebarTransitioning(false);
+  }, []);
+
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => !current);
+    setSidebarTransitioning(true);
+    if (transitionTimer.current !== null) {
+      window.clearTimeout(transitionTimer.current);
+    }
+    transitionTimer.current = window.setTimeout(() => {
+      transitionTimer.current = null;
+      setSidebarTransitioning(false);
+    }, SIDEBAR_TRANSITION_MS);
+  }
 
   return (
     <div
       className="min-h-screen bg-transparent"
       style={{ "--sidebar-width": sidebarCollapsed ? "5rem" : "258px" } as CSSProperties}
     >
-      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((current) => !current)} />
+      <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       <div className={sidebarCollapsed ? "min-h-screen transition-[padding] duration-200 lg:pl-20" : "min-h-screen transition-[padding] duration-200 lg:pl-[258px]"}>
         <Header />
         <main className="mx-auto w-full max-w-[1680px] px-4 py-6 lg:px-6">

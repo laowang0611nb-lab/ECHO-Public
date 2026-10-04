@@ -9,7 +9,7 @@ function normalizeTab(value: string | string[] | undefined): KnowledgeBaseTab {
   const tab = first(value);
   return tab === "graph" || tab === "textbooks" || tab === "examples" || tab === "external" || tab === "recycle"
     ? tab
-    : "resources";
+    : "graph";
 }
 
 export default async function KnowledgePage({

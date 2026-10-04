@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useSidebarTransitioning } from "@/components/layout/sidebar-transition";
 import { buildPointHref } from "@/features/knowledge/view-model";
 import { useKnowledgeCourseDashboard, useKnowledgePointAnalytics } from "@/features/knowledge/queries";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ export function KnowledgeGraphView({
   onRetry: () => void;
 }) {
   const router = useRouter();
+  const sidebarTransitioning = useSidebarTransitioning();
   const source = useMemo(() => (graph ? buildGraphSource(graph, chapters) : null), [chapters, graph]);
   const dashboardQuery = useKnowledgeCourseDashboard(courseId);
   const [preferredFocusId] = useState<string | null>(() => {
@@ -106,6 +108,10 @@ export function KnowledgeGraphView({
     riskMapRef.current = riskMap;
     controllerRef.current?.setRiskMap(riskMap);
   }, [riskMap]);
+
+  useEffect(() => {
+    controllerRef.current?.setPaused(sidebarTransitioning);
+  }, [sidebarTransitioning]);
 
   useEffect(() => {
     if (!source || !initialFocusId || !canvasRef.current) {
@@ -277,13 +283,16 @@ export function KnowledgeGraphView({
     <div
       className={cn(
         "relative overflow-hidden rounded-xl border border-[#213c62] bg-[#081527] shadow-[0_18px_60px_rgba(8,21,39,0.22)] transition-[height,border-radius] duration-300",
-        fullscreen ? "h-screen rounded-none border-0" : "h-[720px]",
+        fullscreen ? "h-screen rounded-none border-0" : "h-full min-h-[420px]",
       )}
       ref={wrapperRef}
     >
       <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(rgba(84,128,185,0.075)_1px,transparent_1px),linear-gradient(90deg,rgba(84,128,185,0.075)_1px,transparent_1px)] bg-[size:32px_32px] opacity-55" />
       <div
-        className="absolute inset-0 z-[1]"
+        className={cn(
+          "absolute inset-0 z-[1] transition-[filter,opacity] duration-200",
+          sidebarTransitioning && "opacity-70 blur-[2px]",
+        )}
         ref={canvasRef}
       />
 
@@ -378,7 +387,7 @@ function GraphPanelShell({
   children: ReactNode;
 }) {
   return (
-    <div className="relative h-[720px] overflow-hidden rounded-xl border border-[#213c62] bg-[#081527]">
+    <div className="relative h-full min-h-[420px] overflow-hidden rounded-xl border border-[#213c62] bg-[#081527]">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(84,128,185,0.075)_1px,transparent_1px),linear-gradient(90deg,rgba(84,128,185,0.075)_1px,transparent_1px)] bg-[size:32px_32px] opacity-55" />
       <div className="absolute left-5 top-5 z-10">
         <h3 className="text-sm font-semibold text-white">{title}</h3>

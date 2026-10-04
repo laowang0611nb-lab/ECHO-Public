@@ -23,7 +23,6 @@ import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { LoadingState } from "@/components/common/loading-state";
 import { StatusBadge } from "@/components/common/status-badge";
-import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -49,8 +48,8 @@ const resourceTypeOptions: Array<{ value: ResourceType; label: string }> = [
   { value: "lab", label: "实验资料" },
 ];
 const tabs = [
-  { value: "resources", label: "资源管理" },
   { value: "graph", label: "知识图谱" },
+  { value: "resources", label: "资源管理" },
   { value: "textbooks", label: "教材与大纲" },
   { value: "examples", label: "示例与习题" },
   { value: "external", label: "外部资源" },
@@ -116,7 +115,7 @@ export function KnowledgeBasePage({
   }, [data.resources, search, statusFilter]);
 
   function handleTabChange(value: string) {
-    const next = tabs.some((tab) => tab.value === value) ? (value as KnowledgeBaseTab) : "resources";
+    const next = tabs.some((tab) => tab.value === value) ? (value as KnowledgeBaseTab) : "graph";
     setActiveTab(next);
     const params = new URLSearchParams();
     if (courseId) params.set("courseId", courseId);
@@ -148,53 +147,73 @@ export function KnowledgeBasePage({
   }
 
   return (
-    <motion.div animate={{ opacity: 1, y: 0 }} className="space-y-5" initial={{ opacity: 0, y: 6 }}>
-      <PageHeader
-        actions={
-          <>
-            <input
-              accept=".pdf,application/pdf"
-              className="sr-only"
-              disabled={uploadMutation.isPending}
-              onChange={(event) => handleUpload(event.target.files)}
-              ref={fileRef}
-              type="file"
-            />
-            <Select
-              items={resourceTypeOptions}
-              onValueChange={(value) => value && setUploadResourceType(value as ResourceType)}
-              value={uploadResourceType}
-            >
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-              <SelectContent><SelectGroup>{resourceTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
-            </Select>
-            <Button disabled={uploadMutation.isPending} onClick={() => fileRef.current?.click()} type="button">
-              <Plus data-icon="inline-start" />
-              {uploadMutation.isPending ? "正在上传..." : "上传资源"}
-            </Button>
-          </>
-        }
-        breadcrumbs={[{ label: "知识库" }]}
-        description="构建高质量的教学知识体系，让 AI 更懂你的课程。"
-        title="知识库"
-      />
+    <motion.div
+      animate={{ opacity: 1, y: 0 }}
+      className="flex h-[calc(100dvh-7rem)] min-h-[560px] flex-col overflow-hidden"
+      initial={{ opacity: 0, y: 6 }}
+    >
+      <Tabs className="min-h-0 flex-1" onValueChange={handleTabChange} value={activeTab}>
+        <div className="shrink-0 border-b border-border">
+          <TabsList className="grid h-11 w-full grid-cols-3 justify-start rounded-none px-0 sm:grid-cols-6" variant="line">
+            {tabs.map((tab) => (
+              <TabsTrigger className="h-full w-full px-2" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
-      {uploadMutation.isError ? (
-        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {uploadMutation.error instanceof Error ? uploadMutation.error.message : "资源上传失败，请重试。"}
-        </p>
-      ) : null}
+        <TabsContent className="min-h-0 flex-1 overflow-hidden pt-4" value={activeTab}>
+          {activeTab === "graph" ? (
+            <div className="h-full min-h-0">
+              <KnowledgeGraphView
+                chapters={data.chapters}
+                courseId={courseId}
+                courseName={course?.name ?? "课程"}
+                graph={graphQuery.data}
+                isError={graphQuery.isError}
+                isLoading={graphQuery.isPending}
+                key={courseId}
+                onRetry={() => void graphQuery.refetch()}
+              />
+            </div>
+          ) : null}
 
-      <Tabs onValueChange={handleTabChange} value={activeTab}>
-        <TabsList className="grid h-auto w-full grid-cols-3 justify-start rounded-none border-b border-border px-0 sm:grid-cols-6" variant="line">
-          {tabs.map((tab) => (
-            <TabsTrigger className="h-10 w-full px-2" key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>
-          ))}
-        </TabsList>
-
-        <TabsContent className="mt-5" value={activeTab}>
           {activeTab === "resources" ? (
-            <div className="space-y-5">
+            <div className="h-full space-y-4 overflow-y-auto pr-1">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold">资源管理</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">上传 PDF 教材，解析章节与知识点后即可在知识图谱中查看。</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    accept=".pdf,application/pdf"
+                    className="sr-only"
+                    disabled={uploadMutation.isPending}
+                    onChange={(event) => handleUpload(event.target.files)}
+                    ref={fileRef}
+                    type="file"
+                  />
+                  <Select
+                    items={resourceTypeOptions}
+                    onValueChange={(value) => value && setUploadResourceType(value as ResourceType)}
+                    value={uploadResourceType}
+                  >
+                    <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectGroup>{resourceTypeOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectGroup></SelectContent>
+                  </Select>
+                  <Button disabled={uploadMutation.isPending} onClick={() => fileRef.current?.click()} type="button">
+                    <Plus data-icon="inline-start" />
+                    {uploadMutation.isPending ? "正在上传..." : "上传资源"}
+                  </Button>
+                </div>
+              </div>
+
+              {uploadMutation.isError ? (
+                <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                  {uploadMutation.error instanceof Error ? uploadMutation.error.message : "资源上传失败，请重试。"}
+                </p>
+              ) : null}
+
               <ResourceStats summary={summary} />
               <div className="grid gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.85fr)]">
                 <Card className="gap-4 py-5">
@@ -267,21 +286,9 @@ export function KnowledgeBasePage({
             </div>
           ) : null}
 
-          {activeTab === "graph" ? (
-            <KnowledgeGraphView
-              chapters={data.chapters}
-              courseId={courseId}
-              courseName={course?.name ?? "课程"}
-              graph={graphQuery.data}
-              isError={graphQuery.isError}
-              isLoading={graphQuery.isPending}
-              key={courseId}
-              onRetry={() => void graphQuery.refetch()}
-            />
-          ) : null}
-
           {activeTab === "textbooks" ? (
-            data.resources.length ? (
+            <div className="h-full overflow-y-auto pr-1">
+              {data.resources.length ? (
               <Card className="gap-0 overflow-hidden py-0">
                 <CardHeader className="border-b px-5 py-4">
                   <CardTitle>教材与大纲</CardTitle>
@@ -291,12 +298,25 @@ export function KnowledgeBasePage({
                   {data.resources.filter((resource) => resource.document.resource_type === "textbook" || resource.document.resource_type === "outline").map((resource) => <ResourceRow courseId={courseId} key={resource.document.id} resource={resource} />)}
                 </CardContent>
               </Card>
-            ) : <EmptyState description="上传教材或教学大纲后，这里会显示正式知识来源。" title="暂无教材与大纲" />
+              ) : <EmptyState description="上传教材或教学大纲后，这里会显示正式知识来源。" title="暂无教材与大纲" />}
+            </div>
           ) : null}
 
-          {activeTab === "examples" ? <QuestionItemsTab chapters={data.chapters} courseId={courseId} query={questionItemsQuery} /> : null}
-          {activeTab === "external" ? <ExternalResourcesTab chapters={data.chapters} courseId={courseId} query={externalResourcesQuery} /> : null}
-          {activeTab === "recycle" ? <ResourceTrashTab query={trashedResourcesQuery} courseId={courseId} onChanged={data.refetch} /> : null}
+          {activeTab === "examples" ? (
+            <div className="h-full overflow-y-auto pr-1">
+              <QuestionItemsTab chapters={data.chapters} courseId={courseId} query={questionItemsQuery} />
+            </div>
+          ) : null}
+          {activeTab === "external" ? (
+            <div className="h-full overflow-y-auto pr-1">
+              <ExternalResourcesTab chapters={data.chapters} courseId={courseId} query={externalResourcesQuery} />
+            </div>
+          ) : null}
+          {activeTab === "recycle" ? (
+            <div className="h-full overflow-y-auto pr-1">
+              <ResourceTrashTab query={trashedResourcesQuery} courseId={courseId} onChanged={data.refetch} />
+            </div>
+          ) : null}
         </TabsContent>
       </Tabs>
     </motion.div>

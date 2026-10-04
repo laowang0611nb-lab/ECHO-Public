@@ -34,7 +34,8 @@ Labels are rendered by G6 in the graph layer. There is no per-frame DOM label ov
 - Far zoom shows focus, hovered, high-risk, and important first-hop nodes.
 - Near zoom shows more depth and degree.
 - Text stays horizontal and is compensated to keep a stable screen size.
-- Orbit has one rAF owner and completes one cycle in about 120 seconds.
+- Orbit has one rAF owner and completes one cycle in about 160 seconds.
+- Zoom is clamped to 10%-200%.
 - Orbit pauses during focus transitions, drag, zoom, hover, hidden pages, and `prefers-reduced-motion`.
 
 ## Risk Presentation
@@ -52,7 +53,8 @@ The derived value is never written back to the database and is not presented as 
 
 ## Interaction
 
-- Clicking a different node rebuilds the display tree and moves the camera in one G6 animation.
+- Clicking a different node rebuilds the display tree while every node glides from its previous layout position to the new slot, with the camera animating at the same time.
+- While the sidebar collapses or expands, canvas rendering pauses and the graph is briefly blurred, then redraws once at the new size.
 - Clicking the focused node opens the existing `buildPointHref` detail route.
 - Dragging or zooming enters free view and stops automatic orbit.
 - Clicking a node in free view returns to focused mode.
