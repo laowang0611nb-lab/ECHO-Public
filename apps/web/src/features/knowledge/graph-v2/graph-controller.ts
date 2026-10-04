@@ -9,7 +9,7 @@ import {
   type NodeData,
 } from "@antv/g6";
 
-import { buildGraphDisplay, graphClamp, rerootDisplayMetadata } from "./graph-adapter";
+import { buildGraphDisplay, graphClamp } from "./graph-adapter";
 import { layoutGraph, orbitPositions } from "./graph-layout";
 import { GRAPH_THEME, riskColor, riskHalo } from "./graph-theme";
 import type {
@@ -17,6 +17,7 @@ import type {
   GraphControllerOptions,
   GraphDisplayModel,
   GraphEdgeMeta,
+  GraphLayoutNode,
   GraphLayoutModel,
   GraphNodeMeta,
   GraphRiskLevel,
@@ -37,6 +38,10 @@ function truncateLabel(label: string | null | undefined, max = 12) {
   }
   const characters = Array.from(label);
   return characters.length > max ? `${characters.slice(0, max).join("")}…` : label;
+}
+
+function mix(left: number, right: number, amount: number) {
+  return left + (right - left) * amount;
 }
 
 function isNodeEvent(event: IElementEvent) {
@@ -64,6 +69,9 @@ export class KnowledgeGraphController {
   private orbitLastPosition = 0;
   private orbitMoving = false;
   private orbitBasePoints: Record<string, [number, number]> | null = null;
+  private currentPositionById = new Map<string, [number, number]>();
+  private handoffFrame: number | null = null;
+  private pendingFocusId: string | null = null;
   private interactionUntil = 0;
   private zoomNoticeAt = 0;
   private zoomCompensation = 1;
@@ -120,6 +128,7 @@ export class KnowledgeGraphController {
     this.viewport = options.viewport;
     this.display = this.buildDisplay();
     this.layout = layoutGraph(this.display, this.viewport);
+    this.seedCurrentPositions();
   }
 
   mount() {
@@ -128,6 +137,7 @@ export class KnowledgeGraphController {
     }
     this.display = this.buildDisplay();
     this.layout = layoutGraph(this.display, this.viewport);
+    this.seedCurrentPositions();
     const data = this.graphData(this.layout, this.display);
     this.graph = new Graph({
       container: this.container,
@@ -373,7 +383,6 @@ export class KnowledgeGraphController {
         semanticDegree: node.semanticDegree,
         evidenceCount: node.evidenceCount,
         displayRelation: node.displayRelation,
-        isFocus: node.isFocus,
         isConnected: node.isConnected,
         risk,
       };
@@ -381,7 +390,7 @@ export class KnowledgeGraphController {
         id: node.id,
         type: "circle",
         data: meta as unknown as Record<string, unknown>,
-        style: this.nodeDatumStyle(node, zoom),
+        style: this.nodeDatumStyle(node, zoom, 0),
       };
     });
 
@@ -420,61 +429,67 @@ export class KnowledgeGraphController {
 
   private nodeStyleFromDatum(datum: NodeData) {
     const meta = datum.data as GraphNodeMeta | undefined;
+    const id = meta?.pointId ?? String(datum.id);
+    const layoutNode = this.layout.nodeById.get(id);
+    const current = this.currentPositionById.get(id);
     return this.nodeDatumStyle(
       {
-        id: meta?.pointId ?? String(datum.id),
-        label: meta?.label ?? "",
-        x: Number(datum.style?.x ?? 0),
-        y: Number(datum.style?.y ?? 0),
-        isFocus: Boolean(meta?.isFocus),
-        depth: Number(meta?.depth ?? 0),
+        id,
+        label: meta?.label ?? layoutNode?.label ?? "",
+        x: current?.[0] ?? Number(datum.style?.x ?? layoutNode?.x ?? 0),
+        y: current?.[1] ?? Number(datum.style?.y ?? layoutNode?.y ?? 0),
+        depth: layoutNode?.depth ?? Number(meta?.depth ?? 0),
       },
       this.safeZoom(),
+      0,
     );
   }
 
   private nodeDatumStyle(
-    node: Pick<GraphLayoutModel["nodes"][number], "id" | "label" | "x" | "y" | "isFocus" | "depth">,
+    node: Pick<GraphLayoutModel["nodes"][number], "id" | "label" | "x" | "y" | "depth">,
     zoom = 1,
+    focusAmount = 0,
   ) {
     return {
       x: node.x,
       y: node.y,
-      ...this.styleWithoutPosition(node, zoom),
+      ...this.styleWithoutPosition(node, zoom, focusAmount),
     };
   }
 
   private styleWithoutPosition(
-    node: Pick<GraphLayoutModel["nodes"][number], "id" | "label" | "isFocus" | "depth">,
+    node: Pick<GraphLayoutModel["nodes"][number], "id" | "label" | "depth">,
     zoom = 1,
+    focusAmount = 0,
   ) {
     const risk = this.riskById.get(node.id) ?? "normal";
-    const baseSize = node.isFocus ? 22 : node.depth <= 1 ? 14 : node.depth <= 3 ? 11 : 9;
-    const labelSize = (node.isFocus ? 15 : node.depth <= 1 ? 12.5 : 12) / zoom;
-    const labelWidth = (node.isFocus ? 132 : node.depth <= 1 ? 112 : 96) / zoom;
+    const amount = Math.max(0, Math.min(1, focusAmount));
+    const normalSize = node.depth <= 1 ? 14 : node.depth <= 3 ? 11 : 9;
+    const normalLabelSize = node.depth <= 1 ? 12.5 : 12;
+    const normalLabelWidth = node.depth <= 1 ? 112 : 96;
     return {
-      size: baseSize,
+      size: mix(normalSize, 22, amount),
       fill: riskColor(risk),
       stroke: risk === "normal" ? GRAPH_THEME.primaryStrong : riskColor(risk),
-      lineWidth: node.isFocus ? 2.6 : 1.2,
+      lineWidth: mix(1.2, 2.6, amount),
       opacity: 1,
-      halo: node.isFocus || risk === "high",
-      haloStroke: node.isFocus ? GRAPH_THEME.focusHalo : riskHalo(risk),
-      haloLineWidth: node.isFocus ? 18 : 10,
-      haloOpacity: node.isFocus ? 0.72 : 0.38,
+      halo: amount > 0.01 || risk === "high",
+      haloStroke: amount > 0.55 ? GRAPH_THEME.focusHalo : riskHalo(risk),
+      haloLineWidth: mix(risk === "high" ? 10 : 0, 18, amount),
+      haloOpacity: mix(risk === "high" ? 0.38 : 0, 0.72, amount),
       label: true,
       labelText: truncateLabel(node.label),
       labelPlacement: "bottom" as const,
-      labelOffsetY: (node.isFocus ? 18 : 12) / zoom,
-      labelFill: node.isFocus ? GRAPH_THEME.text : GRAPH_THEME.textMuted,
-      labelFontSize: labelSize,
-      labelFontWeight: node.isFocus ? 700 : 540,
+      labelOffsetY: mix(12, 18, amount) / zoom,
+      labelFill: amount > 0.55 ? GRAPH_THEME.text : GRAPH_THEME.textMuted,
+      labelFontSize: mix(normalLabelSize, 15, amount) / zoom,
+      labelFontWeight: mix(540, 700, amount),
       labelWordWrap: true,
-      labelMaxWidth: labelWidth,
-      labelBackground: node.isFocus,
+      labelMaxWidth: mix(normalLabelWidth, 132, amount) / zoom,
+      labelBackground: amount > 0.55,
       labelBackgroundFill: GRAPH_THEME.surfaceStrong,
       labelBackgroundOpacity: 0.76,
-      labelPadding: node.isFocus ? [5, 8] : 0,
+      labelPadding: [mix(0, 5, amount), mix(0, 8, amount)],
       cursor: "pointer" as const,
     };
   }
@@ -498,7 +513,7 @@ export class KnowledgeGraphController {
   }
 
   setFocus(id: string, force = false) {
-    if (!force && id === this.focusId) {
+    if (!force && id === this.focusId && this.pendingFocusId === null) {
       return;
     }
     if (!this.source.pointById.has(id) || !this.graph || !this.ready) {
@@ -507,17 +522,31 @@ export class KnowledgeGraphController {
     this.startFocusHandoff(id);
   }
 
-  // Focus navigation is a camera + style handoff on a stable world map.
-  // The radial layout (positions, angles, display edges) is only rebuilt on
-  // creation, viewport changes or data replacement - never for a node click.
   private startFocusHandoff(id: string) {
-    const graph = this.graph;
-    if (!graph || id === this.focusId) {
+    if (this.mode === "free") {
+      this.startFreeViewFocusHandoff(id);
       return;
     }
-    const generation = ++this.transitionGeneration;
-    const previousFocusId = this.focusId;
+    this.startLocalFocusHandoff(id);
+  }
+
+  // Focused-mode navigation is a local A/B swap. The camera and every other
+  // node remain untouched; free-view navigation uses a camera recovery path.
+  private startLocalFocusHandoff(id: string) {
+    const graph = this.graph;
+    const fromId = this.focusId;
+    if (!graph || id === fromId) {
+      return;
+    }
+    const fromNode = this.layout.nodeById.get(fromId);
+    const toNode = this.layout.nodeById.get(id);
+    if (!fromNode || !toNode) {
+      return;
+    }
+    this.stopHandoff();
     this.stopOrbit();
+    const generation = ++this.transitionGeneration;
+    this.pendingFocusId = id;
     this.setMode("focusing");
     this.orbitAngle = 0;
     if (this.hoveredId !== null) {
@@ -525,36 +554,117 @@ export class KnowledgeGraphController {
       this.callbacks.onNodeHover(null);
     }
 
-    // 1. Re-root only the display metadata on the existing undirected tree.
-    this.display = rerootDisplayMetadata(this.display, id);
-    this.syncLayoutMetadata();
+    const fromStart = this.readLivePosition(fromId);
+    const toStart = this.readLivePosition(id);
+    this.commitPosition(fromId, fromStart);
+    this.commitPosition(id, toStart);
+    const dx = toStart[0] - fromStart[0];
+    const dy = toStart[1] - fromStart[1];
+    const distance = Math.hypot(dx, dy);
+    const perpendicular: [number, number] = distance > 0.001 ? [-dy / distance, dx / distance] : [0, 0];
+    const curve = Math.min(28, Math.max(10, distance * 0.12));
+    const duration = this.reducedMotion ? 180 : 720;
+    const startedAt = performance.now();
+    graph.setOptions({ animation: false });
+    void graph.setElementState({ [fromId]: [], [id]: [] }, false).catch((error: unknown) => this.reportRenderError(error));
+    const step = (now: number) => {
+      if (!this.isTransitionCurrent(generation) || this.pendingFocusId !== id) {
+        return;
+      }
+      const progress = Math.min(1, Math.max(0, (now - startedAt) / duration));
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const arc = Math.sin(Math.PI * progress) * curve;
+      const fromPoint: [number, number] = [
+        mix(fromStart[0], toStart[0], eased) + perpendicular[0] * arc,
+        mix(fromStart[1], toStart[1], eased) + perpendicular[1] * arc,
+      ];
+      const toPoint: [number, number] = [
+        mix(toStart[0], fromStart[0], eased) - perpendicular[0] * arc,
+        mix(toStart[1], fromStart[1], eased) - perpendicular[1] * arc,
+      ];
+      graph.updateNodeData([
+        { id: fromId, style: this.nodeDatumStyle({ ...fromNode, x: fromPoint[0], y: fromPoint[1] }, this.safeZoom(), 1 - eased) },
+        { id, style: this.nodeDatumStyle({ ...toNode, x: toPoint[0], y: toPoint[1] }, this.safeZoom(), eased) },
+      ]);
+      this.commitPosition(fromId, fromPoint);
+      this.commitPosition(id, toPoint);
+      void graph.draw().catch((error: unknown) => this.reportRenderError(error));
+      if (progress < 1) {
+        this.handoffFrame = requestAnimationFrame(step);
+        return;
+      }
+      this.handoffFrame = null;
+      this.completeLocalFocusHandoff(fromId, id, fromStart, toStart, generation);
+    };
+    this.handoffFrame = requestAnimationFrame(step);
+  }
 
-    // 2. Hand the focus role over: the clicked node grows while the previous
-    //    focus shrinks, driven by a single animated state application.
-    this.focusId = id;
-    this.selectedId = id;
-    this.normalizeBaseStyle(previousFocusId);
+  private completeLocalFocusHandoff(
+    fromId: string,
+    toId: string,
+    fromStart: [number, number],
+    toStart: [number, number],
+    generation: number,
+  ) {
+    if (!this.isTransitionCurrent(generation)) {
+      return;
+    }
+    const graph = this.graph;
+    const fromNode = this.layout.nodeById.get(fromId);
+    const toNode = this.layout.nodeById.get(toId);
+    if (!graph || !fromNode || !toNode) {
+      return;
+    }
+    this.commitPosition(fromId, toStart);
+    this.commitPosition(toId, fromStart);
+    this.focusId = toId;
+    this.selectedId = toId;
+    this.pendingFocusId = null;
+    graph.updateNodeData([
+      { id: fromId, style: this.nodeDatumStyle({ ...fromNode, x: toStart[0], y: toStart[1] }, this.safeZoom(), 0) },
+      { id: toId, style: this.nodeDatumStyle({ ...toNode, x: fromStart[0], y: fromStart[1] }, this.safeZoom(), 0) },
+    ]);
+    this.callbacks.onFocusCommit?.(toId);
     graph.setOptions({
-      animation: { duration: this.reducedMotion ? 160 : 820, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      animation: { duration: this.reducedMotion ? 180 : 780, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
     });
-    this.applyVisualState(true);
+    this.applyVisualState(false);
+    this.setMode("focused");
+    this.interactionUntil = performance.now() + IDLE_RESUME_MS;
+    if (!this.reducedMotion) {
+      this.startOrbit();
+    }
+    if (this.pendingRiskRefresh) {
+      this.pendingRiskRefresh = false;
+      window.setTimeout(() => this.refreshNodeStyles(), 150);
+    }
+  }
 
-    // 3. One obvious motion: the camera carries the clicked node to the anchor.
-    const animation = { duration: this.reducedMotion ? 160 : 820 };
-    void this.moveCameraToPoint(this.readLivePosition(id), this.focusAnchor(), animation)
+  private startFreeViewFocusHandoff(id: string) {
+    const graph = this.graph;
+    if (!graph || id === this.focusId) {
+      return;
+    }
+    this.stopHandoff();
+    this.stopOrbit();
+    const generation = ++this.transitionGeneration;
+    this.pendingFocusId = id;
+    this.setMode("focusing");
+    void this.moveCameraToPoint(this.readLivePosition(id), this.focusAnchor(), {
+      duration: this.reducedMotion ? 160 : 620,
+    })
       .then(() => {
-        if (!this.isTransitionCurrent(generation)) {
+        if (!this.isTransitionCurrent(generation) || this.pendingFocusId !== id) {
           return;
         }
-        this.applyVisualState(false);
-        graph.setOptions({
-          animation: { duration: this.reducedMotion ? 180 : 780, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
-        });
-        if (this.mode === "focusing") {
-          this.setMode("focused");
-        }
+        this.focusId = id;
+        this.selectedId = id;
+        this.pendingFocusId = null;
+        this.callbacks.onFocusCommit?.(id);
+        this.applyVisualState(true);
+        this.setMode("focused");
         this.interactionUntil = performance.now() + IDLE_RESUME_MS;
-        if (!this.reducedMotion && this.mode === "focused") {
+        if (!this.reducedMotion) {
           this.startOrbit();
         }
         if (this.pendingRiskRefresh) {
@@ -567,30 +677,17 @@ export class KnowledgeGraphController {
           return;
         }
         this.reportRenderError(error);
+        this.pendingFocusId = null;
         this.setMode("focused");
       });
   }
 
-  private syncLayoutMetadata() {
-    for (const node of this.layout.nodes) {
-      const meta = this.display.nodeById.get(node.id);
-      if (!meta) {
-        continue;
-      }
-      node.depth = meta.depth;
-      node.displayParentId = meta.displayParentId;
-      node.branchId = meta.branchId;
-      node.isFocus = meta.isFocus;
+  private stopHandoff() {
+    if (this.handoffFrame !== null) {
+      cancelAnimationFrame(this.handoffFrame);
+      this.handoffFrame = null;
     }
-  }
-
-  private normalizeBaseStyle(id: string) {
-    const graph = this.graph;
-    const node = this.layout.nodeById.get(id);
-    if (!graph || !node) {
-      return;
-    }
-    graph.updateNodeData([{ id, style: this.styleWithoutPosition({ ...node, isFocus: false }, this.safeZoom()) }]);
+    this.pendingFocusId = null;
   }
 
   setSelected(id: string | null) {
@@ -771,20 +868,52 @@ export class KnowledgeGraphController {
     return anchor;
   }
 
-  // The focus node may live anywhere in world coordinates now that layout and
-  // focus are decoupled, so read its live G6 position instead of assuming (0, 0).
-  private readLivePosition(id: string): [number, number] {
-    const graph = this.graph;
-    if (graph) {
-      try {
-        const [x, y] = graph.getElementPosition(id);
-        return [x, y];
-      } catch {
-        // Fall back to the stable layout position below.
-      }
+  private seedCurrentPositions() {
+    this.currentPositionById.clear();
+    for (const node of this.layout.nodes) {
+      this.currentPositionById.set(node.id, [node.x, node.y]);
     }
-    const node = this.layout.nodeById.get(id);
-    return node ? [node.x, node.y] : [0, 0];
+  }
+
+  private readGraphPosition(id: string): [number, number] | null {
+    const graph = this.graph;
+    if (!graph) {
+      return null;
+    }
+    try {
+      const [x, y] = graph.getElementPosition(id);
+      return [x, y];
+    } catch {
+      return null;
+    }
+  }
+
+  private commitPosition(id: string, point: [number, number]) {
+    this.currentPositionById.set(id, [point[0], point[1]]);
+  }
+
+  private commitPositions(points: Record<string, [number, number]>) {
+    for (const [id, point] of Object.entries(points)) {
+      this.commitPosition(id, point);
+    }
+  }
+
+  private positionedNode(node: GraphLayoutNode): GraphLayoutNode {
+    const point = this.currentPositionById.get(node.id);
+    return point ? { ...node, x: point[0], y: point[1] } : node;
+  }
+
+  // G6 is the rendered source during a transition; outside a transition the
+  // mutable current-position map is the authoritative fallback.
+  private readLivePosition(id: string): [number, number] {
+    const live = this.readGraphPosition(id);
+    if (live) {
+      if (this.mode !== "focusing") {
+        this.commitPosition(id, live);
+      }
+      return live;
+    }
+    return this.currentPositionById.get(id) ?? (this.layout.nodeById.get(id) ? [this.layout.nodeById.get(id)!.x, this.layout.nodeById.get(id)!.y] : [0, 0]);
   }
 
   private async moveCameraToPoint(
@@ -914,7 +1043,7 @@ export class KnowledgeGraphController {
     graph.updateNodeData(
       nodes.map((node) => ({
         id: node.id,
-        style: this.nodeDatumStyle(node, zoom),
+        style: this.nodeDatumStyle(this.positionedNode(node), zoom),
       })),
     );
     void graph
@@ -956,7 +1085,7 @@ export class KnowledgeGraphController {
     this.graph.updateNodeData(
       this.layout.nodes.map((node) => ({
         id: node.id,
-        style: this.nodeDatumStyle(node, zoom),
+        style: this.nodeDatumStyle(this.positionedNode(node), zoom),
       })),
     );
     void this.graph.draw().catch((error: unknown) => this.reportRenderError(error));
@@ -992,8 +1121,7 @@ export class KnowledgeGraphController {
       this.stopOrbit();
       return;
     }
-    // Leaving the panel resumes the orbit immediately instead of waiting for the idle delay.
-    this.interactionUntil = 0;
+    // Leaving the panel starts the orbit loop; the loop still respects the post-transition cooldown.
     if (this.mode === "focused" && !this.reducedMotion) {
       this.startOrbit();
     }
@@ -1030,6 +1158,7 @@ export class KnowledgeGraphController {
           }
           const points = this.orbitBasePoints;
           const positions = orbitPositions(points, points[this.focusId] ?? [0, 0], this.orbitAngle);
+          this.commitPositions(positions);
           this.orbitMoving = true;
           void graph
             .translateElementTo(positions, false)
@@ -1062,6 +1191,7 @@ export class KnowledgeGraphController {
       this.renderFrame = null;
     }
     this.stopOrbit();
+    this.stopHandoff();
     if (this.zoomCompensationTimer) {
       clearTimeout(this.zoomCompensationTimer);
       this.zoomCompensationTimer = null;

@@ -102,6 +102,7 @@ export interface GraphControllerCallbacks {
   onNodeClick: (id: string) => void;
   onNodeHover: (id: string | null, client?: GraphPoint) => void;
   onBackgroundClick: () => void;
+  onFocusCommit?: (id: string) => void;
   onZoomChange?: (zoom: number) => void;
   onModeChange?: (mode: KnowledgeGraphMode) => void;
   onRenderError?: (error: unknown) => void;
@@ -128,7 +129,6 @@ export interface GraphNodeMeta {
   semanticDegree: number;
   evidenceCount: number;
   displayRelation: GraphDisplayRelation | null;
-  isFocus: boolean;
   isConnected: boolean;
   risk: GraphRiskLevel;
 }

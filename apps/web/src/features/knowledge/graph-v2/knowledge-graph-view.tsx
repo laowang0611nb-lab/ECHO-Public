@@ -142,8 +142,12 @@ export function KnowledgeGraphView({
             }));
             return;
           }
-          setFocusOverride(id);
-          setSelectedOverride(id);
+          if (controllerRef.current) {
+            controllerRef.current.setFocus(id);
+          } else {
+            setFocusOverride(id);
+            setSelectedOverride(id);
+          }
         },
         onNodeHover: (id, client) => {
           if (!id) {
@@ -167,6 +171,10 @@ export function KnowledgeGraphView({
           if (focusIdRef.current) {
             setSelectedOverride(focusIdRef.current);
           }
+        },
+        onFocusCommit: (id) => {
+          setFocusOverride(id);
+          setSelectedOverride(id);
         },
         onZoomChange: (nextZoom) => setZoom(nextZoom),
         onModeChange: setMode,
