@@ -475,16 +475,16 @@ export class KnowledgeGraphController {
           return;
         }
         graph.setOptions({
-          animation: { duration: this.reducedMotion ? 180 : 620, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+          animation: { duration: this.reducedMotion ? 160 : 520, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
         });
         const morph = graph.translateElementTo(targets, true).catch((error: unknown) => this.reportRenderError(error));
-        this.applyVisualState();
         return Promise.all([morph, this.centerCamera(true)]);
       })
       .then(() => {
         if (!this.isTransitionCurrent(generation)) {
           return;
         }
+        this.applyVisualState(false);
         graph.setOptions({
           animation: { duration: this.reducedMotion ? 180 : 780, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
         });
@@ -634,10 +634,7 @@ export class KnowledgeGraphController {
       if (this.destroyed || this.graph !== graph) {
         return;
       }
-      await graph.translateTo(
-        [width * (width >= 1024 ? 0.43 : 0.5), height / 2],
-        animation,
-      );
+      await this.centerOnFocus(width >= 1024 ? 0.43 : 0.5, 0.5, animation);
       if (this.destroyed || this.graph !== graph) {
         return;
       }
@@ -653,20 +650,34 @@ export class KnowledgeGraphController {
   }
 
   private async centerCamera(animate: boolean): Promise<void> {
-    if (!this.graph) {
+    const graph = this.graph;
+    if (!graph) {
       return;
     }
     const zoom = this.safeZoom();
     const targetZoom = zoom < 0.88 ? 0.96 : graphClamp(zoom, MIN_ZOOM, MAX_ZOOM);
-    const animation = animate ? { duration: this.reducedMotion ? 180 : 820 } : false;
-    const { width, height } = this.viewport;
-    await this.graph.translateTo([width * 0.43, height * 0.52], animation);
+    const animation = animate ? { duration: this.reducedMotion ? 160 : 520 } : false;
     if (targetZoom !== zoom) {
-      await this.graph.zoomTo(targetZoom, animation, [width * 0.43, height * 0.52]);
+      await graph.zoomTo(targetZoom, animation);
+      if (this.destroyed || this.graph !== graph) {
+        return;
+      }
     }
+    const { width } = this.viewport;
+    await this.centerOnFocus(width >= 1024 ? 0.43 : 0.5, 0.52, animation);
   }
 
-  private applyVisualState() {
+  private async centerOnFocus(anchorX: number, anchorY: number, animation: boolean | { duration: number }): Promise<void> {
+    const graph = this.graph;
+    if (!graph) {
+      return;
+    }
+    const { width, height } = this.viewport;
+    const [currentX, currentY] = graph.getViewportByCanvas([0, 0]);
+    await graph.translateBy([width * anchorX - currentX, height * anchorY - currentY], animation);
+  }
+
+  private applyVisualState(animated = true) {
     if (!this.graph) {
       return;
     }
@@ -716,8 +727,8 @@ export class KnowledgeGraphController {
       const active = edge.source === activeId || edge.target === activeId;
       edgeStates[`semantic:${edge.id}`] = [active ? "semantic-active" : "semantic-hidden"];
     }
-    void this.graph.setElementState(nodeStates, true).catch((error: unknown) => this.reportRenderError(error));
-    void this.graph.setElementState(edgeStates, true).catch((error: unknown) => this.reportRenderError(error));
+    void this.graph.setElementState(nodeStates, animated).catch((error: unknown) => this.reportRenderError(error));
+    void this.graph.setElementState(edgeStates, animated).catch((error: unknown) => this.reportRenderError(error));
   }
 
   private scheduleVisualState(delay = 50) {

@@ -62,6 +62,9 @@ The derived value is never written back to the database and is not presented as 
 - Fit view calculates a bounded zoom from the real layout bounds and recenters the focus.
 - Fit view pauses orbit only while fitting and resumes it after the idle delay.
 - Fullscreen changes only the graph panel.
+- Fullscreen resizes both canvas axes: the graph renders into a full-bleed inner wrapper so the G6 container cannot collapse to the canvas height.
+- Re-root centering measures the focus node's current screen position, so free-view pan and zoom no longer push the new focus off-center.
+- The focus morph runs alone; element states apply after it settles instead of animating on top of the position and camera transitions.
 
 ## Extension Points
 

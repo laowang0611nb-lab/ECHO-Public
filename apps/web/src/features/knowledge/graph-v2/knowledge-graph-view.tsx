@@ -288,13 +288,15 @@ export function KnowledgeGraphView({
       ref={wrapperRef}
     >
       <div className="pointer-events-none absolute inset-0 z-0 bg-[linear-gradient(rgba(84,128,185,0.075)_1px,transparent_1px),linear-gradient(90deg,rgba(84,128,185,0.075)_1px,transparent_1px)] bg-[size:32px_32px] opacity-55" />
-      <div
-        className={cn(
-          "absolute inset-0 z-[1] transition-[filter,opacity] duration-200",
-          sidebarTransitioning && "opacity-70 blur-[2px]",
-        )}
-        ref={canvasRef}
-      />
+      <div className="absolute inset-0 z-[1]">
+        <div
+          className={cn(
+            "h-full w-full transition-[filter,opacity] duration-200",
+            sidebarTransitioning && "opacity-50 blur-[6px]",
+          )}
+          ref={canvasRef}
+        />
+      </div>
 
       <div className="pointer-events-none absolute left-4 top-4 z-20 max-w-[520px]">
         <div className="flex items-center gap-2 text-[#dceaff]">
