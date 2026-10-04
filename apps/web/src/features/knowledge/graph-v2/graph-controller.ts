@@ -63,6 +63,7 @@ export class KnowledgeGraphController {
   private orbitLastTime = 0;
   private orbitLastPosition = 0;
   private orbitMoving = false;
+  private orbitBasePoints: Record<string, [number, number]> | null = null;
   private interactionUntil = 0;
   private zoomNoticeAt = 0;
   private zoomCompensation = 1;
@@ -702,6 +703,7 @@ export class KnowledgeGraphController {
     if (!this.graph || !this.ready) {
       return;
     }
+    this.stopOrbit();
     this.orbitAngle = 0;
     this.setMode("focused");
     void this.moveCameraToPoint(this.readLivePosition(this.focusId), this.focusAnchor(), {
@@ -1016,10 +1018,17 @@ export class KnowledgeGraphController {
         this.orbitAngle += (delta / ORBIT_PERIOD) * Math.PI * 2;
         if (now - this.orbitLastPosition >= 32) {
           this.orbitLastPosition = now;
-          const points: Record<string, [number, number]> = {};
-          for (const node of this.layout.nodes) {
-            points[node.id] = this.readLivePosition(node.id);
+          // Keep one pre-orbit snapshot. Applying the cumulative phase to live
+          // positions would compound every frame and make the orbit accelerate.
+          if (!this.orbitBasePoints) {
+            this.orbitAngle = 0;
+            const points: Record<string, [number, number]> = {};
+            for (const node of this.layout.nodes) {
+              points[node.id] = this.readLivePosition(node.id);
+            }
+            this.orbitBasePoints = points;
           }
+          const points = this.orbitBasePoints;
           const positions = orbitPositions(points, points[this.focusId] ?? [0, 0], this.orbitAngle);
           this.orbitMoving = true;
           void graph
@@ -1040,6 +1049,7 @@ export class KnowledgeGraphController {
       cancelAnimationFrame(this.orbitFrame);
       this.orbitFrame = null;
     }
+    this.orbitBasePoints = null;
     this.orbitMoving = false;
   }
 

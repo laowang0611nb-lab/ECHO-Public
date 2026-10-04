@@ -40,6 +40,7 @@ Labels are rendered by G6 in the graph layer. There is no per-frame DOM label ov
 - Text stays horizontal and is compensated to keep a stable screen size.
 - Orbit has one rAF owner and completes one cycle in about 160 seconds.
 - Orbit rotates live rendered positions around the current focus node's live position; the focus node stays fixed as the pivot.
+- Orbit snapshots the current rendered positions when it starts or resumes, then rotates that fixed snapshot by the accumulated phase; cumulative phase is never applied to already-rotated live coordinates, so angular speed stays constant.
 - Zoom is clamped to 10%-200%.
 - Orbit pauses during focus transitions, drag, zoom, hover, hidden pages, and `prefers-reduced-motion`.
 - Orbit only runs while the pointer is outside the graph panel; entering the panel stops it and leaving resumes it immediately.
