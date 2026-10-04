@@ -536,10 +536,12 @@ export function rerootDisplayMetadata(
   const depth = new Map<string, number>([[focusId, 0]]);
   const parent = new Map<string, string | null>([[focusId, null]]);
   const branch = new Map<string, string>([[focusId, "root"]]);
+  const children = new Map<string, string[]>();
   const queue: string[] = [focusId];
   while (queue.length) {
     const currentId = queue.shift()!;
     const neighbors = [...(adjacency.get(currentId) ?? [])].sort(stableCompare);
+    const childIds = children.get(currentId) ?? [];
     for (const neighborId of neighbors) {
       if (depth.has(neighborId)) {
         continue;
@@ -547,8 +549,10 @@ export function rerootDisplayMetadata(
       depth.set(neighborId, (depth.get(currentId) ?? 0) + 1);
       parent.set(neighborId, currentId);
       branch.set(neighborId, currentId === focusId ? neighborId : branch.get(currentId) ?? neighborId);
+      childIds.push(neighborId);
       queue.push(neighborId);
     }
+    children.set(currentId, childIds);
   }
   const nodes = display.nodes.map((node) => {
     const nextDepth = depth.get(node.id);
@@ -560,14 +564,27 @@ export function rerootDisplayMetadata(
       depth: nextDepth,
       displayParentId: parent.get(node.id) ?? null,
       branchId: branch.get(node.id) ?? node.branchId,
+      radialBand: nextDepth,
+      siblingIndex: 0,
+      subtreeSize: 1,
+      baseAngle: 0,
       isFocus: node.id === focusId,
     };
   });
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  for (const childIds of children.values()) {
+    childIds.forEach((childId, index) => {
+      const child = nodeById.get(childId);
+      if (child) child.siblingIndex = index;
+    });
+  }
+  assignSubtreeSizes(children, nodeById);
+  assignAngles(focusId, children, nodeById);
   return {
     ...display,
     focusId,
     nodes,
-    nodeById: new Map(nodes.map((node) => [node.id, node])),
+    nodeById,
   };
 }
 

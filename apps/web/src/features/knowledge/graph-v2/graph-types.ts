@@ -131,6 +131,7 @@ export interface GraphNodeMeta {
   displayRelation: GraphDisplayRelation | null;
   isConnected: boolean;
   risk: GraphRiskLevel;
+  focusAmount?: number | null;
 }
 
 export interface GraphEdgeMeta {

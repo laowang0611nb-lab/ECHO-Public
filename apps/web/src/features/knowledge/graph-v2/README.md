@@ -2,12 +2,12 @@
 
 This module renders the teacher knowledge graph as a focus-centered knowledge network with a stable layout root.
 
-The graph keeps a stable spatial layout while focus changes. In focused mode, navigation is an elastic local focus handoff: A and B exchange the focus/vacated slots while one- and two-hop display-tree neighbors receive a small symmetric falloff displacement. The camera and distant nodes stay fixed. Free-view navigation is the only path allowed to move the camera.
+Focus navigation is implemented as an anchored camera-and-layout transition. When a user clicks a node, that node's current world position becomes the anchor of the next rooted layout. The camera travels to that anchor while the existing graph continuously morphs into the new layout. The clicked node does not teleport to the previous focus position; the viewport travels to the concept.
 
 ## Architecture
 
-- `graph-adapter.ts` turns the API graph into a knowledge-point-only source model and a deterministic display tree.
-- `graph-layout.ts` computes a stable radial/organic layout from real container dimensions and builds the reversible local displacement field used by focused-mode handoffs. It does not run force simulation and does not use random numbers.
+- `graph-adapter.ts` turns the API graph into a knowledge-point-only source model and re-roots the existing deterministic display tree without changing its undirected edge set.
+- `graph-layout.ts` computes a stable radial/organic layout from real container dimensions and translates a rooted layout so its root remains anchored at the clicked node's live world position. It does not run force simulation and does not use random numbers.
 - `graph-controller.ts` owns the single G6 instance, focus transitions, camera, free view, orbit, hover states, semantic-edge reveal, and label LOD.
 - The first G6 render is deferred one frame, and `destroy()` waits for an in-flight render, so mount/unmount cycles (React StrictMode, fast route changes) never trip G6's destroyed-instance guard.
 - `knowledge-graph-view.tsx` owns route state, course switching, filters, fullscreen, loading/empty/error states, and the analytics card.
@@ -23,7 +23,7 @@ The backend graph can contain many-to-many semantic relations. The display tree 
 - prerequisite relations are preferred when a parent must be selected;
 - remaining ties use chapter order, point order, label, and ID;
 - raw semantic edges remain in `GraphSourceModel.semanticEdges` and are revealed only for the active node.
-- focus styling is driven by runtime `focusId` and datum-style interpolation; the layout root, edge set, and radial ordering are not rebuilt by a normal focus click.
+- focus navigation re-roots display metadata (`depth`, `displayParentId`, `branchId`, angles) and computes a new rooted radial layout while preserving the existing undirected display-edge identities.
 
 Display-tree edges are layout-only and do not carry source/target direction. Only semantic reveal edges are directional, so a prerequisite arrow always preserves the API's original direction.
 
@@ -44,8 +44,8 @@ Labels are rendered by G6 in the graph layer. There is no per-frame DOM label ov
 - Zoom is clamped to 10%-200%.
 - Orbit pauses during focus transitions, drag, zoom, hover, hidden pages, and `prefers-reduced-motion`.
 - Orbit only runs while the pointer is outside the graph panel; entering the panel stops it and leaving resumes it immediately.
-- A focused-mode handoff runs for about 0.72s (0.18s under `prefers-reduced-motion`): A and B travel along shallow opposite arcs, nearby display-tree nodes follow with ordinary eased interpolation, and size, halo, and label emphasis interpolate on the same timeline.
-- The camera and all nodes beyond the local two-hop falloff remain unchanged during a focused-mode handoff; orbit rebases after the whole elastic handoff is committed and resumes only after the post-transition cooldown.
+- A focused-mode navigation runs for about 0.90s (0.18s under `prefers-reduced-motion`) with one master progress value: camera travel, layout morph, focus emphasis, and semantic emphasis are staged from that value.
+- The clicked node stays fixed in world space while the camera travels to it; all nodes morph from their live positions to the translated B-rooted target layout. Orbit rebases after the complete layout commit and resumes only after the cooldown.
 
 ## Risk Presentation
 
@@ -62,7 +62,7 @@ The derived value is never written back to the database and is not presented as 
 
 ## Interaction
 
-- Clicking a different node in focused mode uses a reversible elastic local handoff: the clicked B takes A's exact live slot, A moves to B's old live slot, one-hop display-tree neighbors follow by a falloff of 0.48 (typically 0.34 after the A/B influence difference), two-hop nodes by 0.14, and the difference is clamped to +/-0.42. Distant nodes do not move and the camera does not move.
+- Clicking a different node in focused mode anchors the clicked node's current world position, re-roots the display tree around it, and morphs the graph toward the translated rooted layout while the camera travels to that node. A moves to its natural position in the new layout rather than swapping into B's old slot.
 - While the sidebar collapses or expands, canvas rendering pauses and the graph is briefly blurred, then redraws once at the new size.
 - Clicking the focused node opens the existing `buildPointHref` detail route.
 - Dragging or zooming enters free view and stops automatic orbit.
@@ -75,8 +75,8 @@ The derived value is never written back to the database and is not presented as 
 - Fit view pauses orbit only while fitting and resumes it after the idle delay.
 - Fullscreen changes only the graph panel.
 - Fullscreen resizes both canvas axes: the graph renders into a full-bleed inner wrapper so the G6 container cannot collapse to the canvas height.
-- Free-view navigation may restore the camera to the clicked node; future focused-mode clicks return to the elastic local handoff once free view settles.
-- The local handoff owns positions, focus size, halo, and label emphasis on one timeline; semantic edge opacity is swept in the same timeline and final neighbor dimming/semantic emphasis commit at handoff completion.
+- Free-view navigation uses the same anchored camera-and-layout navigation when a node is clicked, then returns to focused mode after the transition settles.
+- The navigation timeline owns positions, camera travel, focus size, halo, label emphasis, and semantic edge staging; analytics commits only after the visual navigation settles.
 
 ## Extension Points
 
