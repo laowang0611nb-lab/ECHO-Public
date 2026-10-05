@@ -1,7 +1,7 @@
 "use client";
 
 import type { TeachingStrategyListItem, TeachingStrategyType } from "@echo/shared-types";
-import { Plus, Sparkles } from "lucide-react";
+import { Check, Flag, Play, Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -273,31 +273,57 @@ function StrategyRail({
 }: {
   stats: { total: number; accepted: number; highPriority: number; planning: number };
 }) {
-  const items = [
-    { label: "策略建议", value: stats.total },
-    { label: "已确认", value: stats.accepted },
-    { label: "高优先级", value: stats.highPriority },
-    { label: "执行中", value: stats.planning },
+  const stages = [
+    { label: "策略建议", value: stats.total, icon: Sparkles, marker: "border-blue-200 bg-blue-50 text-blue-600", connector: "bg-blue-200" },
+    { label: "已确认", value: stats.accepted, icon: Check, marker: "border-emerald-200 bg-emerald-50 text-emerald-700", connector: "bg-emerald-200" },
+    { label: "执行中", value: stats.planning, icon: Play, marker: "border-sky-200 bg-sky-50 text-sky-700", connector: "" },
   ];
 
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-card px-5 py-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">策略推进</p>
-          <p className="mt-1 text-xs text-muted-foreground">从建议到确认，再到执行</p>
+    <section className="overflow-hidden rounded-xl border-2 border-border bg-card">
+      <div className="grid lg:grid-cols-[220px_minmax(0,1fr)_180px]">
+        <div className="border-b border-border px-5 py-5 lg:border-b-0 lg:border-r">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Sparkles className="size-4" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">策略推进</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">从建议到确认，再到执行</p>
+            </div>
+          </div>
+          <span className="mt-4 inline-flex rounded-full border border-border bg-muted/45 px-2.5 py-1 text-[11px] text-muted-foreground">
+            当前筛选范围
+          </span>
         </div>
-        <p className="text-xs text-muted-foreground">当前筛选范围</p>
+
+        <ol aria-label="策略推进阶段" className="grid grid-cols-3 px-3 py-5 sm:px-5">
+          {stages.map((stage, index) => {
+            const Icon = stage.icon;
+            return (
+              <li className="relative flex min-w-0 flex-col items-center text-center" key={stage.label}>
+                {index < stages.length - 1 ? (
+                  <span aria-hidden="true" className={`absolute left-1/2 top-4 h-px w-full ${stage.connector}`} />
+                ) : null}
+                <span className={`relative z-10 flex size-8 items-center justify-center rounded-full border-2 ${stage.marker}`}>
+                  <Icon className="size-3.5" />
+                </span>
+                <span className="mt-2.5 text-2xl font-semibold leading-none">{stage.value}</span>
+                <span className="mt-1 text-[11px] leading-4 text-muted-foreground">{stage.label}</span>
+              </li>
+            );
+          })}
+        </ol>
+
+        <div className="flex items-center justify-between gap-4 border-t border-amber-100 bg-amber-50/55 px-5 py-4 lg:flex-col lg:items-start lg:justify-center lg:border-l lg:border-t-0">
+          <span className="flex items-center gap-2 text-xs font-medium text-amber-700">
+            <Flag className="size-4" />
+            高优先级
+          </span>
+          <span className="text-3xl font-semibold leading-none text-amber-700">{stats.highPriority}</span>
+          <span className="hidden text-[11px] leading-4 text-amber-700/75 lg:block">需要优先处理</span>
+        </div>
       </div>
-      <ol className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-0">
-        {items.map((item, index) => (
-          <li className="flex min-w-0 items-center gap-3 sm:flex-1" key={item.label}>
-            <span className="text-2xl font-semibold leading-none">{item.value}</span>
-            <span className="text-xs text-muted-foreground">{item.label}</span>
-            {index < items.length - 1 ? <span aria-hidden="true" className="hidden text-muted-foreground/60 sm:mx-4 sm:block">→</span> : null}
-          </li>
-        ))}
-      </ol>
     </section>
   );
 }
