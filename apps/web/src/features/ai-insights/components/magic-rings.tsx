@@ -127,7 +127,8 @@ export function MagicRings({ state, className }: MagicRingsProps) {
       currentSpeed += (targetSpeed - currentSpeed) * Math.min(1, delta * 6);
       currentOpacity += (targetOpacity - currentOpacity) * Math.min(1, delta * 6);
 
-      const ringCount = window.innerWidth < 768 ? 3 : window.innerWidth < 1200 ? 4 : 5;
+      const mobile = window.innerWidth < 768;
+      const ringCount = mobile ? 3 : window.innerWidth < 1200 ? 4 : 5;
       const minDimension = Math.min(width, height);
       const maxRadius = minDimension * 0.46;
       const totalWeight = BASE_RADIUS + (ringCount - 1) * RADIUS_STEP * RING_GAP;
@@ -140,7 +141,8 @@ export function MagicRings({ state, className }: MagicRingsProps) {
         const radius = Math.max(8, normalizedRadius + wave);
         const ringOpacity = currentOpacity * Math.exp(-index / (ATTENUATION * 0.5));
         const color = mixColor(COLOR_ONE, COLOR_TWO, index / Math.max(1, ringCount - 1));
-        const lineWidth = LINE_THICKNESS + Math.sin(rotation * 0.8 + index) * NOISE_AMOUNT;
+        const noiseAmount = mobile ? 0 : NOISE_AMOUNT;
+        const lineWidth = LINE_THICKNESS + Math.sin(rotation * 0.8 + index) * noiseAmount;
 
         context.beginPath();
         context.arc(width / 2, height / 2, radius, 0, Math.PI * 2);
