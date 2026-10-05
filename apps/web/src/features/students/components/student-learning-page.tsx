@@ -1,8 +1,9 @@
 "use client";
 import { Activity, AlertTriangle, ChevronRight, ClipboardCheck, GraduationCap, LoaderCircle, Search, Sparkles, TrendingUp, Users, X } from "lucide-react";
+import { useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
@@ -396,22 +397,145 @@ function StudentAnalyticsLoadingState({ activeTab }: { activeTab: StudentAnalyti
 }
 
 function KnowledgeDistribution({ summary }: { summary: ReturnType<typeof useStudentAnalytics>["summary"] }) {
-  const total = Math.max(1, summary.studentCount);
   return (
     <Card className="gap-4 py-5">
       <CardHeader className="px-5"><CardTitle>知识掌握分布</CardTitle><p className="text-xs text-muted-foreground">仅统计存在真实掌握状态的学生。</p></CardHeader>
       <CardContent className="space-y-4 px-5">
-        <div className="mx-auto flex size-40 items-center justify-center rounded-full" style={{ background: `conic-gradient(#2f7cf6 0 ${summary.masteryDistribution[0]?.value / total * 100}%, #22c55e ${summary.masteryDistribution[0]?.value / total * 100}% ${(summary.masteryDistribution[0]?.value + summary.masteryDistribution[1]?.value) / total * 100}%, #fb923c ${(summary.masteryDistribution[0]?.value + summary.masteryDistribution[1]?.value) / total * 100}% ${(summary.masteryDistribution[0]?.value + summary.masteryDistribution[1]?.value + summary.masteryDistribution[2]?.value) / total * 100}%, #fda4af ${(summary.masteryDistribution[0]?.value + summary.masteryDistribution[1]?.value + summary.masteryDistribution[2]?.value) / total * 100}% 100%)` }}>
-          <div className="flex size-28 flex-col items-center justify-center rounded-full bg-card">
-            <span className="text-2xl font-semibold">{summary.studentCount}</span>
-            <span className="text-xs text-muted-foreground">学生总数</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {summary.masteryDistribution.map((item) => <div className="flex items-center gap-2 text-sm" key={item.label}><span className={cn("size-2 rounded-full", item.tone)} /><span className="flex-1 text-muted-foreground">{item.label}</span><span className="font-medium">{item.value}</span></div>)}
-        </div>
+        <KnowledgeDistributionRing distribution={summary.masteryDistribution} total={Math.max(1, summary.studentCount)} />
       </CardContent>
     </Card>
+  );
+}
+
+function KnowledgeDistributionRing({
+  distribution,
+  total,
+}: {
+  distribution: ReturnType<typeof useStudentAnalytics>["summary"]["masteryDistribution"];
+  total: number;
+}) {
+  const reducedMotion = useReducedMotion() ?? false;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const centerValueRef = useRef<HTMLSpanElement>(null);
+  const valueRefs = useRef<Array<HTMLSpanElement | null>>([]);
+  const distributionRef = useRef(distribution);
+  const totalRef = useRef(total);
+  const hasAnimatedRef = useRef(false);
+  const distributionKey = distribution.map((item) => `${item.label}:${item.value}`).join("|");
+
+  useEffect(() => {
+    distributionRef.current = distribution;
+    totalRef.current = total;
+  }, [distribution, total]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const drawingContext = canvas.getContext("2d");
+    if (!drawingContext) return;
+    const context = drawingContext;
+    const snapshot = distributionRef.current;
+    const snapshotTotal = Math.max(1, totalRef.current);
+    const colors = ["#2f7cf6", "#22c55e", "#fb923c", "#fda4af"];
+    const size = 160;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const center = size / 2;
+    const radius = 58;
+    const lineWidth = 18;
+    canvas.width = Math.round(size * dpr);
+    canvas.height = Math.round(size * dpr);
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    function updateNumbers(progress: number) {
+      const swept = progress * snapshotTotal;
+      if (centerValueRef.current) centerValueRef.current.textContent = String(Math.round(swept));
+      snapshot.forEach((item, index) => {
+        const before = snapshot.slice(0, index).reduce((sum, current) => sum + current.value, 0);
+        const visible = Math.max(0, Math.min(item.value, swept - before));
+        const target = valueRefs.current[index];
+        if (target) target.textContent = String(Math.round(visible));
+      });
+    }
+
+    function draw(progress: number) {
+      context.clearRect(0, 0, size, size);
+      context.lineWidth = lineWidth;
+      context.beginPath();
+      context.arc(center, center, radius, 0, Math.PI * 2);
+      context.strokeStyle = "rgba(226, 232, 240, 0.76)";
+      context.stroke();
+
+      const sweepEnd = -Math.PI / 2 + progress * Math.PI * 2;
+      let cumulative = 0;
+      snapshot.forEach((item, index) => {
+        const start = -Math.PI / 2 + (cumulative / snapshotTotal) * Math.PI * 2;
+        const end = start + (item.value / snapshotTotal) * Math.PI * 2;
+        const visibleEnd = Math.min(end, sweepEnd);
+        if (visibleEnd > start) {
+          context.beginPath();
+          context.arc(center, center, radius, start, visibleEnd);
+          context.strokeStyle = colors[index] ?? colors[colors.length - 1];
+          context.stroke();
+        }
+        cumulative += item.value;
+      });
+
+      if (progress < 1) {
+        const sweepRadius = radius + lineWidth / 2 + 2;
+        context.beginPath();
+        context.arc(center, center, sweepRadius, sweepEnd, sweepEnd + 0.16);
+        context.strokeStyle = "rgba(47, 128, 255, 0.72)";
+        context.lineWidth = 2;
+        context.lineCap = "round";
+        context.stroke();
+      }
+    }
+
+    const shouldAnimate = !reducedMotion && !hasAnimatedRef.current;
+    hasAnimatedRef.current = true;
+    if (!shouldAnimate) {
+      draw(1);
+      updateNumbers(1);
+      return;
+    }
+
+    let frame = 0;
+    let startedAt = 0;
+    const animate = (timestamp: number) => {
+      if (!startedAt) startedAt = timestamp;
+      const progress = Math.min(1, (timestamp - startedAt) / 2000);
+      draw(progress);
+      updateNumbers(progress);
+      if (progress < 1) frame = requestAnimationFrame(animate);
+    };
+    frame = requestAnimationFrame(animate);
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [distributionKey, reducedMotion, total]);
+
+  return (
+    <div className="space-y-4">
+      <div className="relative mx-auto size-40">
+        <canvas aria-hidden="true" className="absolute inset-0 size-full" ref={canvasRef} />
+        <div className="absolute inset-[31px] flex flex-col items-center justify-center rounded-full bg-card">
+          <span className="text-2xl font-semibold" ref={centerValueRef}>0</span>
+          <span className="text-xs text-muted-foreground">学生总数</span>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {distribution.map((item, index) => (
+          <div className="flex items-center gap-2 text-sm" key={item.label}>
+            <span className={cn("size-2 rounded-full", item.tone)} />
+            <span className="flex-1 text-muted-foreground">{item.label}</span>
+            <span className="font-medium" ref={(node) => { valueRefs.current[index] = node; }}>0</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

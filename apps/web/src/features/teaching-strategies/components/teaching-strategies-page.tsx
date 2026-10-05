@@ -9,7 +9,6 @@ import { useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { LoadingState } from "@/components/common/loading-state";
-import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -157,12 +156,7 @@ export function TeachingStrategiesPage({
       {generateMutation.isError ? <p className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{generateMutation.error instanceof Error ? generateMutation.error.message : "策略生成失败。"}</p> : null}
       {actionMutation.isError ? <p className="rounded-lg border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">{actionMutation.error instanceof Error ? actionMutation.error.message : "策略状态更新失败。"}</p> : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Target} label="策略建议总数" supporting="当前筛选范围内" value={stats.total} />
-        <StatCard icon={CheckCircle2} label="已采纳 / 已计划" supporting="教师已确认的策略" value={stats.accepted} />
-        <StatCard icon={TrendingUp} label="高优先级" supporting="需要优先处理" value={stats.highPriority} />
-        <StatCard icon={Users} label="执行中计划" supporting="关联当前课程" value={stats.planning} />
-      </section>
+      <StrategyRail stats={stats} />
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,0.65fr)]">
         <Card className="gap-4 py-5">
@@ -271,6 +265,49 @@ export function TeachingStrategiesPage({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function StrategyRail({
+  stats,
+}: {
+  stats: { total: number; accepted: number; highPriority: number; planning: number };
+}) {
+  const items = [
+    { label: "策略建议", value: stats.total, detail: "当前范围", icon: Target, tone: "bg-blue-50 text-blue-700" },
+    { label: "已采纳 / 已计划", value: stats.accepted, detail: "教师已确认", icon: CheckCircle2, tone: "bg-emerald-50 text-emerald-700" },
+    { label: "高优先级", value: stats.highPriority, detail: "需要优先处理", icon: TrendingUp, tone: "bg-amber-50 text-amber-700" },
+    { label: "执行中计划", value: stats.planning, detail: "关联当前课程", icon: Users, tone: "bg-violet-50 text-violet-700" },
+  ];
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-card px-5 py-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">策略推进</p>
+          <p className="mt-1 text-xs text-muted-foreground">从建议到确认，再到执行</p>
+        </div>
+        <p className="text-xs text-muted-foreground">当前筛选范围</p>
+      </div>
+      <ol className="relative mt-4 grid gap-2 md:grid-cols-4">
+        <span aria-hidden="true" className="absolute left-[12%] right-[12%] top-5 hidden h-px bg-border md:block" />
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <li className="relative flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5 md:border-transparent md:bg-transparent md:px-0" key={item.label}>
+              <span className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full ${item.tone}`}>
+                <Icon className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs text-muted-foreground">{item.label}</span>
+                <span className="mt-0.5 block text-xl font-semibold leading-none">{item.value}</span>
+              </span>
+              <span className="hidden text-[10px] text-muted-foreground lg:block">{item.detail}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 

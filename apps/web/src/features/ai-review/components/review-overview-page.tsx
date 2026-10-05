@@ -121,7 +121,7 @@ export function ReviewOverviewPage({
         <div className="grid lg:grid-cols-[minmax(260px,0.85fr)_minmax(0,2.15fr)]">
           <Link
             className="group relative flex min-h-36 flex-col justify-between overflow-hidden bg-sidebar px-5 py-5 text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
-            href={`/ai-review?courseId=${courseId}`}
+            href={`/ai-review/pending?courseId=${courseId}`}
           >
             <span className="pointer-events-none absolute inset-y-5 left-0 w-0.5 rounded-r-full bg-primary" />
             <span className="flex items-start justify-between gap-4">
@@ -142,7 +142,7 @@ export function ReviewOverviewPage({
           <div className="grid sm:grid-cols-3">
             <ReviewSignal
               detail={`占待审核记录 ${highRiskShare}%`}
-              href={`/ai-review?courseId=${courseId}&severity=high`}
+              href={`/ai-review/pending?courseId=${courseId}&severity=high`}
               icon={AlertTriangle}
               label="高风险回答"
               tone="danger"
@@ -150,7 +150,7 @@ export function ReviewOverviewPage({
             />
             <ReviewSignal
               detail="未检索到教材来源"
-              href={`/ai-review?courseId=${courseId}&reason=missing_course_basis`}
+              href={`/ai-review/pending?courseId=${courseId}&reason=missing_course_basis`}
               icon={FileWarning}
               label="缺少课程依据"
               tone="warning"
@@ -158,7 +158,7 @@ export function ReviewOverviewPage({
             />
             <ReviewSignal
               detail="学生主动标记或连续追问"
-              href={`/ai-review?courseId=${courseId}&reason=student_not_resolved`}
+              href={`/ai-review/pending?courseId=${courseId}&reason=student_not_resolved`}
               icon={ShieldCheck}
               label="学生未解决"
               tone="info"
