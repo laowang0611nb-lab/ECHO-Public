@@ -10,6 +10,7 @@ Focus navigation is implemented as an anchored camera-and-layout transition. Whe
 - `graph-layout.ts` computes a stable radial/organic layout from real container dimensions and translates a rooted layout so its root remains anchored at the clicked node's live world position. It does not run force simulation and does not use random numbers.
 - `graph-controller.ts` owns the single G6 instance, focus transitions, camera, free view, orbit, hover states, semantic-edge reveal, and label LOD.
 - The first G6 render is deferred one frame, and `destroy()` waits for an in-flight render, so mount/unmount cycles (React StrictMode, fast route changes) never trip G6's destroyed-instance guard.
+- Entering or returning to the graph shows a short 1.5s initialization overlay so the first G6 render and camera centering are not exposed as a top-left jump.
 - `knowledge-graph-view.tsx` owns route state, course switching, filters, fullscreen, loading/empty/error states, and the analytics card.
 - `analytics-card.tsx` renders only fields returned by the real `KnowledgePointAnalytics` API.
 

@@ -60,6 +60,7 @@ export function KnowledgeGraphView({
   const [filter, setFilter] = useState<KnowledgeGraphFilter>("all");
   const [fullscreen, setFullscreen] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<KnowledgeGraphController | null>(null);
@@ -103,6 +104,14 @@ export function KnowledgeGraphView({
   useEffect(() => {
     focusIdRef.current = focusId;
   }, [focusId]);
+
+  useEffect(() => {
+    if (!source || !initialFocusId) {
+      return;
+    }
+    const timer = window.setTimeout(() => setInitialLoading(false), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [courseId, initialFocusId, source]);
 
   useEffect(() => {
     riskMapRef.current = riskMap;
@@ -386,6 +395,27 @@ export function KnowledgeGraphView({
         point={selectedPoint}
         risk={selectedRisk}
       />
+
+      <div
+        aria-hidden={!initialLoading}
+        className={cn(
+          "absolute inset-0 z-50 flex items-center justify-center bg-[#081527]/96 backdrop-blur-sm transition-opacity duration-300",
+          initialLoading ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+        )}
+        role="status"
+      >
+        <div className="flex items-center gap-4 rounded-xl border border-[#315b8f]/40 bg-[#0b1b30]/95 px-5 py-4 shadow-[0_18px_50px_rgba(3,10,24,0.35)]">
+          <span className="relative flex size-9 items-center justify-center">
+            <span className="absolute inset-0 animate-pulse rounded-full border border-[#4b9cff]/35" />
+            <span className="absolute inset-1 animate-spin rounded-full border-2 border-[#4b9cff]/20 border-t-[#6ab0ff]" />
+            <span className="size-2 rounded-full bg-[#6ab0ff] shadow-[0_0_14px_rgba(106,176,255,0.8)]" />
+          </span>
+          <span>
+            <span className="block text-sm font-medium text-[#eaf2ff]">正在准备知识图谱</span>
+            <span className="mt-1 block text-xs text-[#8fa5c2]">正在初始化视图与中心布局…</span>
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
