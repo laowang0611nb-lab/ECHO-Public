@@ -1,0 +1,454 @@
+.card {
+  --ai-card-bg: rgba(255, 255, 255, 0.58);
+  --ai-card-border: rgba(66, 133, 244, 0.2);
+  --ai-card-border-highlight: rgba(255, 255, 255, 0.78);
+  --ai-card-shadow:
+    0 24px 70px rgba(53, 116, 220, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid var(--ai-card-border);
+  border-radius: 24px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(246, 250, 255, 0.5)
+    );
+  box-shadow: var(--ai-card-shadow);
+  backdrop-filter: blur(20px) saturate(135%);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.card::before {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  content: "";
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 50% 36%,
+      rgba(47, 128, 255, 0.13),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 78% 15%,
+      rgba(98, 212, 255, 0.08),
+      transparent 25%
+    );
+}
+
+.card:hover {
+  border-color: rgba(66, 133, 244, 0.32);
+  box-shadow:
+    0 26px 74px rgba(53, 116, 220, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  transform: translateY(-1px);
+}
+
+.card:focus-within {
+  border-color: rgba(47, 128, 255, 0.42);
+  box-shadow:
+    0 26px 74px rgba(53, 116, 220, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+@supports not (
+  (backdrop-filter: blur(1px)) or
+  (-webkit-backdrop-filter: blur(1px))
+) {
+  .card {
+    background: rgba(248, 251, 255, 0.96);
+  }
+}
+
+.coreStage {
+  position: relative;
+  display: flex;
+  height: 112px;
+  flex: 0 0 112px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.coreStage::after {
+  position: absolute;
+  inset: 14px 18px;
+  z-index: 0;
+  content: "";
+  pointer-events: none;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(47, 128, 255, 0.08),
+    transparent 68%
+  );
+}
+
+.coreHalo {
+  position: absolute;
+  z-index: 1;
+  width: 104px;
+  height: 104px;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    rgba(47, 128, 255, 0.17) 0%,
+    rgba(98, 212, 255, 0.08) 42%,
+    transparent 72%
+  );
+  filter: blur(1px);
+  animation: haloBreathe 4400ms ease-in-out infinite;
+}
+
+.coreShellWrap {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  transition: transform 180ms ease;
+}
+
+.coreShell {
+  display: grid;
+  width: 78px;
+  height: 78px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.86),
+      rgba(94, 175, 255, 0.26)
+    );
+  box-shadow:
+    0 12px 32px rgba(47, 128, 255, 0.17),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  animation: coreBreathe 4400ms ease-in-out infinite;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.coreIcon {
+  color: #2f80ff;
+}
+
+.card[data-state="hover"] .coreShellWrap {
+  transform: scale(1.025);
+}
+
+.card[data-state="processing"] .coreHalo {
+  animation-duration: 2100ms;
+}
+
+.card[data-state="processing"] .coreShell {
+  animation-duration: 2100ms;
+}
+
+.pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pipelineItem {
+  position: relative;
+  display: grid;
+  min-height: 18px;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: #50647f;
+}
+
+.pipelineItem + .pipelineItem::before {
+  position: absolute;
+  top: -8px;
+  left: 5px;
+  width: 1px;
+  height: 8px;
+  content: "";
+  background: rgba(78, 103, 138, 0.22);
+}
+
+.pipelineNode {
+  display: grid;
+  width: 10px;
+  height: 10px;
+  place-items: center;
+  border: 1px solid rgba(78, 103, 138, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #ffffff;
+}
+
+.pipelineItem[data-status="done"] .pipelineNode {
+  border-color: #2483ff;
+  background: #2483ff;
+}
+
+.pipelineItem[data-status="active"] .pipelineNode {
+  border-color: #2483ff;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(47, 128, 255, 0.12);
+}
+
+.pipelineItem[data-status="pending"] .pipelineNode {
+  background: rgba(78, 103, 138, 0.18);
+}
+
+.pipelineLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.pipelineItem[data-status="active"] .pipelineLabel {
+  color: #13233a;
+  font-weight: 650;
+}
+
+.pipelineState {
+  color: #8a9bb1;
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.pipelineItem[data-status="done"] .pipelineState {
+  color: #2483ff;
+}
+
+.pipelineItem[data-status="active"] .pipelineState {
+  color: #2483ff;
+  font-weight: 650;
+}
+
+.metrics {
+  display: grid;
+  min-height: 42px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(76, 132, 220, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.metric {
+  min-width: 0;
+  padding: 5px 6px;
+  text-align: center;
+}
+
+.metric + .metric {
+  border-left: 1px solid rgba(76, 132, 220, 0.1);
+}
+
+.metricValue {
+  display: block;
+  overflow: hidden;
+  color: #13233a;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metricLabel {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #71839a;
+  font-size: 9px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meterWrap {
+  margin-top: 6px;
+}
+
+.meterLabels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #71839a;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.meterTrack {
+  height: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(47, 128, 255, 0.12);
+}
+
+.meterFill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f80ff, #62d4ff);
+  transition: width 280ms ease;
+}
+
+.meterIndeterminate {
+  animation: meterSweep 1500ms ease-in-out infinite;
+}
+
+.statusLine {
+  min-height: 14px;
+  margin-top: 4px;
+  color: #71839a;
+  font-size: 10px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.strategyButton {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 13px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 650;
+  background: linear-gradient(135deg, #2f80ff 0%, #4d6fff 100%);
+  box-shadow: 0 9px 22px rgba(47, 128, 255, 0.18);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease;
+}
+
+.strategyButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.025);
+  box-shadow: 0 12px 26px rgba(47, 128, 255, 0.23);
+}
+
+.strategyButton:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.strategyButton:focus-visible {
+  outline: 3px solid rgba(47, 128, 255, 0.28);
+  outline-offset: 3px;
+}
+
+@keyframes haloBreathe {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.025);
+  }
+}
+
+@keyframes coreBreathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.012);
+  }
+}
+
+@keyframes meterSweep {
+  0% {
+    transform: translateX(-115%);
+  }
+  100% {
+    transform: translateX(315%);
+  }
+}
+
+@media (max-width: 1199px) {
+  .coreStage {
+    height: 108px;
+    flex-basis: 108px;
+  }
+
+  .coreShell {
+    width: 76px;
+    height: 76px;
+  }
+
+  .coreHalo {
+    width: 104px;
+    height: 104px;
+  }
+}
+
+@media (max-width: 767px) {
+  .card {
+    border-radius: 20px;
+  }
+
+  .coreStage {
+    height: 102px;
+    flex-basis: 102px;
+  }
+
+  .coreShell {
+    width: 70px;
+    height: 70px;
+  }
+
+  .coreHalo {
+    width: 96px;
+    height: 96px;
+  }
+
+  .pipelineState {
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .coreShellWrap,
+  .strategyButton {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+
+  .coreHalo,
+  .coreShell,
+  .meterIndeterminate {
+    animation: none;
+  }
+
+  .card[data-state="hover"] .coreShellWrap {
+    transform: none;
+  }
+
+  .meterFill {
+    transition: none;
+  }
+}

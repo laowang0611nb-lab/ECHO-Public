@@ -396,6 +396,8 @@ function AiInsightsWorkspace({
             actionLabel={actionLabel}
             actionPendingLabel={actionPendingLabel}
             actionPending={analysisPending || createStrategy.isPending}
+            affectedStudentCount={analysis?.result?.affected_student_ids.length ?? 0}
+            evidenceCount={analysisEvidenceCount}
             modelName={analysis?.result?.model_name}
             onAction={handleAnalysisAction}
             onReanalyze={showReanalyze ? handleReanalyze : undefined}
