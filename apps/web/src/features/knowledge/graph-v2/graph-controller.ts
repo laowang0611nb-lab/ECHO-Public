@@ -30,6 +30,7 @@ import type {
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 2;
 const ORBIT_PERIOD = 160_000;
+const FOCUS_HOVER_ORBIT_SCALE = 0.25;
 const IDLE_RESUME_MS = 2_400;
 
 function truncateLabel(label: string | null | undefined, max = 12) {
@@ -266,7 +267,6 @@ export class KnowledgeGraphController {
       }
       const id = String(elementEvent.target.id);
       this.hoveredId = id;
-      this.touchInteraction();
       const point = elementEvent.client;
       this.callbacks.onNodeHover(id, point ? { x: point.x, y: point.y } : undefined);
       this.scheduleVisualState(0);
@@ -277,7 +277,6 @@ export class KnowledgeGraphController {
       }
       this.hoveredId = null;
       this.callbacks.onNodeHover(null);
-      this.touchInteraction();
       this.scheduleVisualState(0);
     });
     this.graph.on(CanvasEvent.CLICK, (event) => {
@@ -1162,37 +1161,30 @@ export class KnowledgeGraphController {
   }
 
   setPointerInside(inside: boolean) {
-    if (this.pointerInside === inside) {
-      return;
-    }
     this.pointerInside = inside;
-    if (inside) {
-      this.stopOrbit();
-      return;
-    }
-    // Leaving the panel starts the orbit loop; the loop still respects the post-transition cooldown.
     if (this.mode === "focused" && !this.reducedMotion) {
       this.startOrbit();
     }
   }
 
   private startOrbit() {
-    if (!this.ready || this.paused || this.pointerInside || this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
+    if (!this.ready || this.paused || this.orbitFrame !== null || this.destroyed || this.reducedMotion) {
       return;
     }
     this.orbitLastTime = performance.now();
     this.orbitLastPosition = this.orbitLastTime;
     const step = (now: number) => {
       this.orbitFrame = null;
-      if (this.destroyed || this.paused || this.pointerInside || !this.graph || this.mode !== "focused") {
+      if (this.destroyed || this.paused || !this.graph || this.mode !== "focused") {
         return;
       }
       const graph = this.graph;
       const delta = Math.min(60, Math.max(0, now - this.orbitLastTime));
       this.orbitLastTime = now;
       const idle = now >= this.interactionUntil;
-      if (idle && this.hoveredId === null && !this.orbitMoving) {
-        this.orbitAngle += (delta / ORBIT_PERIOD) * Math.PI * 2;
+      if (idle && !this.orbitMoving) {
+        const orbitScale = this.hoveredId === this.focusId ? FOCUS_HOVER_ORBIT_SCALE : 1;
+        this.orbitAngle += (delta / ORBIT_PERIOD) * Math.PI * 2 * orbitScale;
         if (now - this.orbitLastPosition >= 32) {
           this.orbitLastPosition = now;
           // Keep one pre-orbit snapshot. Applying the cumulative phase to live

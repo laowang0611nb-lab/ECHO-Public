@@ -43,7 +43,7 @@ Labels are rendered by G6 in the graph layer. There is no per-frame DOM label ov
 - Orbit snapshots the current rendered positions when it starts or resumes, then rotates that fixed snapshot by the accumulated phase; cumulative phase is never applied to already-rotated live coordinates, so angular speed stays constant.
 - Zoom is clamped to 10%-200%.
 - Orbit pauses during focus transitions, drag, zoom, hover, hidden pages, and `prefers-reduced-motion`.
-- Orbit only runs while the pointer is outside the graph panel; entering the panel stops it and leaving resumes it immediately.
+- Orbit continues while the pointer is inside the graph panel. It runs at normal speed unless the pointer is hovering the current focus node, where it slows to 1/4 speed.
 - A focused-mode navigation runs for about 0.90s (0.18s under `prefers-reduced-motion`) with one master progress value: camera travel, layout morph, focus emphasis, and semantic emphasis are staged from that value.
 - The clicked node stays fixed in world space while the camera travels to it; all nodes morph from their live positions to the translated B-rooted target layout. Orbit rebases after the complete layout commit and resumes only after the cooldown.
 
