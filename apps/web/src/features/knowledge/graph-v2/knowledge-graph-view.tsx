@@ -335,7 +335,7 @@ export function KnowledgeGraphView({
       </div>
 
       <div className="absolute right-4 top-4 z-30 flex items-center gap-2 lg:right-[324px]">
-        <div className="flex rounded-lg border border-white/10 bg-[#0d1d33]/90 p-1 shadow-lg backdrop-blur">
+        <div className="flex rounded-xl border border-white/18 bg-[#0d1d33]/58 p-1 shadow-[0_12px_34px_rgba(2,8,23,0.24)] ring-1 ring-white/8 backdrop-blur-xl backdrop-saturate-150">
           <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>全部</FilterButton>
           <FilterButton active={filter === "high-risk"} onClick={() => setFilter("high-risk")}>高风险</FilterButton>
         </div>
@@ -350,7 +350,7 @@ export function KnowledgeGraphView({
         </ToolbarButton>
       </div>
 
-      <div className="pointer-events-none absolute bottom-4 left-4 z-20 flex flex-wrap items-center gap-3 rounded-lg border border-white/10 bg-[#0d1d33]/86 px-3 py-2 text-[11px] text-[#9db2cf] backdrop-blur">
+      <div className="pointer-events-none absolute bottom-4 left-4 z-20 flex flex-wrap items-center gap-3 rounded-lg border border-white/14 bg-[#0d1d33]/58 px-3 py-2 text-[11px] text-[#9db2cf] ring-1 ring-white/8 backdrop-blur-xl backdrop-saturate-150">
         <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: GRAPH_THEME.primary }} />正常</span>
         <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: GRAPH_THEME.risk.elevated }} />关注</span>
         <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: GRAPH_THEME.risk.medium }} />中风险</span>
@@ -358,7 +358,7 @@ export function KnowledgeGraphView({
         <span className="ml-1 border-l border-white/10 pl-3">拖动进入自由视图</span>
       </div>
 
-      <div className="pointer-events-none absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg border border-white/10 bg-[#0d1d33]/86 px-3 py-2 text-[11px] text-[#9db2cf] backdrop-blur">
+      <div className="pointer-events-none absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg border border-white/14 bg-[#0d1d33]/58 px-3 py-2 text-[11px] text-[#9db2cf] ring-1 ring-white/8 backdrop-blur-xl backdrop-saturate-150">
         <ZoomIn className="size-3.5" />
         {Math.round(zoom * 100)}%
         <span className="border-l border-white/10 pl-2">{mode === "free" ? "自由视图" : mode === "focusing" ? "正在聚焦" : "聚焦模式"}</span>
@@ -453,8 +453,8 @@ function FilterButton({
   return (
     <button
       className={cn(
-        "h-7 rounded-md px-2.5 text-xs font-semibold transition-colors",
-        active ? "bg-[#2468b7] text-white" : "text-[#8ea7c6] hover:bg-white/8 hover:text-white",
+        "h-7 rounded-md px-2.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-200",
+        active ? "bg-[#2468b7] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]" : "text-[#9db5d2] hover:bg-white/10 hover:text-white",
       )}
       onClick={onClick}
       type="button"
@@ -476,7 +476,7 @@ function ToolbarButton({
   return (
     <button
       aria-label={label}
-      className="flex size-9 items-center justify-center rounded-lg border border-white/10 bg-[#0d1d33]/90 text-[#a9bfdd] shadow-lg backdrop-blur transition-colors hover:bg-[#173152] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4b9cff]"
+      className="flex size-9 items-center justify-center rounded-xl border border-white/18 bg-[#0d1d33]/58 text-[#c7d8f0] shadow-[0_12px_30px_rgba(2,8,23,0.22)] ring-1 ring-white/8 backdrop-blur-xl backdrop-saturate-150 transition-[background-color,border-color,color,transform] duration-200 hover:-translate-y-0.5 hover:border-white/28 hover:bg-[#173152]/75 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4b9cff]"
       onClick={onClick}
       title={label}
       type="button"

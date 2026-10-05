@@ -1,12 +1,11 @@
 "use client";
-import { Activity, AlertTriangle, ChevronRight, ClipboardCheck, GraduationCap, Search, Sparkles, TrendingUp, Users, X } from "lucide-react";
+import { Activity, AlertTriangle, ChevronRight, ClipboardCheck, GraduationCap, LoaderCircle, Search, Sparkles, TrendingUp, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
-import { LoadingState } from "@/components/common/loading-state";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
@@ -132,7 +131,7 @@ export function StudentLearningPage({
   if (!courseId) {
     return <EmptyState action={<Link className={buttonVariants()} href="/courses">进入课程管理</Link>} description="请先选择课程，学生学情会围绕当前课程展示。" title="尚未选择课程" />;
   }
-  if (data.isLoading) return <LoadingState label="正在加载学生学情..." />;
+  if (data.isLoading) return <StudentAnalyticsLoadingState activeTab={activeTab} />;
   if (data.isError) return <ErrorState description="学生学情加载失败，请确认后端服务后重试。" onRetry={data.refetch} />;
 
   return (
@@ -309,6 +308,89 @@ function Overview({ items, summary }: { items: ReturnType<typeof useStudentAnaly
       </section>
 
       <EchoStudentInsight items={items} summary={summary} />
+    </div>
+  );
+}
+
+function StudentAnalyticsLoadingState({ activeTab }: { activeTab: StudentAnalyticsTab }) {
+  const showOverview = activeTab === "overview";
+  return (
+    <div aria-busy="true" className="space-y-5" role="status">
+      <PageHeader
+        breadcrumbs={[{ label: "学生学情" }]}
+        description="用数据看见每一位学生的学习状态，及时发现问题，提供更有针对性的教学支持。"
+        title="学生学情"
+      />
+
+      <div className="h-12 rounded-xl border-2 border-border bg-card/70 p-2">
+        <div className="flex h-full items-center gap-3 overflow-hidden px-2">
+          {tabs.map((tab, index) => (
+            <span
+              className={cn("h-4 rounded-full bg-muted-foreground/15", index % 2 === 0 ? "w-16" : "w-20")}
+              key={tab.value}
+            />
+          ))}
+        </div>
+      </div>
+
+      {showOverview ? (
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.65fr)]">
+          <Card className="gap-4 py-5">
+            <CardHeader className="px-5">
+              <span className="h-5 w-32 animate-pulse rounded-md bg-muted" />
+              <span className="mt-2 h-3 w-64 max-w-full animate-pulse rounded-full bg-muted" />
+            </CardHeader>
+            <CardContent className="px-5">
+              <div className="flex h-[300px] items-end gap-3 rounded-lg bg-muted/35 px-4 pb-4">
+                {[36, 54, 44, 72, 61, 82, 68].map((height, index) => (
+                  <span
+                    className="flex-1 animate-pulse rounded-t-md bg-primary/15"
+                    key={`${height}-${index}`}
+                    style={{ height: `${height}%`, animationDelay: `${index * 90}ms` }}
+                  />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="gap-4 py-5">
+            <CardHeader className="px-5">
+              <span className="h-5 w-32 animate-pulse rounded-md bg-muted" />
+              <span className="mt-2 h-3 w-52 max-w-full animate-pulse rounded-full bg-muted" />
+            </CardHeader>
+            <CardContent className="space-y-4 px-5">
+              <div className="relative mx-auto size-40">
+                <div
+                  className="absolute inset-0 animate-spin rounded-full motion-reduce:animate-none"
+                  style={{ background: "conic-gradient(from 180deg, transparent 0deg, transparent 220deg, #dbeafe 245deg, #2f7cf6 305deg, #22c55e 360deg)" }}
+                />
+                <div className="absolute inset-[13px] flex items-center justify-center rounded-full bg-card">
+                  <div className="text-center">
+                    <LoaderCircle className="mx-auto size-6 animate-spin text-primary motion-reduce:animate-none" />
+                    <p className="mt-2 text-xs text-muted-foreground">正在汇总</p>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {["稳定掌握", "基本掌握", "需要关注", "重点关注"].map((label, index) => (
+                  <span className="flex items-center gap-2" key={label}>
+                    <span className="size-2 animate-pulse rounded-full bg-muted-foreground/20" style={{ animationDelay: `${index * 90}ms` }} />
+                    <span className="h-3 flex-1 animate-pulse rounded-full bg-muted" />
+                  </span>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      ) : (
+        <Card className="gap-4 py-5">
+          <CardHeader className="px-5">
+            <span className="h-5 w-36 animate-pulse rounded-md bg-muted" />
+          </CardHeader>
+          <CardContent className="space-y-4 px-5">
+            {[0, 1, 2, 3].map((item) => <span className="block h-12 animate-pulse rounded-lg bg-muted" key={item} />)}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

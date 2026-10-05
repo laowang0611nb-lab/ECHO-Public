@@ -217,7 +217,7 @@ const NavLink = memo(function NavLink({
       aria-current={active ? "page" : undefined}
       aria-label={collapsed ? item.label : undefined}
       className={cn(
-        "relative flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm text-sidebar-foreground/70 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
+        "relative flex h-10 w-full touch-manipulation select-none items-center gap-3 rounded-lg px-3 text-sm text-sidebar-foreground/70 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
         nested && "pl-9",
         !collapsed && "hover:text-sidebar-accent-foreground",
         active && "text-sidebar-accent-foreground",
@@ -261,7 +261,7 @@ const NavLink = memo(function NavLink({
       ) : null}
       <motion.span
         animate={{ x: iconShift }}
-        className="relative z-10 flex size-10 shrink-0 items-center justify-center"
+        className="pointer-events-none relative z-10 flex size-10 shrink-0 items-center justify-center"
         initial={false}
         style={{ scale: reducedMotion ? 1 : scale }}
         transition={collapseTransition}
@@ -293,7 +293,7 @@ const NavLink = memo(function NavLink({
   );
 
   return (
-    <motion.div className="w-full transform-gpu" ref={wrapperRef}>
+    <motion.div className="relative w-full transform-gpu" ref={wrapperRef} style={{ zIndex: hovered || focused ? 2 : 1 }}>
       <Tooltip disabled={!collapsed}>
         <TooltipTrigger render={link} />
         <TooltipContent side="right" sideOffset={8}>

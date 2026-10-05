@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReviewFlagSummary } from "@echo/shared-types";
-import { AlertTriangle, ArrowRight, Clock, FileWarning, Inbox, Search, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, FileWarning, Inbox, Search, ShieldCheck, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDeferredValue, useState } from "react";
@@ -9,7 +9,7 @@ import { useDeferredValue, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { ErrorState } from "@/components/common/error-state";
 import { LoadingState } from "@/components/common/loading-state";
-import { StatCard } from "@/components/common/stat-card";
+import { AnimatedNumber } from "@/components/common/animated-number";
 import { StatusBadge } from "@/components/common/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -68,6 +68,9 @@ export function ReviewOverviewPage({
     pending_rereview: 0,
     regeneration_failed: 0,
   };
+  const highRiskShare = summaryData.pending > 0
+    ? Math.min(100, Math.round((summaryData.high_risk / summaryData.pending) * 100))
+    : 0;
   const firstReviewPending = Math.max(0, summaryData.pending - summaryData.pending_rereview);
 
   function updateQuery(patch: Partial<ReviewQueueFilters> & { courseId?: string }) {
@@ -114,11 +117,55 @@ export function ReviewOverviewPage({
         title="AI 回答审核"
       />
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={Inbox} label="待审核" supporting="首次审核与再次审核合计" value={summaryData.pending} />
-        <StatCard icon={AlertTriangle} label="高风险回答" supporting="系统标记为高优先级" value={summaryData.high_risk} />
-        <StatCard icon={FileWarning} label="缺少课程依据" supporting="未检索到教材来源" value={summaryData.reasons.missing_course_basis} />
-        <StatCard icon={ShieldCheck} label="学生未解决" supporting="学生主动标记或连续追问" value={summaryData.reasons.student_not_resolved} />
+      <section className="overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+        <div className="grid lg:grid-cols-[minmax(260px,0.85fr)_minmax(0,2.15fr)]">
+          <Link
+            className="group relative flex min-h-36 flex-col justify-between overflow-hidden bg-sidebar px-5 py-5 text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+            href={`/ai-review?courseId=${courseId}`}
+          >
+            <span className="pointer-events-none absolute inset-y-5 left-0 w-0.5 rounded-r-full bg-primary" />
+            <span className="flex items-start justify-between gap-4">
+              <span className="flex items-center gap-2 text-sm font-medium text-sidebar-foreground/70">
+                <Inbox className="size-4 text-[#7fb4ff]" />
+                待审核
+              </span>
+              <ArrowRight className="size-4 text-sidebar-foreground/45 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-sidebar-foreground" />
+            </span>
+            <span>
+              <span className="flex items-end gap-2">
+                <span className="text-4xl font-semibold leading-none tracking-tight"><AnimatedNumber value={summaryData.pending} /></span>
+                <span className="pb-1 text-xs text-sidebar-foreground/60">条记录</span>
+              </span>
+              <span className="mt-2 block text-xs leading-5 text-sidebar-foreground/60">首次审核与再次审核合计</span>
+            </span>
+          </Link>
+          <div className="grid sm:grid-cols-3">
+            <ReviewSignal
+              detail={`占待审核记录 ${highRiskShare}%`}
+              href={`/ai-review?courseId=${courseId}&severity=high`}
+              icon={AlertTriangle}
+              label="高风险回答"
+              tone="danger"
+              value={summaryData.high_risk}
+            />
+            <ReviewSignal
+              detail="未检索到教材来源"
+              href={`/ai-review?courseId=${courseId}&reason=missing_course_basis`}
+              icon={FileWarning}
+              label="缺少课程依据"
+              tone="warning"
+              value={summaryData.reasons.missing_course_basis}
+            />
+            <ReviewSignal
+              detail="学生主动标记或连续追问"
+              href={`/ai-review?courseId=${courseId}&reason=student_not_resolved`}
+              icon={ShieldCheck}
+              label="学生未解决"
+              tone="info"
+              value={summaryData.reasons.student_not_resolved}
+            />
+          </div>
+        </div>
       </section>
 
       <Card className="gap-4 py-5">
@@ -273,6 +320,47 @@ function ReviewFilterSelect({
       <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
       <SelectContent><SelectGroup>{items.map((item) => <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>)}</SelectGroup></SelectContent>
     </Select>
+  );
+}
+function ReviewSignal({
+  label,
+  detail,
+  href,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  detail: string;
+  href: string;
+  value: number;
+  icon: LucideIcon;
+  tone: "danger" | "warning" | "info";
+}) {
+  return (
+    <Link
+      className="group relative flex min-h-36 flex-col justify-between gap-5 border-t border-border px-5 py-4 transition-colors first:border-t-0 hover:bg-muted/35 sm:border-l sm:border-t-0"
+      href={href}
+    >
+      <span className="flex items-start justify-between gap-3">
+        <span className="text-sm font-medium">{label}</span>
+        <span
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-lg",
+            tone === "danger" && "bg-red-50 text-red-600",
+            tone === "warning" && "bg-amber-50 text-amber-600",
+            tone === "info" && "bg-blue-50 text-blue-700",
+          )}
+        >
+          <Icon className="size-4" />
+        </span>
+      </span>
+      <span className="block">
+        <span className="block text-2xl font-semibold leading-none"><AnimatedNumber value={value} /></span>
+        <span className="mt-2 block pr-6 text-xs leading-5 text-muted-foreground">{detail}</span>
+      </span>
+      <ArrowRight className="absolute bottom-4 right-4 size-3.5 text-muted-foreground opacity-0 transition-[opacity,transform] duration-200 group-hover:translate-x-0.5 group-hover:opacity-100" />
+    </Link>
   );
 }
 

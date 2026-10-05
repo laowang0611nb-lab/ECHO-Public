@@ -39,7 +39,7 @@ export function KnowledgeGraphAnalyticsCard({
         <motion.aside
           animate={{ opacity: 1, x: 0 }}
           className={cn(
-            "pointer-events-auto absolute right-4 top-20 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/12 bg-[#f8fbff]/96 text-foreground shadow-[0_18px_50px_rgba(3,10,24,0.28)] backdrop-blur transition-[padding] duration-200 lg:top-4",
+            "pointer-events-auto absolute right-4 top-20 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/45 bg-[#f8fbff]/72 text-foreground shadow-[0_24px_70px_rgba(2,8,23,0.34)] ring-1 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition-[padding,box-shadow] duration-200 lg:top-4",
             collapsed ? "px-3 py-1.5" : "p-4",
           )}
           exit={{ opacity: 0, x: 12 }}
@@ -102,12 +102,12 @@ export function KnowledgeGraphAnalyticsCard({
           ) : null}
 
           {isLoading ? (
-            <div className="mt-4 flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-3 text-sm text-muted-foreground">
+            <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/45 bg-white/45 px-3 py-3 text-sm text-muted-foreground backdrop-blur-xl">
               <LoaderCircle className="size-4 animate-spin" />
               正在加载真实学情…
             </div>
           ) : isError ? (
-            <div className="mt-4 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-3">
+            <div className="mt-4 rounded-lg border border-destructive/20 bg-white/45 px-3 py-3 backdrop-blur-xl">
               <p className="text-sm text-destructive">学情数据暂时不可用。</p>
               <Button className="mt-2 h-8 px-3" onClick={onRetry} size="sm" type="button" variant="outline">
                 <RefreshCw data-icon="inline-start" />
@@ -135,7 +135,7 @@ export function KnowledgeGraphAnalyticsCard({
               </div>
             </>
           ) : (
-            <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-3 text-sm text-muted-foreground">
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-white/45 bg-white/45 px-3 py-3 text-sm text-muted-foreground backdrop-blur-xl">
               <AlertCircle className="mt-0.5 size-4 shrink-0" />
               该知识点还没有可展示的学情记录。
             </div>
@@ -164,7 +164,7 @@ export function KnowledgeGraphAnalyticsCard({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-border bg-white px-3 py-2.5">
+    <div className="rounded-lg border border-white/50 bg-white/55 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-xl">
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className="mt-1 text-lg font-semibold leading-none">{value}</p>
     </div>
