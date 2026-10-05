@@ -78,6 +78,7 @@ export class KnowledgeGraphController {
   private orbitLastTime = 0;
   private orbitLastPosition = 0;
   private orbitMoving = false;
+  private orbitSpeed = 1;
   private orbitBasePoints: Record<string, [number, number]> | null = null;
   private currentPositionById = new Map<string, [number, number]>();
   private handoffFrame: number | null = null;
@@ -1183,8 +1184,10 @@ export class KnowledgeGraphController {
       this.orbitLastTime = now;
       const idle = now >= this.interactionUntil;
       if (idle && !this.orbitMoving) {
-        const orbitScale = this.hoveredId === this.focusId ? FOCUS_HOVER_ORBIT_SCALE : 1;
-        this.orbitAngle += (delta / ORBIT_PERIOD) * Math.PI * 2 * orbitScale;
+        const targetOrbitSpeed = this.hoveredId === this.focusId ? FOCUS_HOVER_ORBIT_SCALE : 1;
+        // Ease between normal and focus-hover speed without resetting phase.
+        this.orbitSpeed = mix(this.orbitSpeed, targetOrbitSpeed, 1 - Math.exp(-delta / 180));
+        this.orbitAngle += (delta / ORBIT_PERIOD) * Math.PI * 2 * this.orbitSpeed;
         if (now - this.orbitLastPosition >= 32) {
           this.orbitLastPosition = now;
           // Keep one pre-orbit snapshot. Applying the cumulative phase to live
@@ -1220,6 +1223,7 @@ export class KnowledgeGraphController {
       this.orbitFrame = null;
     }
     this.orbitBasePoints = null;
+    this.orbitSpeed = 1;
     this.orbitMoving = false;
   }
 
