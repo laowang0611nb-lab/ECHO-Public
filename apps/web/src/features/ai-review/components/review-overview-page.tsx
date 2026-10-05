@@ -121,7 +121,7 @@ export function ReviewOverviewPage({
         <div className="grid lg:grid-cols-[minmax(260px,0.85fr)_minmax(0,2.15fr)]">
           <Link
             className="group relative flex min-h-36 flex-col justify-between overflow-hidden bg-sidebar px-5 py-5 text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
-            href={`/ai-review?courseId=${courseId}&status=open`}
+            href={`/ai-review/pending?courseId=${courseId}&status=open`}
           >
             <span className="pointer-events-none absolute inset-y-5 left-0 w-0.5 rounded-r-full bg-primary" />
             <span className="flex items-start justify-between gap-4">
@@ -142,7 +142,7 @@ export function ReviewOverviewPage({
           <div className="grid sm:grid-cols-3">
             <ReviewSignal
               detail={`占待审核记录 ${highRiskShare}%`}
-              href={`/ai-review?courseId=${courseId}&severity=high`}
+              href={`/ai-review/pending?courseId=${courseId}&severity=high`}
               icon={AlertTriangle}
               label="高风险回答"
               tone="danger"
@@ -150,7 +150,7 @@ export function ReviewOverviewPage({
             />
             <ReviewSignal
               detail="未检索到教材来源"
-              href={`/ai-review?courseId=${courseId}&reason=missing_course_basis`}
+              href={`/ai-review/pending?courseId=${courseId}&reason=missing_course_basis`}
               icon={FileWarning}
               label="缺少课程依据"
               tone="warning"
@@ -158,7 +158,7 @@ export function ReviewOverviewPage({
             />
             <ReviewSignal
               detail="学生主动标记或连续追问"
-              href={`/ai-review?courseId=${courseId}&reason=student_not_resolved`}
+              href={`/ai-review/pending?courseId=${courseId}&reason=student_not_resolved`}
               icon={ShieldCheck}
               label="学生未解决"
               tone="info"
@@ -177,26 +177,26 @@ export function ReviewOverviewPage({
           <RiskSummaryCard
             count={firstReviewPending}
             detail="等待首次教师判断"
-            href={`/ai-review?courseId=${courseId}&status=open`}
+            href={`/ai-review/pending?courseId=${courseId}&status=open`}
             title="待首次审核"
           />
           <RiskSummaryCard
             count={summaryData.pending_rereview}
             detail="重新生成后等待教师复核"
-            href={`/ai-review?courseId=${courseId}&status=pending_rereview`}
+            href={`/ai-review/pending?courseId=${courseId}&status=pending_rereview`}
             title="待再次审核"
           />
           <RiskSummaryCard
             count={summaryData.generating}
             detail="AI 正在生成新版本"
-            href={`/ai-review?courseId=${courseId}&status=generating`}
+            href={`/ai-review/pending?courseId=${courseId}&status=generating`}
             title="重新生成中"
             tone="info"
           />
           <RiskSummaryCard
             count={summaryData.regeneration_failed}
             detail="生成失败，可进入工作台重试"
-            href={`/ai-review?courseId=${courseId}&status=regeneration_failed`}
+            href={`/ai-review/pending?courseId=${courseId}&status=regeneration_failed`}
             title="重新生成失败"
             tone="danger"
           />
