@@ -1,4 +1,4 @@
-import { ReviewOverviewPage } from "@/features/ai-review/components/review-overview-page";
+import { ReviewCockpitPage } from "@/features/ai-review/components/review-cockpit-page";
 import { buildReviewFilters, firstQueryValue } from "@/features/ai-review/normalizers";
 
 export default async function AiReviewRoute({
@@ -14,5 +14,5 @@ export default async function AiReviewRoute({
   }>;
 }) {
   const query = await searchParams;
-  return <ReviewOverviewPage initialCourseId={firstQueryValue(query.courseId)} initialFilters={buildReviewFilters(query)} />;
+  return <ReviewCockpitPage initialCourseId={firstQueryValue(query.courseId)} initialFilters={buildReviewFilters(query)} />;
 }
