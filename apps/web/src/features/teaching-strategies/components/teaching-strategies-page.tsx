@@ -1,7 +1,7 @@
 "use client";
 
 import type { TeachingStrategyListItem, TeachingStrategyType } from "@echo/shared-types";
-import { CheckCircle2, Plus, Sparkles, Target, TrendingUp, Users } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -274,10 +274,10 @@ function StrategyRail({
   stats: { total: number; accepted: number; highPriority: number; planning: number };
 }) {
   const items = [
-    { label: "策略建议", value: stats.total, detail: "当前范围", icon: Target, tone: "bg-blue-50 text-blue-700" },
-    { label: "已采纳 / 已计划", value: stats.accepted, detail: "教师已确认", icon: CheckCircle2, tone: "bg-emerald-50 text-emerald-700" },
-    { label: "高优先级", value: stats.highPriority, detail: "需要优先处理", icon: TrendingUp, tone: "bg-amber-50 text-amber-700" },
-    { label: "执行中计划", value: stats.planning, detail: "关联当前课程", icon: Users, tone: "bg-violet-50 text-violet-700" },
+    { label: "策略建议", value: stats.total },
+    { label: "已确认", value: stats.accepted },
+    { label: "高优先级", value: stats.highPriority },
+    { label: "执行中", value: stats.planning },
   ];
 
   return (
@@ -289,23 +289,14 @@ function StrategyRail({
         </div>
         <p className="text-xs text-muted-foreground">当前筛选范围</p>
       </div>
-      <ol className="relative mt-4 grid gap-2 md:grid-cols-4">
-        <span aria-hidden="true" className="absolute left-[12%] right-[12%] top-5 hidden h-px bg-border md:block" />
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <li className="relative flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2.5 md:border-transparent md:bg-transparent md:px-0" key={item.label}>
-              <span className={`relative z-10 flex size-9 shrink-0 items-center justify-center rounded-full ${item.tone}`}>
-                <Icon className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs text-muted-foreground">{item.label}</span>
-                <span className="mt-0.5 block text-xl font-semibold leading-none">{item.value}</span>
-              </span>
-              <span className="hidden text-[10px] text-muted-foreground lg:block">{item.detail}</span>
-            </li>
-          );
-        })}
+      <ol className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-0">
+        {items.map((item, index) => (
+          <li className="flex min-w-0 items-center gap-3 sm:flex-1" key={item.label}>
+            <span className="text-2xl font-semibold leading-none">{item.value}</span>
+            <span className="text-xs text-muted-foreground">{item.label}</span>
+            {index < items.length - 1 ? <span aria-hidden="true" className="hidden text-muted-foreground/60 sm:mx-4 sm:block">→</span> : null}
+          </li>
+        ))}
       </ol>
     </section>
   );

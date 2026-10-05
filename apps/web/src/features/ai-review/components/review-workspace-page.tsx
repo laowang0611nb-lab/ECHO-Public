@@ -194,7 +194,7 @@ export function ReviewWorkspacePage({
             onFiltersChange={updateFilters}
           />
           {queueQuery.hasNextPage ? (
-            <Button disabled={queueQuery.isFetchingNextPage} onClick={() => void queueQuery.fetchNextPage()} type="button" variant="outline">
+            <Button className="w-full" disabled={queueQuery.isFetchingNextPage} onClick={() => void queueQuery.fetchNextPage()} type="button" variant="outline">
               {queueQuery.isFetchingNextPage ? "正在加载..." : "加载更多审核记录"}
             </Button>
           ) : null}

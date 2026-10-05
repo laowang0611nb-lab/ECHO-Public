@@ -483,44 +483,62 @@ function KnowledgeDistributionRing({
       });
 
       if (progress < 1) {
-        const sweepRadius = radius + lineWidth / 2 + 2;
+        const innerRadius = radius - lineWidth / 2 - 2;
+        const outerRadius = radius + lineWidth / 2 + 2;
+        const sweepX = Math.cos(sweepEnd);
+        const sweepY = Math.sin(sweepEnd);
         context.beginPath();
-        context.arc(center, center, sweepRadius, sweepEnd, sweepEnd + 0.16);
-        context.strokeStyle = "rgba(47, 128, 255, 0.72)";
-        context.lineWidth = 2;
+        context.moveTo(center + sweepX * innerRadius, center + sweepY * innerRadius);
+        context.lineTo(center + sweepX * outerRadius, center + sweepY * outerRadius);
+        context.strokeStyle = "rgba(47, 128, 255, 0.82)";
+        context.lineWidth = 2.4;
         context.lineCap = "round";
         context.stroke();
+
+        context.beginPath();
+        context.arc(center + sweepX * outerRadius, center + sweepY * outerRadius, 2.4, 0, Math.PI * 2);
+        context.fillStyle = "#2f80ff";
+        context.fill();
       }
     }
 
     const shouldAnimate = !reducedMotion && !hasAnimatedRef.current;
-    hasAnimatedRef.current = true;
     if (!shouldAnimate) {
+      hasAnimatedRef.current = true;
       draw(1);
       updateNumbers(1);
       return;
     }
 
     let frame = 0;
+    let completed = false;
     let startedAt = 0;
+    let progress = 0;
     const animate = (timestamp: number) => {
+      frame = 0;
       if (!startedAt) startedAt = timestamp;
-      const progress = Math.min(1, (timestamp - startedAt) / 2000);
+      progress = Math.min(1, (timestamp - startedAt) / 2000);
       draw(progress);
       updateNumbers(progress);
-      if (progress < 1) frame = requestAnimationFrame(animate);
+      if (progress < 1) {
+        frame = requestAnimationFrame(animate);
+      } else {
+        completed = true;
+        hasAnimatedRef.current = true;
+      }
     };
     frame = requestAnimationFrame(animate);
 
     return () => {
       if (frame) cancelAnimationFrame(frame);
+      if (!completed) hasAnimatedRef.current = false;
     };
   }, [distributionKey, reducedMotion, total]);
 
   return (
     <div className="space-y-4">
       <div className="relative mx-auto size-40">
-        <canvas aria-hidden="true" className="absolute inset-0 size-full" ref={canvasRef} />
+        <canvas aria-hidden="true" className="absolute inset-0 size-full" data-mastery-ring="true" ref={canvasRef} />
         <div className="absolute inset-[31px] flex flex-col items-center justify-center rounded-full bg-card">
           <span className="text-2xl font-semibold" ref={centerValueRef}>0</span>
           <span className="text-xs text-muted-foreground">学生总数</span>
