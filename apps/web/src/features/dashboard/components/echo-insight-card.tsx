@@ -18,7 +18,7 @@ export function EchoInsightCard({
   const tone = insight.risk_level === "high" ? "danger" : insight.risk_level === "medium" ? "warning" : "success";
 
   return (
-    <Card className="gap-4 border-blue-300/80 bg-blue-50/45 py-5 shadow-[0_1px_3px_rgba(47,124,246,0.12)]">
+    <Card className="flex h-full flex-col gap-4 border-blue-300/80 bg-blue-50/45 py-5 shadow-[0_1px_3px_rgba(47,124,246,0.12)]">
       <CardHeader className="px-5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-primary">
@@ -29,7 +29,8 @@ export function EchoInsightCard({
         </div>
         <CardTitle className="mt-3 text-lg leading-7">{localizeInsightSummary(insight.summary)}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4 px-5">
+      <CardContent className="flex flex-1 flex-col gap-4 px-5">
+        <div className="space-y-4">
         <div className="space-y-2">
           {difficulties.slice(0, 3).map((item) => (
             <div className="flex items-start gap-2 text-sm text-foreground" key={item.knowledge_point_id}>
@@ -49,8 +50,9 @@ export function EchoInsightCard({
             <p className="mt-2 text-xs text-muted-foreground">数据来源：实时课程学习事件与掌握状态。</p>
           </div>
         ) : null}
+        </div>
 
-        <Link className={cn(buttonVariants(), "w-full")} href="/ai-insights">
+        <Link className={cn(buttonVariants(), "mt-auto w-full")} href="/ai-insights">
           查看详细分析
           <ArrowRight data-icon="inline-end" />
         </Link>

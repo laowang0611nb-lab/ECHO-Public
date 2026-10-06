@@ -18,11 +18,13 @@ export function LearningTrendCard({
   data: DashboardTrendPoint[];
   currentMastery: number | null;
 }) {
-  const [metric, setMetric] = useState<TrendMetric>("interaction");
+  const [metric, setMetric] = useState<TrendMetric>(() =>
+    data.some((point) => point.interaction_count > 0) ? "interaction" : "mastery",
+  );
   const range = data.length ? `${formatDashboardDate(data[0].date)} - ${formatDashboardDate(data.at(-1)!.date)}` : "暂无日期范围";
 
   return (
-    <Card className="relative gap-0 overflow-hidden py-0">
+    <Card className="relative h-full gap-0 overflow-hidden py-0">
       <div className="h-px bg-gradient-to-r from-primary/75 via-primary/25 to-transparent" />
       <CardHeader className="gap-4 px-5 py-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center gap-3">

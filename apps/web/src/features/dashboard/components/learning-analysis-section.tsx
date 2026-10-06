@@ -16,6 +16,7 @@ export function LearningAnalysisSection({
   difficulties: DashboardLearningDifficulty[];
   courseId: string;
 }) {
+  const maxAffected = Math.max(...difficulties.map((item) => item.affected_students), 1);
   return (
     <section className="space-y-4">
       <div>
@@ -23,7 +24,7 @@ export function LearningAnalysisSection({
         <p className="mt-1 text-sm text-muted-foreground">从章节掌握度和高频问题，快速了解学生学习状况。</p>
       </div>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Card className="gap-3 py-5">
+        <Card className="flex h-full flex-col gap-3 py-5">
           <CardHeader className="px-5">
             <CardTitle>章节掌握度</CardTitle>
             <CardAction>
@@ -32,7 +33,7 @@ export function LearningAnalysisSection({
               </Link>
             </CardAction>
           </CardHeader>
-          <CardContent className="space-y-4 px-5">
+          <CardContent className="flex flex-1 flex-col justify-between gap-4 px-5">
             {chapters.slice(0, 6).map((chapter, index) => {
               const value = chapter.average_mastery ?? 0;
               const warning = chapter.average_mastery !== null && value < 60;
@@ -56,7 +57,7 @@ export function LearningAnalysisSection({
           </CardContent>
         </Card>
 
-        <Card className="gap-3 py-5">
+        <Card className="flex h-full flex-col gap-3 py-5">
           <CardHeader className="px-5">
             <CardTitle>学生学习困难 TOP 5</CardTitle>
             <CardAction>
@@ -65,11 +66,19 @@ export function LearningAnalysisSection({
               </Link>
             </CardAction>
           </CardHeader>
-          <CardContent className="divide-y divide-border px-5">
+          <CardContent className="flex flex-1 flex-col divide-y divide-border px-5">
             {difficulties.slice(0, 5).map((item, index) => (
-              <Link className="flex items-center gap-4 py-3.5" href={`/knowledge/points/${item.knowledge_point_id}?from=dashboard&courseId=${courseId}`} key={item.knowledge_point_id}>
+              <Link className="flex flex-1 items-center gap-4 py-3.5" href={`/knowledge/points/${item.knowledge_point_id}?from=dashboard&courseId=${courseId}`} key={item.knowledge_point_id}>
                 <span className="w-6 text-xs text-muted-foreground">{String(index + 1).padStart(2, "0")}</span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{item.name}</span>
+                  <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full bg-orange-500"
+                      style={{ width: `${Math.min(100, (item.affected_students / maxAffected) * 100)}%` }}
+                    />
+                  </span>
+                </span>
                 <span className="text-sm text-muted-foreground">{item.affected_students} 人</span>
               </Link>
             ))}

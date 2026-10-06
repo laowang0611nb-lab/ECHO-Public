@@ -8,23 +8,37 @@ import { formatDashboardDate } from "@/features/dashboard/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { cn } from "@/lib/utils";
 
+type ActionTone = "blue" | "amber" | "sky" | "emerald";
+
+const actionToneClasses: Record<ActionTone, { bar: string; icon: string }> = {
+  blue: { bar: "bg-blue-500", icon: "bg-blue-50 text-blue-600" },
+  amber: { bar: "bg-amber-500", icon: "bg-amber-50 text-amber-700" },
+  sky: { bar: "bg-sky-500", icon: "bg-sky-50 text-sky-700" },
+  emerald: { bar: "bg-emerald-500", icon: "bg-emerald-50 text-emerald-700" },
+};
+
 function ActionCard({
   title,
   icon: Icon,
   children,
   href,
   action,
+  tone,
 }: {
   title: string;
   icon: typeof Users;
   children: React.ReactNode;
   href: string;
   action: string;
+  tone: ActionTone;
 }) {
+  const toneClass = actionToneClasses[tone];
+
   return (
-    <Card className="gap-3 py-5">
+    <Card className="relative flex h-full min-h-[220px] flex-col gap-3 overflow-hidden py-5">
+      <span aria-hidden="true" className={cn("absolute inset-x-0 top-0 h-0.5", toneClass.bar)} />
       <CardHeader className="flex flex-row items-center gap-3 px-5">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-blue-50 text-primary">
+        <span className={cn("flex size-8 items-center justify-center rounded-lg", toneClass.icon)}>
           <Icon className="size-4" />
         </span>
         <CardTitle>{title}</CardTitle>
@@ -58,7 +72,7 @@ export function TeacherActionSection({ courseId, overview }: { courseId: string;
         <p className="mt-1 text-sm text-muted-foreground">根据近期学习数据，为你整理值得关注的事项。</p>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
-<ActionCard action="查看学生学情" href={studentHref} icon={Users} title="待关注学生">
+<ActionCard action="查看学生学情" href={studentHref} icon={Users} title="待关注学生" tone="amber">
           {topDifficulties.length ? (
             <div className="space-y-2">
               {topDifficulties.map((item) => (
@@ -72,14 +86,14 @@ export function TeacherActionSection({ courseId, overview }: { courseId: string;
           )}
         </ActionCard>
 
-        <ActionCard action="查看审核" href="/ai-review" icon={ClipboardCheck} title="AI 回答待审核">
+        <ActionCard action="查看审核" href="/ai-review" icon={ClipboardCheck} title="AI 回答待审核" tone="blue">
           <p className="text-2xl font-semibold text-foreground">{overview.stats.pending_review_count} 条</p>
           <p className="mt-2">
             {reviewAction?.priority === "high" ? "存在高优先级审核项。" : "按优先级处理教师审核队列。"}
           </p>
         </ActionCard>
 
-<ActionCard action="查看全部" href={`/students?courseId=${courseId}&tab=behavior`} icon={MessageSquareText} title="最近学习动态">
+        <ActionCard action="查看全部" href={`/students?courseId=${courseId}&tab=behavior`} icon={MessageSquareText} title="最近学习动态" tone="sky">
           <div className="space-y-2">
             {recent.map((point) => (
               <p key={point.date}>
@@ -95,6 +109,7 @@ export function TeacherActionSection({ courseId, overview }: { courseId: string;
           href={supportPoint ? `/execution-plans/new?courseId=${courseId}&knowledgePointId=${supportPoint.knowledge_point_id}` : `/execution-plans/new?courseId=${courseId}`}
           icon={Compass}
           title="ECHO 教师建议"
+          tone="emerald"
         >
           {supportPoint ? (
             <div className="space-y-2">
