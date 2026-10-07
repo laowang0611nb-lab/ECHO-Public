@@ -84,7 +84,7 @@ export function AnalysisEngine({
     <section
       aria-busy={analyzing}
       aria-labelledby="ai-analysis-title"
-      className={cn(styles.card, "relative flex min-h-[310px] flex-col px-4 py-3 backdrop-blur-[20px] backdrop-saturate-[1.35] xl:h-full")}
+      className={cn(styles.card, "relative flex min-h-[310px] flex-col px-4 pt-3 pb-6 backdrop-blur-[20px] backdrop-saturate-[1.35] xl:h-full")}
       data-ai-analysis-card="true"
       data-state={visualState}
       onPointerEnter={() => setHovered(true)}

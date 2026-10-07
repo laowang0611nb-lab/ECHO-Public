@@ -61,13 +61,13 @@ export function TeachingStrategiesPage({
   });
   const plansQuery = useExecutionPlans(courseId, { limit: 100 });
   const dashboardQuery = useTeacherDashboardOverview(user?.id, courseId);
-  const studentsQuery = useStudentAnalytics(courseId);
+  const studentsQuery = useStudentAnalytics(courseId, { includeDetails: false });
   const generateMutation = useGenerateTeachingStrategy(courseId);
   const actionMutation = useTeachingStrategyAction();
   const strategies = strategiesQuery.data?.items ?? [];
   const plans = plansQuery.data?.items ?? [];
   const focusAreas = dashboardQuery.data?.learning_difficulties ?? [];
-  const activeStudents = studentsQuery.items.filter((item) => item.activeRecently);
+  const studentOptions = studentsQuery.students.slice(0, 20);
   const plannableStrategies = strategies.filter((strategy) => canCreateExecutionPlan(strategy.status));
   const planSource = plannableStrategies[0] ?? null;
 
@@ -94,7 +94,7 @@ export function TeachingStrategiesPage({
         ...(initialKnowledgePointId ? [initialKnowledgePointId] : []),
         ...focusAreas.map((item) => item.knowledge_point_id),
       ])].slice(0, 5);
-      const studentIds = activeStudents.slice(0, 20).map((item) => item.member.user_id);
+      const studentIds = studentOptions.map((student) => student.user_id);
       const generated = await generateMutation.mutateAsync({
         knowledgePointIds,
         studentIds,

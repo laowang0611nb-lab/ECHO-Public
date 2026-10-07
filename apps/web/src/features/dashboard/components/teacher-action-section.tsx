@@ -5,7 +5,6 @@ import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDashboardDate } from "@/features/dashboard/view-model";
-import { useStudentAnalytics } from "@/features/students/queries";
 import { cn } from "@/lib/utils";
 
 type ActionTone = "blue" | "amber" | "sky" | "emerald";
@@ -54,11 +53,7 @@ function ActionCard({
 }
 
 export function TeacherActionSection({ courseId, overview }: { courseId: string; overview: TeacherDashboardOverview }) {
-  const studentAnalytics = useStudentAnalytics(courseId);
-  const attentionStudent = studentAnalytics.items.find((item) => item.status === "risk" || item.status === "attention");
-  const studentHref = attentionStudent
-    ? `/students/${attentionStudent.member.user_id}?from=dashboard&courseId=${courseId}&tab=overview`
-    : `/students?courseId=${courseId}&tab=students`;
+  const studentHref = `/students?courseId=${courseId}&tab=difficulty`;
   const topDifficulties = overview.learning_difficulties.slice(0, 2);
   const supportPoint = overview.learning_difficulties[0];
   const reviewAction = overview.teacher_actions.find((action) => action.action_type === "review_flags");

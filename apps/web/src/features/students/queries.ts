@@ -35,7 +35,11 @@ export const studentQueryKeys = {
     ["teacher", "students", "error-patterns", userId, courseId, studentId, days] as const,
 };
 
-export function useStudentAnalytics(courseId: string | null) {
+export function useStudentAnalytics(
+  courseId: string | null,
+  options?: { includeDetails?: boolean },
+) {
+  const includeDetails = options?.includeDetails ?? true;
   const { user } = useTeacherSession();
   const userId = user?.id;
   const enabled = Boolean(userId && courseId);
@@ -67,18 +71,18 @@ export function useStudentAnalytics(courseId: string | null) {
 
   const students = (membersQuery.data ?? []).filter((member) => member.role === "student");
   const detailQueries = useQueries({
-    queries: students.map((student) => ({
+    queries: includeDetails ? students.map((student) => ({
       queryKey: studentQueryKeys.detail(userId ?? "anonymous", courseId ?? "none", student.user_id),
       queryFn: () => apiClient.getStudentLearningDetail(userId!, courseId!, student.user_id),
       enabled,
       staleTime: 30_000,
-    })),
+    })) : [],
   });
 
   const items = students.map((student, index) =>
     buildStudentAnalyticsItem({
       member: student,
-      detail: detailQueries[index]?.data ?? null,
+      detail: includeDetails ? detailQueries[index]?.data ?? null : null,
       chapters: chaptersQuery.data ?? [],
     }),
   );
@@ -94,12 +98,12 @@ export function useStudentAnalytics(courseId: string | null) {
       membersQuery.isPending ||
       chaptersQuery.isPending ||
       analyticsQuery.isPending ||
-      detailQueries.some((query) => query.isPending),
+      (includeDetails && detailQueries.some((query) => query.isPending)),
     isError:
       membersQuery.isError ||
       chaptersQuery.isError ||
       analyticsQuery.isError ||
-      detailQueries.some((query) => query.isError),
+      (includeDetails && detailQueries.some((query) => query.isError)),
     refetch: () => {
       void membersQuery.refetch();
       void chaptersQuery.refetch();
