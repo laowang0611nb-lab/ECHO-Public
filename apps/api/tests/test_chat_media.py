@@ -1,11 +1,17 @@
 import json
 from pathlib import Path
+from uuid import UUID, uuid4
 
 import httpx
 from database.models.chat import ChatAttachment, ChatAttachmentKind
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.config import settings
+from app.services import chat_media
 from app.services.asr import DashScopeAsrProvider
 from app.services.chat_attachments import attachment_to_model_content
+from app.services.chat_media import ensure_video_model_url
 
 
 async def test_dashscope_asr_sends_data_url(tmp_path: Path) -> None:
@@ -50,7 +56,61 @@ async def test_dashscope_asr_sends_data_url(tmp_path: Path) -> None:
     assert audio.startswith("data:audio/mp4;base64,")
 
 
+async def test_ensure_video_model_url_defers_commit(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "chat-media-commit@example.com",
+            "display_name": "Media",
+            "role": "student",
+        },
+    )
+    user = response.json()
+    video_path = tmp_path / "question.mp4"
+    video_path.write_bytes(b"video-data")
+    attachment_id = uuid4()
+    monkeypatch.setattr(settings, "chat_media_upload_enabled", True)
+    monkeypatch.setattr(settings, "chat_api_key", "test-chat-key")
+
+    def fake_normalize(path: Path, fps: int, max_dimension: int) -> Path:
+        return path
+
+    async def fake_upload(path: Path, **kwargs) -> str:
+        return "oss://dashscope-instant/test/question.mp4"
+
+    monkeypatch.setattr(chat_media, "_normalize_video", fake_normalize)
+    monkeypatch.setattr(chat_media, "_upload_file", fake_upload)
+
+    async with session_factory() as session:
+        attachment = ChatAttachment(
+            id=attachment_id,
+            user_id=UUID(user["id"]),
+            kind=ChatAttachmentKind.VIDEO,
+            mime_type="video/mp4",
+            file_name="question.mp4",
+            storage_key=f"users/{user['id']}/question.mp4",
+            size_bytes=video_path.stat().st_size,
+        )
+        session.add(attachment)
+        await session.commit()
+        url = await ensure_video_model_url(session, attachment, video_path)
+        assert url == "oss://dashscope-instant/test/question.mp4"
+        assert attachment.model_file_url == url
+        await session.rollback()
+
+    async with session_factory() as session:
+        stored = await session.get(ChatAttachment, attachment_id)
+        assert stored is not None
+        assert stored.model_file_url is None
+
+
 def test_video_model_content_uses_temporary_dashscope_url(tmp_path: Path) -> None:
+
     video_path = tmp_path / "question.mp4"
     video_path.write_bytes(b"video-data")
     attachment = ChatAttachment(

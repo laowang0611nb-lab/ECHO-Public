@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from database.models.chat import ChatAttachmentKind
@@ -37,6 +37,7 @@ from app.services.chat import (
     stream_chat_response,
 )
 from app.services.chat_attachments import (
+    MIME_TYPES_BY_KIND,
     ChatAttachmentFileMissingError,
     ChatAttachmentForbiddenError,
     ChatAttachmentInvalidStateError,
@@ -46,6 +47,7 @@ from app.services.chat_attachments import (
     get_chat_attachment_path,
     upload_chat_attachment,
 )
+from app.services.chat_media import video_media_available
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 
 router = APIRouter(tags=["chat"])
@@ -59,47 +61,91 @@ def _attachment_max_bytes(kind: ChatAttachmentKind) -> int:
     return settings.chat_video_max_upload_bytes
 
 
-def _attachment_http_exception(exc: Exception) -> HTTPException:
+def _attachment_http_exception(
+    exc: Exception,
+    *,
+    kind: ChatAttachmentKind | None = None,
+) -> HTTPException:
     if isinstance(exc, ChatAttachmentInvalidTypeError):
+        detail: dict[str, object] = {
+            "code": "CHAT_ATTACHMENT_INVALID_TYPE",
+            "message": str(exc),
+        }
+        if kind is not None:
+            detail["kind"] = kind.value
+            detail["allowed_mime_types"] = sorted(MIME_TYPES_BY_KIND[kind])
         return HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail={"code": "unsupported_attachment_type", "message": str(exc)},
+            detail=detail,
         )
     if isinstance(exc, ChatAttachmentTooLargeError):
+        limit_bytes = exc.max_bytes
+        detail = {
+            "code": "CHAT_ATTACHMENT_TOO_LARGE",
+            "message": str(exc),
+            "limit_bytes": limit_bytes,
+            "limit_mb": round(limit_bytes / (1024 * 1024), 2),
+        }
+        if kind is not None:
+            detail["kind"] = kind.value
         return HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail={"code": "attachment_too_large", "message": str(exc)},
+            detail=detail,
         )
     if isinstance(exc, ChatAttachmentForbiddenError):
         return HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "attachment_forbidden", "message": str(exc)},
+            detail={"code": "CHAT_ATTACHMENT_FORBIDDEN", "message": str(exc)},
         )
     if isinstance(exc, ChatAttachmentNotFoundError):
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "attachment_not_found", "message": str(exc)},
+            detail={"code": "CHAT_ATTACHMENT_NOT_FOUND", "message": str(exc)},
         )
     if isinstance(exc, (ChatAttachmentInvalidStateError, ChatAttachmentFileMissingError)):
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "attachment_unavailable", "message": str(exc)},
+            detail={"code": "CHAT_ATTACHMENT_UNAVAILABLE", "message": str(exc)},
         )
     return HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail={"code": "attachment_error", "message": str(exc)},
+        detail={"code": "CHAT_ATTACHMENT_ERROR", "message": str(exc)},
     )
 
 
 @router.get("/chat/modalities", response_model=ChatModalitiesResponse)
-async def get_chat_modalities(_current_user: CurrentUser) -> ChatModalitiesResponse:
+async def get_chat_modalities(
+    _current_user: CurrentUser,
+    asr_provider: ASRProviderDep,
+) -> ChatModalitiesResponse:
+    provider_ready = bool(settings.chat_api_key and settings.chat_model)
+    modalities: list[Literal["text", "image", "audio", "video"]] = []
+    unavailable: list[str] = []
+    if provider_ready:
+        modalities.extend(["text", "image"])
+    else:
+        unavailable.append("Chat Provider 未配置")
+    if asr_provider is not None:
+        modalities.append("audio")
+    else:
+        unavailable.append("ASR 未启用或未配置")
+    if video_media_available():
+        modalities.append("video")
+    else:
+        unavailable.append("视频临时文件服务未启用")
+    limits = (
+        f"图片上限 {settings.chat_image_max_upload_bytes // (1024 * 1024)} MB，"
+        f"音频上限 {settings.chat_audio_max_upload_bytes // (1024 * 1024)} MB，"
+        f"视频上限 {settings.chat_video_max_upload_bytes // (1024 * 1024)} MB。"
+    )
+    message = limits
+    if unavailable:
+        message = f"{message} 当前不可用：{'；'.join(unavailable)}。"
     return ChatModalitiesResponse(
-        input_modalities=["text", "image", "audio", "video"],
+        input_modalities=modalities,
         output_modalities=["text"],
-        attachments_enabled=True,
-        message=(
-            "支持文本、图片、音频和视频输入；模型对附件内容的理解取决于当前 Chat Provider 能力。"
-        ),
+        attachments_enabled=bool({"image", "audio", "video"}.intersection(modalities)),
+        message=message,
     )
 
 
@@ -129,7 +175,7 @@ async def upload_chat_attachment_endpoint(
         ChatAttachmentInvalidStateError,
         ChatAttachmentFileMissingError,
     ) as exc:
-        raise _attachment_http_exception(exc) from exc
+        raise _attachment_http_exception(exc, kind=kind) from exc
     return ChatAttachmentUploadResponse(
         attachment=attachment,
         expires_at=attachment.expires_at,

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from fractions import Fraction
+from importlib.util import find_spec
 from pathlib import Path
 
 import anyio
@@ -12,6 +13,12 @@ from app.core.config import settings
 
 class ChatMediaError(Exception):
     pass
+
+
+def video_media_available() -> bool:
+    return bool(
+        settings.chat_api_key and settings.chat_media_upload_enabled and find_spec("av") is not None
+    )
 
 
 async def ensure_video_model_url(
@@ -45,7 +52,7 @@ async def ensure_video_model_url(
     attachment.model_file_url = model_url
     attachment.model_file_model = settings.chat_model
     attachment.model_file_expires_at = expires_at
-    await session.commit()
+    await session.flush()
     return model_url
 
 

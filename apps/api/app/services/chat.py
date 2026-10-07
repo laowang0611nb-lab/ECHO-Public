@@ -36,7 +36,7 @@ from app.services.chat_attachments import (
     attachment_to_model_content,
     resolve_message_attachments,
 )
-from app.services.chat_media import ensure_video_model_url
+from app.services.chat_media import ChatMediaError, ensure_video_model_url
 from app.services.chat_provider import ChatProvider
 from app.services.course import get_course_for_member
 from app.services.embedding import EmbeddingProvider
@@ -142,6 +142,37 @@ class ChatEvent:
     def encode(self) -> str:
         payload = json.dumps(self.data, ensure_ascii=False)
         return f"event: {self.event}\ndata: {payload}\n\n"
+
+
+def _chat_error_event(error: Exception) -> ChatEvent:
+    if isinstance(error, ChatMediaError):
+        return ChatEvent(
+            "error",
+            {
+                "code": "CHAT_MEDIA_PROCESSING_FAILED",
+                "kind": "video",
+                "message": str(error),
+                "detail": str(error),
+            },
+        )
+    if isinstance(error, (ASRConfigurationError, ASRProviderError)):
+        return ChatEvent(
+            "error",
+            {
+                "code": "CHAT_MEDIA_PROCESSING_FAILED",
+                "kind": "audio",
+                "message": str(error),
+                "detail": str(error),
+            },
+        )
+    return ChatEvent(
+        "error",
+        {
+            "code": "CHAT_REQUEST_FAILED",
+            "message": str(error),
+            "detail": str(error),
+        },
+    )
 
 
 async def create_conversation(
@@ -636,7 +667,7 @@ async def _stream_chat_response_contents(
         assistant_message.content = "".join(collected)
         assistant_message.status = MessageStatus.FAILED
         await session.commit()
-        yield ChatEvent("error", {"detail": str(exc)})
+        yield _chat_error_event(exc)
         return
 
     answer = "".join(collected)
@@ -853,7 +884,7 @@ async def _stream_continuation_contents(
         assistant_message.content = "".join(collected)
         assistant_message.status = MessageStatus.FAILED
         await session.commit()
-        yield ChatEvent("error", {"detail": str(exc)})
+        yield _chat_error_event(exc)
         return
 
     blocks = list(assistant_message.blocks)
@@ -901,7 +932,7 @@ async def continue_chat_response(
             yield event
     except Exception as exc:
         await session.rollback()
-        yield ChatEvent("error", {"detail": str(exc)})
+        yield _chat_error_event(exc)
 
 
 async def stream_chat_response(
@@ -936,4 +967,4 @@ async def stream_chat_response(
             yield event
     except Exception as exc:
         await session.rollback()
-        yield ChatEvent("error", {"detail": str(exc)})
+        yield _chat_error_event(exc)

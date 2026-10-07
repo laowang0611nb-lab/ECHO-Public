@@ -58,3 +58,63 @@ async def test_expired_unbound_attachment_is_removed_with_model_cache(
             select(ChatAttachment.id).where(ChatAttachment.storage_key == storage_key)
         )
     assert attachment is None
+
+
+async def test_stale_conversation_orphan_is_removed(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    tmp_path: Path,
+) -> None:
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "attachment-orphan@example.com",
+            "display_name": "Orphan Teacher",
+            "role": "teacher",
+        },
+    )
+    teacher = login.json()
+    headers = {"X-User-Id": teacher["id"]}
+    course = await client.post(
+        "/api/v1/courses",
+        headers=headers,
+        json={"name": "Orphan Cleanup Course"},
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course.json()['id']}/conversations",
+        headers=headers,
+        json={"title": "Orphan Conversation"},
+    )
+    storage = LocalDocumentStorage(tmp_path / "cleanup-orphans")
+    storage_key = f"users/{teacher['id']}/orphan.mp4"
+    original = storage.path_for(storage_key)
+    original.parent.mkdir(parents=True, exist_ok=True)
+    original.write_bytes(b"orphan-video")
+    now = datetime.now(UTC)
+
+    async with session_factory() as session:
+        session.add(
+            ChatAttachment(
+                user_id=UUID(teacher["id"]),
+                conversation_id=UUID(conversation.json()["id"]),
+                kind=ChatAttachmentKind.VIDEO,
+                mime_type="video/mp4",
+                file_name="orphan.mp4",
+                storage_key=storage_key,
+                size_bytes=original.stat().st_size,
+                created_at=now - timedelta(hours=2),
+                expires_at=None,
+            )
+        )
+        await session.commit()
+
+    async with session_factory() as session:
+        deleted = await cleanup_expired_chat_attachments(
+            session,
+            storage,
+            now=now,
+            orphan_grace_hours=1,
+        )
+
+    assert deleted == 1
+    assert not original.exists()

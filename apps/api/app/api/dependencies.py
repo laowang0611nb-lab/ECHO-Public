@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from functools import lru_cache
+from importlib.util import find_spec
 from typing import Annotated
 from uuid import UUID
 
@@ -58,7 +59,7 @@ ChatAttachmentStorageDep = Annotated[
 @lru_cache(maxsize=1)
 def get_asr_provider() -> ASRProvider | None:
     providers: list[ASRProvider] = []
-    if settings.asr_enabled:
+    if settings.asr_enabled and find_spec("faster_whisper") is not None:
         providers.append(
             FasterWhisperProvider(
                 model_name=settings.asr_model,

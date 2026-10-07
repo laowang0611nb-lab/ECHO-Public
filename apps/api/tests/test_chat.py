@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from database.models.chat import Conversation, Message, MessageCitation, MessageRole
+from database.models.chat import ChatAttachment, Conversation, Message, MessageCitation, MessageRole
 from database.models.document import Document, DocumentPage, DocumentStatus
 from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType
@@ -19,9 +19,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.dependencies import get_asr_provider, get_chat_attachment_storage
+from app.api.routes import chat as chat_routes
+from app.core.config import settings
 from app.main import app
 from app.schemas.chat import ChatContinueRequest, ChatStreamRequest
+from app.services import chat as chat_service
 from app.services.chat import (
+    ChatMediaError,
     _course_has_searchable_material,
     _stream_chat_response_contents,
 )
@@ -114,8 +118,12 @@ async def test_multimodal_chat_attachment_upload_and_send(
     session_factory: async_sessionmaker[AsyncSession],
     chat_provider,
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     teacher = await login(client, "chat-multimodal@example.com", "teacher")
+    monkeypatch.setattr(settings, "chat_api_key", "test-chat-key")
+    monkeypatch.setattr(settings, "chat_media_upload_enabled", True)
+    monkeypatch.setattr(chat_routes, "video_media_available", lambda: True)
     attachments_storage = LocalDocumentStorage(tmp_path / "chat-attachments")
     asr_provider = FakeASRProvider()
     app.dependency_overrides[get_chat_attachment_storage] = lambda: attachments_storage
@@ -134,6 +142,7 @@ async def test_multimodal_chat_attachment_upload_and_send(
             "audio",
             "video",
         }
+        monkeypatch.setattr(settings, "chat_media_upload_enabled", False)
 
         upload = await client.post(
             "/api/v1/chat/attachments",
@@ -253,6 +262,127 @@ async def test_multimodal_chat_attachment_upload_and_send(
         app.dependency_overrides.pop(get_asr_provider, None)
 
 
+async def test_chat_modalities_reflect_disabled_configuration(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teacher = await login(client, "chat-modalities-disabled@example.com", "teacher")
+    monkeypatch.setattr(settings, "chat_api_key", None)
+    monkeypatch.setattr(settings, "chat_media_upload_enabled", False)
+    app.dependency_overrides[get_asr_provider] = lambda: None
+    try:
+        response = await client.get(
+            "/api/v1/chat/modalities",
+            headers=auth_headers(teacher),
+        )
+    finally:
+        app.dependency_overrides.pop(get_asr_provider, None)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["input_modalities"] == []
+    assert payload["attachments_enabled"] is False
+    assert "Chat Provider 未配置" in payload["message"]
+    assert "ASR 未启用或未配置" in payload["message"]
+    assert "视频临时文件服务未启用" in payload["message"]
+
+
+async def test_attachment_upload_returns_structured_errors(
+    client: AsyncClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teacher = await login(client, "chat-attachment-errors@example.com", "teacher")
+    attachments_storage = LocalDocumentStorage(tmp_path / "chat-attachment-errors")
+    app.dependency_overrides[get_chat_attachment_storage] = lambda: attachments_storage
+    try:
+        mismatch = await client.post(
+            "/api/v1/chat/attachments",
+            headers=auth_headers(teacher),
+            data={"kind": "image"},
+            files={"file": ("question.jpg", PNG_BYTES, "image/jpeg")},
+        )
+        monkeypatch.setattr(settings, "chat_image_max_upload_bytes", 8)
+        too_large = await client.post(
+            "/api/v1/chat/attachments",
+            headers=auth_headers(teacher),
+            data={"kind": "image"},
+            files={"file": ("question.png", PNG_BYTES, "image/png")},
+        )
+    finally:
+        app.dependency_overrides.pop(get_chat_attachment_storage, None)
+
+    assert mismatch.status_code == 415
+    assert mismatch.json()["detail"]["code"] == "CHAT_ATTACHMENT_INVALID_TYPE"
+    assert mismatch.json()["detail"]["kind"] == "image"
+    assert too_large.status_code == 413
+    assert too_large.json()["detail"] == {
+        "code": "CHAT_ATTACHMENT_TOO_LARGE",
+        "message": "Attachment exceeds the 8 byte limit",
+        "limit_bytes": 8,
+        "limit_mb": 0.0,
+        "kind": "image",
+    }
+
+
+async def test_media_processing_error_rolls_back_attachment_binding(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    teacher = await login(client, "chat-media-error@example.com", "teacher")
+    attachments_storage = LocalDocumentStorage(tmp_path / "chat-media-error")
+    app.dependency_overrides[get_chat_attachment_storage] = lambda: attachments_storage
+    monkeypatch.setattr(settings, "chat_media_upload_enabled", True)
+    monkeypatch.setattr(settings, "chat_api_key", "test-chat-key")
+    monkeypatch.setattr(chat_routes, "video_media_available", lambda: True)
+
+    async def fail_media_processing(*args, **kwargs):
+        raise ChatMediaError("video processing failed")
+
+    monkeypatch.setattr(chat_service, "ensure_video_model_url", fail_media_processing)
+
+    try:
+        upload = await client.post(
+            "/api/v1/chat/attachments",
+            headers=auth_headers(teacher),
+            data={"kind": "video"},
+            files={"file": ("question.mp4", b"\x00\x00\x00\x18ftypisom", "video/mp4")},
+        )
+        assert upload.status_code == 200, upload.text
+        attachment = upload.json()["attachment"]
+        course = await create_searchable_course(client, session_factory, teacher)
+        conversation = await client.post(
+            f"/api/v1/courses/{course['id']}/conversations",
+            headers=auth_headers(teacher),
+            json={"title": "媒体处理失败"},
+        )
+        stream = await client.post(
+            f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+            headers=auth_headers(teacher),
+            json={
+                "content": "分析视频",
+                "client_request_id": "media-failure",
+                "attachments": [attachment],
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_chat_attachment_storage, None)
+
+    assert stream.status_code == 200
+    assert "event: error" in stream.text
+    assert '"code": "CHAT_MEDIA_PROCESSING_FAILED"' in stream.text
+    assert '"kind": "video"' in stream.text
+    async with session_factory() as session:
+        stored = await session.get(ChatAttachment, UUID(attachment["id"]))
+    assert stored is not None
+    assert stored.message_id is None
+    assert stored.conversation_id is None
+    assert stored.expires_at is not None
+
+
 async def test_long_student_message_is_atomic_and_retryable(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -349,7 +479,7 @@ async def test_audio_attachment_uses_local_asr_transcript(
             "/api/v1/chat/attachments",
             headers=auth_headers(teacher),
             data={"kind": "audio"},
-            files={"file": ("question.m4a", b"audio-data", "audio/mp4")},
+            files={"file": ("question.m4a", b"\x00\x00\x00\x18ftypM4A ", "audio/mp4")},
         )
         assert upload.status_code == 200, upload.text
         attachment = upload.json()["attachment"]

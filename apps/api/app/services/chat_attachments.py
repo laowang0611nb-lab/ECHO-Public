@@ -44,6 +44,40 @@ MIME_TYPES_BY_KIND: dict[ChatAttachmentKind, dict[str, str]] = {
     ChatAttachmentKind.VIDEO: VIDEO_MIME_TYPES,
 }
 
+COMPATIBLE_CLIENT_MIME_TYPES: dict[str, frozenset[str]] = {
+    "image/jpeg": frozenset({"image/jpeg", "image/jpg"}),
+    "image/png": frozenset({"image/png"}),
+    "image/webp": frozenset({"image/webp"}),
+    "image/heic": frozenset({"image/heic", "image/heif"}),
+    "image/heif": frozenset({"image/heic", "image/heif"}),
+    "audio/aac": frozenset({"audio/aac"}),
+    "audio/mp4": frozenset({"audio/m4a", "audio/mp4", "audio/x-m4a"}),
+    "audio/mpeg": frozenset({"audio/mpeg"}),
+    "audio/wav": frozenset({"audio/wav"}),
+    "audio/webm": frozenset({"audio/webm"}),
+    "video/mp4": frozenset({"video/mp4"}),
+    "video/quicktime": frozenset({"video/quicktime"}),
+    "video/webm": frozenset({"video/webm"}),
+    "video/3gpp": frozenset({"video/3gpp"}),
+}
+
+EXTENSIONS_BY_DETECTED_MIME: dict[str, frozenset[str]] = {
+    "image/jpeg": frozenset({".jpeg", ".jpg", ".jpe"}),
+    "image/png": frozenset({".png"}),
+    "image/webp": frozenset({".webp"}),
+    "image/heic": frozenset({".heic"}),
+    "image/heif": frozenset({".heic", ".heif"}),
+    "audio/aac": frozenset({".aac"}),
+    "audio/mp4": frozenset({".m4a", ".m4b", ".mp4"}),
+    "audio/mpeg": frozenset({".mp3"}),
+    "audio/wav": frozenset({".wav", ".wave"}),
+    "audio/webm": frozenset({".webm"}),
+    "video/mp4": frozenset({".m4v", ".mp4"}),
+    "video/quicktime": frozenset({".mov", ".qt"}),
+    "video/webm": frozenset({".webm"}),
+    "video/3gpp": frozenset({".3gp", ".3gpp"}),
+}
+
 
 class ChatAttachmentError(Exception):
     pass
@@ -58,11 +92,14 @@ class ChatAttachmentForbiddenError(ChatAttachmentError):
 
 
 class ChatAttachmentInvalidTypeError(ChatAttachmentError):
-    pass
+    def __init__(self, message: str = "Attachment content type is invalid") -> None:
+        super().__init__(message)
 
 
 class ChatAttachmentTooLargeError(ChatAttachmentError):
-    pass
+    def __init__(self, max_bytes: int) -> None:
+        self.max_bytes = max_bytes
+        super().__init__(f"Attachment exceeds the {max_bytes} byte limit")
 
 
 class ChatAttachmentInvalidStateError(ChatAttachmentError):
@@ -87,7 +124,9 @@ async def upload_chat_attachment(
     mime_type = (upload.content_type or "").strip().lower()
     extension = mime_types.get(mime_type)
     if extension is None:
-        raise ChatAttachmentInvalidTypeError
+        raise ChatAttachmentInvalidTypeError(
+            f"Unsupported {kind.value} content type: {mime_type or 'missing'}"
+        )
     file_name = _normalize_file_name(upload.filename, extension)
     attachment_id = uuid4()
     storage_key = f"users/{user.id}/{attachment_id}{extension}"
@@ -97,12 +136,22 @@ async def upload_chat_attachment(
         from app.services.storage import DocumentTooLargeError
 
         if isinstance(exc, DocumentTooLargeError):
-            raise ChatAttachmentTooLargeError from exc
+            raise ChatAttachmentTooLargeError(max_bytes) from exc
         raise
     if size_bytes <= 0:
         storage.delete(storage_key)
-        raise ChatAttachmentInvalidTypeError
+        raise ChatAttachmentInvalidTypeError("Attachment file is empty")
     path = storage.path_for(storage_key)
+    try:
+        mime_type = _validate_media_signature(
+            path,
+            kind=kind,
+            client_mime_type=mime_type,
+            file_name=file_name,
+        )
+    except ChatAttachmentInvalidTypeError:
+        storage.delete(storage_key)
+        raise
     width, height = (
         _read_image_dimensions(path) if kind == ChatAttachmentKind.IMAGE else (None, None)
     )
@@ -240,6 +289,100 @@ def attachment_context_text(attachments: list[ChatAttachment]) -> str:
         if attachment.transcript:
             lines.append(f"  音频转写：{attachment.transcript}")
     return "\n".join(lines)
+
+
+def _validate_media_signature(
+    path: Path,
+    *,
+    kind: ChatAttachmentKind,
+    client_mime_type: str,
+    file_name: str,
+) -> str:
+    detected_mime_type = _detect_media_type(path, kind)
+    if detected_mime_type is None:
+        raise ChatAttachmentInvalidTypeError(f"Unable to verify {kind.value} file signature")
+    compatible_mime_types = COMPATIBLE_CLIENT_MIME_TYPES.get(
+        detected_mime_type,
+        frozenset(),
+    )
+    if client_mime_type not in compatible_mime_types:
+        raise ChatAttachmentInvalidTypeError(
+            f"Declared content type {client_mime_type} does not match detected {detected_mime_type}"
+        )
+    suffix = Path(file_name).suffix.lower()
+    allowed_extensions = EXTENSIONS_BY_DETECTED_MIME.get(
+        detected_mime_type,
+        frozenset(),
+    )
+    if suffix and suffix not in allowed_extensions:
+        raise ChatAttachmentInvalidTypeError(
+            f"File extension {suffix} does not match detected {detected_mime_type}"
+        )
+    return detected_mime_type
+
+
+def _detect_media_type(path: Path, kind: ChatAttachmentKind) -> str | None:
+    try:
+        with path.open("rb") as stream:
+            header = stream.read(4096)
+    except OSError as exc:
+        raise ChatAttachmentInvalidTypeError("Attachment file could not be read") from exc
+    if kind == ChatAttachmentKind.IMAGE:
+        return _detect_image_type(header)
+    if kind == ChatAttachmentKind.AUDIO:
+        return _detect_audio_type(header)
+    return _detect_video_type(header)
+
+
+def _detect_image_type(header: bytes) -> str | None:
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        return "image/webp"
+    brand = _iso_bmff_brand(header)
+    if brand in {b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"hevm", b"hevs"}:
+        return "image/heic"
+    if brand in {b"mif1", b"msf1"}:
+        return "image/heif"
+    return None
+
+
+def _detect_audio_type(header: bytes) -> str | None:
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return "audio/wav"
+    if header.startswith(b"\x1aE\xdf\xa3"):
+        return "audio/webm"
+    brand = _iso_bmff_brand(header)
+    if brand in {b"m4a ", b"m4b ", b"mp41", b"mp42", b"isom", b"iso2"}:
+        return "audio/mp4"
+    if header.startswith(b"ID3") or (
+        len(header) >= 2 and header[0] == 0xFF and header[1] in {0xF2, 0xF3, 0xFA, 0xFB}
+    ):
+        return "audio/mpeg"
+    if len(header) >= 2 and header[0] == 0xFF and header[1] & 0xF0 == 0xF0:
+        return "audio/aac"
+    return None
+
+
+def _detect_video_type(header: bytes) -> str | None:
+    if header.startswith(b"\x1aE\xdf\xa3"):
+        return "video/webm"
+    brand = _iso_bmff_brand(header)
+    if brand is None:
+        return None
+    if brand == b"qt  ":
+        return "video/quicktime"
+    if brand in {b"3gp4", b"3gp5", b"3gp6", b"3g2a", b"3g2b"}:
+        return "video/3gpp"
+    return "video/mp4"
+
+
+def _iso_bmff_brand(header: bytes) -> bytes | None:
+    if len(header) < 12 or header[4:8] != b"ftyp":
+        return None
+    return header[8:12].lower()
 
 
 def _read_image_dimensions(path: Path) -> tuple[int | None, int | None]:
