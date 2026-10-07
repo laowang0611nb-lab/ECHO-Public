@@ -8,6 +8,7 @@ export const HEX_BACKGROUND_CONFIG = {
   activeCellCount: 4,
   pulseDuration: 2800,
   glowRadius: 10,
+  clickWaveDuration: 1050,
   mouseInteraction: true,
   animationEnabled: true,
 } as const;
@@ -28,6 +29,15 @@ interface Pulse {
   color: ActiveColor;
   startedAt: number;
   duration: number;
+}
+
+interface ClickWave {
+  x: number;
+  y: number;
+  color: ActiveColor;
+  startedAt: number;
+  duration: number;
+  maxRadius: number;
 }
 
 const ACTIVE_COLORS: ActiveColor[] = ["#3196F3", "#5DB7FF", "#7872F2"];
@@ -174,6 +184,7 @@ function drawAnimatedGlow(
   pulses: Pulse[],
   now: number,
   mouse: { x: number; y: number; active: boolean },
+  clickWaves: ClickWave[],
 ) {
   const radius = HEX_BACKGROUND_CONFIG.hexSize;
   const intensityByIndex = new Map<number, { color: ActiveColor; intensity: number }>();
@@ -205,6 +216,20 @@ function drawAnimatedGlow(
 
   for (const cell of cells) {
     let glow = intensityByIndex.get(cell.index);
+    for (const wave of clickWaves) {
+      const progress = (now - wave.startedAt) / wave.duration;
+      if (progress < 0 || progress >= 1) continue;
+      const distance = Math.hypot(cell.x - wave.x, cell.y - wave.y);
+      const easedProgress = progress * progress * (3 - 2 * progress);
+      const waveRadius = wave.maxRadius * easedProgress;
+      const ringWidth = radius * (0.95 + progress * 0.35);
+      const frontDistance = Math.abs(distance - waveRadius);
+      const waveIntensity =
+        Math.exp(-(frontDistance ** 2) / (2 * ringWidth ** 2)) * (1 - progress) ** 0.65 * 0.82;
+      if (waveIntensity > (glow?.intensity ?? 0)) {
+        glow = { color: wave.color, intensity: waveIntensity };
+      }
+    }
     if (HEX_BACKGROUND_CONFIG.mouseInteraction && mouse.active) {
       const distance = Math.hypot(cell.x - mouse.x, cell.y - mouse.y);
       const mouseIntensity = distance < 140 ? (1 - distance / 140) ** 2 * 0.12 : 0;
@@ -235,6 +260,8 @@ export function HexagonBackground() {
     let cells: HexCell[] = [];
     let cellByPosition = new Map<string, HexCell>();
     let pulses: Pulse[] = [];
+    let clickWaves: ClickWave[] = [];
+    let clickColorIndex = 0;
     let targetPulseCount: number = HEX_BACKGROUND_CONFIG.activeCellCount;
     let animationFrame = 0;
     let lastFrame = 0;
@@ -276,6 +303,7 @@ export function HexagonBackground() {
       if (now - lastFrame >= frameInterval) {
         lastFrame = now;
         pulses = pulses.filter((pulse) => now - pulse.startedAt < pulse.duration);
+        clickWaves = clickWaves.filter((wave) => now - wave.startedAt < wave.duration);
         while (pulses.length < targetPulseCount) {
           pulses.push(createPulse(cells.length, now));
         }
@@ -291,7 +319,7 @@ export function HexagonBackground() {
           window.innerWidth,
           window.innerHeight,
         );
-        drawAnimatedGlow(context, cells, cellByPosition, pulses, now, mouse);
+        drawAnimatedGlow(context, cells, cellByPosition, pulses, now, mouse, clickWaves);
       }
       animationFrame = window.requestAnimationFrame(renderFrame);
     };
@@ -322,6 +350,25 @@ export function HexagonBackground() {
       if (!event.relatedTarget) mouse.active = false;
     };
 
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!event.isPrimary || event.button !== 0 || motionPreference.matches) return;
+      const maxRadius = Math.hypot(window.innerWidth, window.innerHeight) * 1.05;
+      const color = ACTIVE_COLORS[clickColorIndex % ACTIVE_COLORS.length] ?? "#3196F3";
+      clickColorIndex += 1;
+      clickWaves = [
+        ...clickWaves.slice(-3),
+        {
+          x: event.clientX,
+          y: event.clientY,
+          color,
+          startedAt: performance.now(),
+          duration: HEX_BACKGROUND_CONFIG.clickWaveDuration,
+          maxRadius,
+        },
+      ];
+      startAnimation();
+    };
+
     const handleResize = () => {
       renderBase();
       if (!motionPreference.matches && HEX_BACKGROUND_CONFIG.animationEnabled) startAnimation();
@@ -337,6 +384,7 @@ export function HexagonBackground() {
     startAnimation();
     window.addEventListener("resize", handleResize);
     window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    window.addEventListener("pointerdown", handlePointerDown, { passive: true });
     window.addEventListener("pointerout", handlePointerLeave);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     motionPreference.addEventListener("change", handleMotionPreference);
@@ -346,6 +394,7 @@ export function HexagonBackground() {
       stopAnimation();
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointerout", handlePointerLeave);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       motionPreference.removeEventListener("change", handleMotionPreference);
