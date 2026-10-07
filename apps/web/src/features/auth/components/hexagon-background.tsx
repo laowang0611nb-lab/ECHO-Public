@@ -5,9 +5,9 @@ import { useEffect, useRef } from "react";
 export const HEX_BACKGROUND_CONFIG = {
   hexSize: 78,
   baseOpacity: 0.2,
-  activeCellCount: 9,
+  activeCellCount: 4,
   pulseDuration: 2800,
-  glowRadius: 18,
+  glowRadius: 10,
   mouseInteraction: true,
   animationEnabled: true,
 } as const;
@@ -158,10 +158,10 @@ function drawPulseCell(
   const violet = color === "#7872F2";
   const rgb = violet ? "120, 114, 242" : color === "#5DB7FF" ? "93, 183, 255" : "49, 150, 243";
   context.save();
-  context.shadowBlur = HEX_BACKGROUND_CONFIG.glowRadius + intensity * 19;
-  context.shadowColor = `rgba(${rgb}, ${(violet ? 0.28 : 0.35) * intensity})`;
-  context.strokeStyle = `rgba(${rgb}, ${Math.min(0.92, 0.38 + intensity * 0.62)})`;
-  context.lineWidth = 1.05 + intensity * 1.15;
+  context.shadowBlur = HEX_BACKGROUND_CONFIG.glowRadius + intensity * 10;
+  context.shadowColor = `rgba(${rgb}, ${(violet ? 0.22 : 0.28) * intensity})`;
+  context.strokeStyle = `rgba(${rgb}, ${Math.min(0.82, 0.3 + intensity * 0.52)})`;
+  context.lineWidth = 0.9 + intensity * 0.65;
   createHexPath(context, cell.x, cell.y, radius);
   context.stroke();
   context.restore();
@@ -192,7 +192,7 @@ function drawAnimatedGlow(
         if (!cell) continue;
         const distance = Math.hypot(cell.x - center.x, cell.y - center.y);
         const ringIntensity =
-          distance < radius * 0.5 ? 1 : distance < radius * 2 ? 0.42 : distance < radius * 3.15 ? 0.15 : 0;
+          distance < radius * 0.5 ? 1 : distance < radius * 2 ? 0.3 : distance < radius * 3.15 ? 0.08 : 0;
         if (!ringIntensity) continue;
         const current = intensityByIndex.get(cell.index);
         const intensity = baseIntensity * ringIntensity;
@@ -207,7 +207,7 @@ function drawAnimatedGlow(
     let glow = intensityByIndex.get(cell.index);
     if (HEX_BACKGROUND_CONFIG.mouseInteraction && mouse.active) {
       const distance = Math.hypot(cell.x - mouse.x, cell.y - mouse.y);
-      const mouseIntensity = distance < 170 ? (1 - distance / 170) ** 2 * 0.18 : 0;
+      const mouseIntensity = distance < 140 ? (1 - distance / 140) ** 2 * 0.12 : 0;
       if (mouseIntensity > (glow?.intensity ?? 0)) {
         glow = { color: cell.glowColor, intensity: mouseIntensity };
       }
@@ -256,7 +256,7 @@ export function HexagonBackground() {
       cellByPosition = grid.cellByPosition;
       targetPulseCount = Math.min(
         HEX_BACKGROUND_CONFIG.activeCellCount,
-        Math.max(3, Math.floor(cells.length * 0.05)),
+        Math.max(2, Math.floor(cells.length * 0.025)),
       );
       pulses = Array.from({ length: targetPulseCount }, () =>
         createPulse(cells.length, performance.now(), true),
