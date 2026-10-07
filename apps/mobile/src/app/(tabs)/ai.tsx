@@ -4,14 +4,19 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  ImageBackground,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type ImageSourcePropType,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   EmptyState,
@@ -27,14 +32,23 @@ import { isOfflineError } from "@/lib/service-status";
 import { useCurrentCourse } from "@/providers/current-course-provider";
 import { useStudentSession } from "@/providers/student-session-provider";
 
+const ASK_ECHO_RESERVED_HEIGHT = 184;
+
 export default function AISupportScreen() {
   const { user } = useStudentSession();
-  const { courses, selectedCourse, loading, error, refreshCourses } = useCurrentCourse();
+  const { courses, selectedCourse, loading, error, refreshCourses } =
+    useCurrentCourse();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const compact = width < 390;
   const [question, setQuestion] = useState("");
   const archived = selectedCourse?.status === "archived";
   const offline = isOfflineError(error);
 
-  const learning = useStudentLearningOverview(user?.id ?? "", selectedCourse?.id ?? null);
+  const learning = useStudentLearningOverview(
+    user?.id ?? "",
+    selectedCourse?.id ?? null,
+  );
   const knowledgePointNames = useMemo(
     () =>
       new Map(
@@ -47,6 +61,19 @@ export default function AISupportScreen() {
   const weakestStates = [...learning.mastery]
     .sort((left, right) => left.score - right.score)
     .slice(0, 3);
+  const currentChapterTitle = useMemo(() => {
+    const latestState = [...learning.mastery].sort((left, right) =>
+      right.updated_at.localeCompare(left.updated_at),
+    )[0];
+    if (!latestState) return null;
+    return (
+      learning.chapters.find((chapter) =>
+        chapter.knowledge_points.some(
+          (point) => point.id === latestState.knowledge_point_id,
+        ),
+      )?.title ?? null
+    );
+  }, [learning.chapters, learning.mastery]);
 
   if (!user) {
     return null;
@@ -69,7 +96,7 @@ export default function AISupportScreen() {
 
   if (!selectedCourse) {
     return (
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.emptyContent}>
         <EmptyState
           actionLabel="输入课程码"
           description="加入课程后，ECHO 会结合课程资料和教师教学规则陪你学习。"
@@ -82,11 +109,22 @@ export default function AISupportScreen() {
     );
   }
 
+  const progressPercent = Math.max(
+    0,
+    Math.min(100, learning.averageMastery ?? 0),
+  );
+  const progressLabel =
+    learning.averageMastery === null ? "暂无证据" : `${progressPercent}%`;
+  const heroTextWidth = Math.max(compact ? 158 : 202, width - (compact ? 146 : 180));
+
+  function openCourse() {
+    if (!selectedCourse) return;
+    router.push(`/courses/${selectedCourse.id}`);
+  }
+
   function openQuestion() {
     const content = question.trim();
-    if (!content || archived) {
-      return;
-    }
+    if (!content || archived) return;
     router.push({
       pathname: "/chat",
       params: { question: content },
@@ -96,200 +134,308 @@ export default function AISupportScreen() {
 
   return (
     <PageFade>
-    <ScrollView contentContainerStyle={styles.content}>
-      {offline ? <OfflineBanner onRetry={() => void refreshCourses()} /> : null}
-      <View style={styles.hero}>
-        <View style={styles.heroCopy}>
-          <Text style={styles.eyebrow}>ECHO AI 助学</Text>
-          <Text style={styles.heroTitle}>今天想学什么？</Text>
-          <Text style={styles.heroDescription}>
-            围绕当前课程发现学习任务，进入对应学习空间。
-          </Text>
-        </View>
-        <View style={styles.courseBadge}>
-          <Text numberOfLines={1} style={styles.courseBadgeName}>
-            {selectedCourse.name}
-          </Text>
-          <Text style={styles.courseBadgeMeta}>
-            {archived ? "已归档" : (selectedCourse.term ?? "当前课程")}
-          </Text>
-        </View>
-      </View>
+      <View style={styles.screen}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingBottom: ASK_ECHO_RESERVED_HEIGHT + insets.bottom + 24,
+              paddingHorizontal: compact ? 14 : 18,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {offline ? (
+            <OfflineBanner onRetry={() => void refreshCourses()} />
+          ) : null}
 
-      {archived ? (
-        <View style={styles.archivedBanner}>
-          <Text style={styles.archivedBannerText}>本课程已归档，仅可查看历史内容。</Text>
-        </View>
-      ) : null}
-
-      <View style={styles.abilityGrid}>
-        <AbilityCard
-          accent="#3478f6"
-          description={archived ? "课程已归档" : "课程上下文问答"}
-          disabled={archived}
-          imageSource={require("@/assets/images/student/ai-support.png")}
-          onPress={() => router.push("/chat")}
-          title="智能问答"
-        />
-        <AbilityCard
-          accent="#13a574"
-          description={archived ? "课程已归档" : "章节与知识点导学"}
-          disabled={archived}
-          imageSource={require("@/assets/images/student/guided-learning.png")}
-          onPress={() => router.push(`/courses/${selectedCourse.id}`)}
-          title="教材导学"
-        />
-        <AbilityCard
-          accent="#d97706"
-          description={archived ? "课程已归档" : "拍照或上传图片提问"}
-          disabled={archived}
-          imageSource={require("@/assets/images/student/photo-question.png")}
-          onPress={() => router.push("/chat")}
-          title="拍照识题"
-        />
-        <AbilityCard
-          accent="#7357c8"
-          description="增强版开放"
-          disabled
-          imageSource={require("@/assets/images/student/knowledge-graph.png")}
-          title="知识图谱"
-        />
-      </View>
-
-      <Text style={styles.sectionTitle}>快捷入口</Text>
-      <View style={styles.shortcutRow}>
-        <Shortcut
-          icon="qr_code"
-          label="扫码加课"
-          onPress={() => router.push("/join-course")}
-        />
-        <Shortcut
-          icon="history"
-          label="学习记录"
-          onPress={() => router.push("/learning-records")}
-        />
-        <Shortcut
-          icon="quiz"
-          label="错题整理"
-          onPress={() => router.push("/wrong-questions")}
-        />
-      </View>
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>当前课程学习卡</Text>
-        <Pressable onPress={learning.reload}>
-          <Text style={styles.refreshText}>刷新</Text>
-        </Pressable>
-      </View>
-      <View style={styles.courseCard}>
-        <Text style={styles.courseCardTitle}>{selectedCourse.name}</Text>
-        <Text style={styles.courseCardMeta}>
-          {selectedCourse.term ?? "学期待同步"} · 授课教师待同步
-        </Text>
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width:
-                  learning.averageMastery === null
-                    ? "0%"
-                    : `${Math.max(0, Math.min(100, learning.averageMastery))}%`,
-              },
-            ]}
+          <HeroCard
+            archived={archived}
+            compact={compact}
+            courseName={selectedCourse.name}
+            courseTerm={selectedCourse.term ?? "当前学期"}
+            heroTextWidth={heroTextWidth}
+            onOpenCourse={openCourse}
           />
-        </View>
-        <View style={styles.cardFooter}>
-          <Text style={styles.cardMeta}>
-            当前章节待同步 · 综合掌握{" "}
-            {learning.averageMastery === null ? "暂无证据" : `${learning.averageMastery}%`}
+
+          {archived ? (
+            <View style={styles.archivedBanner}>
+              <SymbolView
+                name={{ android: "archive", web: "archive" }}
+                size={16}
+                tintColor={studentTheme.color.warning}
+              />
+              <Text style={styles.archivedBannerText}>
+                本课程已归档，仅可查看历史内容。
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.abilityGrid}>
+            <AbilityCard
+              description="课程上下文问答"
+              disabled={archived}
+              iconBackground={studentTheme.color.abilityBlue}
+              iconSource={require("@/assets/images/student/ai-support.png")}
+              onPress={() => router.push("/chat")}
+              title="智能问答"
+            />
+            <AbilityCard
+              description="章节与知识点导学"
+              disabled={archived}
+              iconBackground={studentTheme.color.abilityOrange}
+              iconSource={require("@/assets/images/student/guided-learning.png")}
+              onPress={openCourse}
+              title="教材导学"
+            />
+            <AbilityCard
+              description="拍照上传图片提问"
+              disabled={archived}
+              iconBackground={studentTheme.color.abilityPurple}
+              iconSource={require("@/assets/images/student/photo-question.png")}
+              onPress={() => router.push("/chat")}
+              title="拍照识题"
+            />
+            <AbilityCard
+              description="构建课程知识网络"
+              disabled
+              iconBackground={studentTheme.color.abilityGreen}
+              iconSource={require("@/assets/images/student/knowledge-graph.png")}
+              meta="增强版开放"
+              title="知识图谱"
+            />
+          </View>
+
+          <CourseLearningCard
+            archived={archived}
+            compact={compact}
+            courseName={selectedCourse.name}
+            courseTerm={selectedCourse.term ?? "学期待同步"}
+            currentChapterTitle={currentChapterTitle}
+            loading={learning.loading}
+            onContinue={openCourse}
+            onOpenDetails={openCourse}
+            onRefresh={learning.reload}
+            progressLabel={progressLabel}
+            progressPercent={progressPercent}
+          />
+
+          <SectionHeading title="快捷入口" />
+          <View style={styles.shortcutRow}>
+            <Shortcut
+              icon="qr_code"
+              label="扫码加课"
+              onPress={() => router.push("/join-course")}
+            />
+            <Shortcut
+              icon="history"
+              label="学习记录"
+              onPress={() => router.push("/learning-records")}
+            />
+            <Shortcut
+              icon="quiz"
+              label="错题整理"
+              onPress={() => router.push("/wrong-questions")}
+            />
+          </View>
+
+          <SectionHeading title="ECHO 学习建议" />
+          {learning.loading ? (
+            <ActivityIndicator color={studentTheme.color.primary} />
+          ) : null}
+          {learning.error ? (
+            <ErrorState
+              description="学习状态加载失败。"
+              onAction={learning.reload}
+              title="学习建议暂不可用"
+            />
+          ) : null}
+          {!learning.loading && !learning.error && weakestStates.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>暂无足够学习证据</Text>
+              <Text style={styles.emptyText}>
+                完成学习后，这里会显示可执行的复习建议。
+              </Text>
+            </View>
+          ) : null}
+          {weakestStates.map((state, index) => (
+            <Pressable
+              key={state.id}
+              onPress={() =>
+                router.push(`/knowledge/${state.knowledge_point_id}`)
+              }
+              style={({ pressed }) => [
+                styles.suggestion,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.suggestionIndex}>
+                <Text style={styles.suggestionIndexText}>{index + 1}</Text>
+              </View>
+              <View style={styles.suggestionCopy}>
+                <Text style={styles.suggestionTitle}>
+                  建议复习“
+                  {knowledgePointNames.get(state.knowledge_point_id) ??
+                    "薄弱知识点"}
+                  ”
+                </Text>
+                <Text style={styles.suggestionMeta}>
+                  当前掌握度 {Math.round(state.score)}%
+                </Text>
+              </View>
+            </Pressable>
+          ))}
+
+          <Text style={styles.footerStats}>
+            {courses.length} 门课程 · {learning.chapters.length} 个章节
           </Text>
-          <Pressable
-            onPress={() => router.push(`/courses/${selectedCourse.id}`)}
-            style={styles.continueButton}
+        </ScrollView>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
+          pointerEvents="box-none"
+          style={styles.floatingKeyboardLayer}
+        >
+          <View
+            pointerEvents="auto"
+            style={[
+              styles.floatingAskWrapper,
+              { marginBottom: Math.max(insets.bottom, 10) },
+            ]}
           >
-            <Text style={styles.continueText}>继续学习</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      <Text style={styles.sectionTitle}>ECHO 学习建议</Text>
-      {learning.loading ? <ActivityIndicator color={studentTheme.color.primary} /> : null}
-      {learning.error ? (
-        <ErrorState
-          description="学习状态加载失败。"
-          onAction={learning.reload}
-          title="学习建议暂不可用"
-        />
-      ) : null}
-      {!learning.loading && !learning.error && weakestStates.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>暂无足够学习证据</Text>
-          <Text style={styles.emptyText}>完成学习后，这里会显示可执行的复习建议。</Text>
-        </View>
-      ) : null}
-      {weakestStates.map((state, index) => (
-        <Pressable
-          key={state.id}
-          onPress={() => router.push(`/knowledge/${state.knowledge_point_id}`)}
-          style={({ pressed }) => [styles.suggestion, pressed && styles.pressed]}
-        >
-          <View style={styles.suggestionIndex}>
-            <Text style={styles.suggestionIndexText}>{index + 1}</Text>
+            <AskEchoCard
+              archived={archived}
+              compact={compact}
+              onChangeQuestion={setQuestion}
+              onOpenChat={() => router.push("/chat")}
+              onSubmit={openQuestion}
+              question={question}
+            />
           </View>
-          <View style={styles.suggestionCopy}>
-            <Text style={styles.suggestionTitle}>
-              建议复习“{knowledgePointNames.get(state.knowledge_point_id) ?? "薄弱知识点"}”
-            </Text>
-            <Text style={styles.suggestionMeta}>
-              当前掌握度 {Math.round(state.score)}%
-            </Text>
-          </View>
-        </Pressable>
-      ))}
-
-      <View style={styles.askCard}>
-        <Text style={styles.askTitle}>问 ECHO</Text>
-        <TextInput
-          multiline
-          editable={!archived}
-          onChangeText={setQuestion}
-          placeholder={archived ? "本课程已归档，仅可查看历史内容" : "输入一个课程问题..."}
-          placeholderTextColor="#8b96a8"
-          style={styles.askInput}
-          value={question}
-        />
-        <Pressable
-          disabled={archived || !question.trim()}
-          onPress={openQuestion}
-          style={[styles.primaryButton, (archived || !question.trim()) && styles.disabled]}
-        >
-          <Text style={styles.primaryButtonText}>进入 AI 对话</Text>
-        </Pressable>
+        </KeyboardAvoidingView>
       </View>
-
-      <Text style={styles.footerStats}>
-        {courses.length} 门课程 · {learning.chapters.length} 个章节
-      </Text>
-    </ScrollView>
     </PageFade>
+  );
+}
+
+function HeroCard({
+  archived,
+  compact,
+  courseName,
+  courseTerm,
+  heroTextWidth,
+  onOpenCourse,
+}: {
+  archived: boolean;
+  compact: boolean;
+  courseName: string;
+  courseTerm: string;
+  heroTextWidth: number;
+  onOpenCourse: () => void;
+}) {
+  const robotSize = compact ? 126 : 154;
+  return (
+    <View
+      style={[
+        styles.hero,
+        {
+          minHeight: compact ? 228 : 244,
+          padding: compact ? 16 : 20,
+        },
+      ]}
+    >
+      <View style={styles.heroGlowLarge} />
+      <View style={styles.heroGlowSmall} />
+      <View style={[styles.heroCopy, { maxWidth: heroTextWidth }]}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={onOpenCourse}
+          style={({ pressed }) => [
+            styles.courseCapsule,
+            pressed && styles.pressed,
+          ]}
+        >
+          <View style={styles.courseCapsuleIcon}>
+            <SymbolView
+              name={{ android: "menu_book", web: "menu_book" }}
+              size={15}
+              tintColor={studentTheme.color.primary}
+            />
+          </View>
+          <Text numberOfLines={1} style={styles.courseCapsuleName}>
+            {courseName}
+          </Text>
+          <Text numberOfLines={1} style={styles.courseCapsuleTerm}>
+            / {archived ? "已归档" : courseTerm}
+          </Text>
+          <SymbolView
+            name={{ android: "chevron_right", web: "chevron_right" }}
+            size={16}
+            tintColor={studentTheme.color.inkMuted}
+          />
+        </Pressable>
+
+        <Text style={[styles.heroTitle, compact && styles.heroTitleCompact]}>
+          今天想学什么？
+        </Text>
+        <Text style={styles.heroDescription}>
+          AI 根据课程进度，为你推荐学习任务
+        </Text>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={archived}
+          onPress={onOpenCourse}
+          style={({ pressed }) => [
+            styles.startButton,
+            archived && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text style={styles.startButtonText}>开始学习</Text>
+          <SymbolView
+            name={{ android: "arrow_forward", web: "arrow_forward" }}
+            size={17}
+            tintColor="#ffffff"
+          />
+        </Pressable>
+      </View>
+
+      <View
+        pointerEvents="none"
+        style={[
+          styles.heroRobotFrame,
+          compact && styles.heroRobotFrameCompact,
+        ]}
+      >
+        <Image
+          resizeMode="contain"
+          source={require("@/assets/images/student/ai-support.png")}
+          style={{ height: robotSize, width: robotSize }}
+        />
+      </View>
+    </View>
   );
 }
 
 function AbilityCard({
   title,
   description,
-  imageSource,
-  accent,
+  iconSource,
+  iconBackground,
   onPress,
   disabled = false,
+  meta,
 }: {
   title: string;
   description: string;
-  imageSource: ImageSourcePropType;
-  accent: string;
+  iconSource: ImageSourcePropType;
+  iconBackground: string;
   onPress?: () => void;
   disabled?: boolean;
+  meta?: string;
 }) {
   return (
     <Pressable
@@ -297,18 +443,268 @@ function AbilityCard({
       onPress={onPress}
       style={({ pressed }) => [
         styles.abilityCard,
-        { backgroundColor: accent, borderColor: accent },
-        disabled && styles.disabled,
+        disabled && styles.abilityCardDisabled,
         pressed && styles.pressed,
       ]}
     >
-      <View style={styles.abilityIcon}>
-        <Image resizeMode="cover" source={imageSource} style={styles.abilityImage} />
+      <View style={[styles.abilityIcon, { backgroundColor: iconBackground }]}>
+        <Image
+          resizeMode="cover"
+          source={iconSource}
+          style={styles.abilityImage}
+        />
       </View>
-      <Text style={styles.abilityTitle}>{title}</Text>
+      <View style={styles.abilityTitleRow}>
+        <Text style={styles.abilityTitle}>{title}</Text>
+        <SymbolView
+          name={{ android: "chevron_right", web: "chevron_right" }}
+          size={19}
+          tintColor={studentTheme.color.inkMuted}
+        />
+      </View>
       <Text style={styles.abilityDescription}>{description}</Text>
+      {meta ? <Text style={styles.abilityMeta}>{meta}</Text> : null}
     </Pressable>
   );
+}
+
+function CourseLearningCard({
+  archived,
+  compact,
+  courseName,
+  courseTerm,
+  currentChapterTitle,
+  progressLabel,
+  progressPercent,
+  loading,
+  onOpenDetails,
+  onContinue,
+  onRefresh,
+}: {
+  archived: boolean;
+  compact: boolean;
+  courseName: string;
+  courseTerm: string;
+  currentChapterTitle: string | null;
+  progressLabel: string;
+  progressPercent: number;
+  loading: boolean;
+  onOpenDetails: () => void;
+  onContinue: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <View style={styles.courseCard}>
+      <View style={styles.courseCardHeader}>
+        <View style={styles.courseCardTitleRow}>
+          <SymbolView
+            name={{ android: "school", web: "school" }}
+            size={20}
+            tintColor={studentTheme.color.ink}
+          />
+          <Text style={styles.courseCardTitle}>当前课程学习卡</Text>
+        </View>
+        <View style={styles.courseCardActions}>
+          <Pressable
+            accessibilityLabel="刷新学习数据"
+            onPress={onRefresh}
+            style={({ pressed }) => [
+              styles.refreshButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <SymbolView
+              name={{ android: "refresh", web: "refresh" }}
+              size={16}
+              tintColor={studentTheme.color.inkMuted}
+            />
+          </Pressable>
+          <Pressable
+            onPress={onOpenDetails}
+            style={({ pressed }) => [
+              styles.detailLink,
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={styles.detailLinkText}>查看详情</Text>
+            <SymbolView
+              name={{ android: "chevron_right", web: "chevron_right" }}
+              size={16}
+              tintColor={studentTheme.color.inkMuted}
+            />
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.courseBody}>
+        <ImageBackground
+          imageStyle={styles.courseCoverImage}
+          resizeMode="cover"
+          source={require("@/assets/images/student/course-code.png")}
+          style={[
+            styles.courseCover,
+            {
+              height: compact ? 108 : 122,
+              width: compact ? 78 : 88,
+            },
+          ]}
+        >
+          <View style={styles.courseCoverOverlay} />
+          <Text numberOfLines={3} style={styles.courseCoverText}>
+            {courseName}
+          </Text>
+        </ImageBackground>
+
+        <View style={styles.courseInfo}>
+          <Text numberOfLines={1} style={styles.courseName}>
+            {courseName}
+          </Text>
+          <Text numberOfLines={1} style={styles.courseTerm}>
+            {courseTerm}
+          </Text>
+
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressLabel}>整体学习进度</Text>
+            <Text style={styles.progressValue}>{progressLabel}</Text>
+          </View>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${progressPercent}%` },
+              ]}
+            />
+          </View>
+          <View style={styles.currentChapterRow}>
+            <SymbolView
+              name={{ android: "bookmark", web: "bookmark" }}
+              size={15}
+              tintColor={studentTheme.color.primary}
+            />
+            <Text numberOfLines={1} style={styles.currentChapterText}>
+              当前章节：{currentChapterTitle ?? "暂无学习记录"}
+            </Text>
+          </View>
+          {loading ? (
+            <ActivityIndicator
+              color={studentTheme.color.primary}
+              size="small"
+            />
+          ) : null}
+        </View>
+      </View>
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={archived}
+        onPress={onContinue}
+        style={({ pressed }) => [
+          styles.continueButton,
+          archived && styles.disabled,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text style={styles.continueButtonText}>继续学习</Text>
+        <SymbolView
+          name={{ android: "arrow_forward", web: "arrow_forward" }}
+          size={17}
+          tintColor="#ffffff"
+        />
+      </Pressable>
+    </View>
+  );
+}
+
+function AskEchoCard({
+  archived,
+  compact,
+  question,
+  onChangeQuestion,
+  onOpenChat,
+  onSubmit,
+}: {
+  archived: boolean;
+  compact: boolean;
+  question: string;
+  onChangeQuestion: (value: string) => void;
+  onOpenChat: () => void;
+  onSubmit: () => void;
+}) {
+  const submitDisabled = archived || !question.trim();
+  return (
+    <View style={styles.askCard}>
+      <View style={styles.askHeader}>
+        <View style={styles.askBrand}>
+          <SymbolView
+            name={{ android: "auto_awesome", web: "auto_awesome" }}
+            size={20}
+            tintColor={studentTheme.color.primary}
+          />
+          <Text style={styles.askTitle}>问 ECHO</Text>
+        </View>
+        <View style={styles.askHint}>
+          <Text numberOfLines={1} style={styles.askHintText}>
+            深度思考，更好的学习体验
+          </Text>
+          <SymbolView
+            name={{ android: "chevron_right", web: "chevron_right" }}
+            size={14}
+            tintColor={studentTheme.color.inkMuted}
+          />
+        </View>
+      </View>
+
+      <View style={styles.askInputRow}>
+        <TextInput
+          editable={!archived}
+          onChangeText={onChangeQuestion}
+          onSubmitEditing={onSubmit}
+          placeholder={
+            archived ? "本课程已归档，仅可查看历史内容" : "输入一个课程问题..."
+          }
+          placeholderTextColor="#8b96a8"
+          returnKeyType="send"
+          style={styles.askInput}
+          value={question}
+        />
+        <Pressable
+          accessibilityLabel="打开 AI 对话并上传图片"
+          disabled={archived}
+          onPress={onOpenChat}
+          style={({ pressed }) => [
+            styles.askImageButton,
+            archived && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <SymbolView
+            name={{ android: "image", web: "image" }}
+            size={20}
+            tintColor={studentTheme.color.inkMuted}
+          />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={submitDisabled}
+          onPress={onSubmit}
+          style={({ pressed }) => [
+            styles.askSubmitButton,
+            compact && styles.askSubmitButtonCompact,
+            submitDisabled && styles.disabled,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Text numberOfLines={1} style={styles.askSubmitText}>
+            进入 AI 对话
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function SectionHeading({ title }: { title: string }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
 }
 
 function Shortcut({
@@ -321,7 +717,13 @@ function Shortcut({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.shortcut, pressed && styles.pressed]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.shortcut,
+        pressed && styles.pressed,
+      ]}
+    >
       <SymbolView
         name={{ android: icon, web: icon }}
         size={19}
@@ -333,130 +735,375 @@ function Shortcut({
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: 14,
-    padding: 16,
-    paddingBottom: 32,
-  },
-  hero: {
-    backgroundColor: studentTheme.color.surface,
-    borderColor: studentTheme.color.border,
-    borderRadius: studentTheme.radius.hero,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 12,
-    padding: 20,
-    shadowColor: "#17345c",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.06,
-    shadowRadius: 20,
-  },
-  heroCopy: {
+  screen: {
+    backgroundColor: studentTheme.color.background,
     flex: 1,
   },
-  eyebrow: {
-    color: studentTheme.color.primary,
-    fontSize: 12,
+  content: {
+    gap: 14,
+    paddingTop: 2,
+  },
+  emptyContent: {
+    padding: 16,
+  },
+  floatingKeyboardLayer: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    justifyContent: "flex-end",
+    zIndex: 20,
+    elevation: 20,
+  },
+  floatingAskWrapper: {
+    marginHorizontal: 16,
+  },
+  hero: {
+    backgroundColor: studentTheme.color.aiHero,
+    borderRadius: studentTheme.radius.aiCard,
+    overflow: "hidden",
+    position: "relative",
+  },
+  heroGlowLarge: {
+    backgroundColor: "rgba(255,255,255,0.72)",
+    borderRadius: 999,
+    height: 196,
+    position: "absolute",
+    right: -62,
+    top: -54,
+    width: 196,
+  },
+  heroGlowSmall: {
+    backgroundColor: "rgba(255,255,255,0.58)",
+    borderRadius: 999,
+    bottom: -42,
+    height: 124,
+    left: -34,
+    position: "absolute",
+    width: 124,
+  },
+  heroCopy: {
+    zIndex: 2,
+  },
+  courseCapsule: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.88)",
+    borderColor: "rgba(193,218,248,0.75)",
+    borderRadius: studentTheme.radius.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    maxWidth: "100%",
+    minHeight: 38,
+    paddingHorizontal: 9,
+  },
+  courseCapsuleIcon: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.primarySoft,
+    borderRadius: 10,
+    height: 26,
+    justifyContent: "center",
+    width: 26,
+  },
+  courseCapsuleName: {
+    color: studentTheme.color.ink,
+    flexShrink: 1,
+    fontSize: 13,
     fontWeight: "900",
+  },
+  courseCapsuleTerm: {
+    color: studentTheme.color.inkMuted,
+    flexShrink: 1,
+    fontSize: 11,
   },
   heroTitle: {
-    color: studentTheme.color.text,
-    fontSize: 26,
+    color: studentTheme.color.ink,
+    fontSize: 30,
     fontWeight: "900",
-    marginTop: 6,
+    lineHeight: 38,
+    marginTop: 15,
+  },
+  heroTitleCompact: {
+    fontSize: 27,
+    lineHeight: 34,
   },
   heroDescription: {
-    color: studentTheme.color.textMuted,
+    color: studentTheme.color.inkMuted,
     fontSize: 13,
     lineHeight: 20,
-    marginTop: 8,
+    marginTop: 6,
+  },
+  startButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: studentTheme.color.primary,
+    borderRadius: studentTheme.radius.pill,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 16,
+    minHeight: 48,
+    paddingHorizontal: 21,
+  },
+  startButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  heroRobotFrame: {
+    alignItems: "center",
+    bottom: -1,
+    height: 172,
+    justifyContent: "flex-end",
+    position: "absolute",
+    right: -1,
+    width: 172,
+  },
+  heroRobotFrameCompact: {
+    height: 142,
+    width: 142,
   },
   archivedBanner: {
-    backgroundColor: "#fff7ed",
-    borderColor: "#fed7aa",
+    alignItems: "center",
+    backgroundColor: studentTheme.color.warningSoft,
+    borderColor: studentTheme.color.warningBorder,
     borderRadius: studentTheme.radius.medium,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
     padding: 12,
   },
   archivedBannerText: {
     color: studentTheme.color.warning,
+    flex: 1,
     fontSize: 13,
     fontWeight: "800",
-  },
-  courseBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: studentTheme.color.surfaceBlue,
-    borderRadius: studentTheme.radius.large,
-    maxWidth: 150,
-    padding: 11,
-  },
-  courseBadgeName: {
-    color: studentTheme.color.primary,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  courseBadgeMeta: {
-    color: studentTheme.color.textMuted,
-    fontSize: 11,
-    marginTop: 3,
   },
   abilityGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
+    gap: 12,
   },
   abilityCard: {
     backgroundColor: studentTheme.color.surface,
     borderColor: studentTheme.color.border,
-    borderRadius: studentTheme.radius.card,
+    borderRadius: studentTheme.radius.ability,
     borderWidth: 1,
-    minHeight: 136,
-    padding: 15,
-    width: "48%",
+    flexBasis: "47%",
+    flexGrow: 1,
+    minHeight: 158,
+    minWidth: 140,
+    padding: 14,
+    shadowColor: studentTheme.color.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  abilityCardDisabled: {
+    opacity: 0.58,
   },
   abilityIcon: {
     alignItems: "center",
     borderRadius: 18,
-    height: 68,
+    height: 58,
     justifyContent: "center",
     overflow: "hidden",
-    width: 68,
+    width: 58,
   },
   abilityImage: {
     height: "100%",
     width: "100%",
   },
+  abilityTitleRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "space-between",
+    marginTop: 14,
+  },
   abilityTitle: {
-    color: "#ffffff",
-    fontSize: 16,
+    color: studentTheme.color.ink,
+    flex: 1,
+    fontSize: 17,
     fontWeight: "900",
-    marginTop: 12,
   },
   abilityDescription: {
-    color: "rgba(255,255,255,0.86)",
+    color: studentTheme.color.inkMuted,
     fontSize: 12,
     lineHeight: 18,
     marginTop: 5,
   },
-  sectionHeader: {
+  abilityMeta: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 10,
+    fontWeight: "700",
+    marginTop: 5,
+  },
+  courseCard: {
+    backgroundColor: studentTheme.color.surface,
+    borderColor: studentTheme.color.border,
+    borderRadius: studentTheme.radius.aiCard,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: studentTheme.color.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    elevation: 2,
+  },
+  courseCardHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 3,
   },
-  sectionTitle: {
-    color: studentTheme.color.text,
+  courseCardTitleRow: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+  },
+  courseCardTitle: {
+    color: studentTheme.color.ink,
+    flexShrink: 1,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  courseCardActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 4,
+  },
+  refreshButton: {
+    alignItems: "center",
+    height: 34,
+    justifyContent: "center",
+    width: 30,
+  },
+  detailLink: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 34,
+  },
+  detailLinkText: {
+    color: studentTheme.color.inkMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  courseBody: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    marginTop: 16,
+  },
+  courseCover: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  courseCoverImage: {
+    borderRadius: 14,
+  },
+  courseCoverOverlay: {
+    bottom: 0,
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
+    backgroundColor: "rgba(21,74,153,0.26)",
+  },
+  courseCoverText: {
+    bottom: 9,
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+    left: 8,
+    lineHeight: 16,
+    position: "absolute",
+    right: 8,
+    textShadowColor: "rgba(0,0,0,0.18)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  courseInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  courseName: {
+    color: studentTheme.color.ink,
     fontSize: 18,
     fontWeight: "900",
   },
-  refreshText: {
-    color: studentTheme.color.primary,
+  courseTerm: {
+    color: studentTheme.color.inkMuted,
     fontSize: 12,
-    fontWeight: "800",
+    marginTop: 4,
+  },
+  progressHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 14,
+  },
+  progressLabel: {
+    color: studentTheme.color.inkMuted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  progressValue: {
+    color: studentTheme.color.primary,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  progressTrack: {
+    backgroundColor: "#e4edf8",
+    borderRadius: studentTheme.radius.pill,
+    height: 8,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  progressFill: {
+    backgroundColor: studentTheme.color.primary,
+    borderRadius: studentTheme.radius.pill,
+    height: 8,
+  },
+  currentChapterRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 12,
+  },
+  currentChapterText: {
+    color: studentTheme.color.inkMuted,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  continueButton: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.primary,
+    borderRadius: 15,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 16,
+    minHeight: 48,
+  },
+  continueButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  sectionTitle: {
+    color: studentTheme.color.ink,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 4,
   },
   shortcutRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 9,
   },
   shortcut: {
     alignItems: "center",
@@ -465,85 +1112,15 @@ const styles = StyleSheet.create({
     borderRadius: studentTheme.radius.medium,
     borderWidth: 1,
     flex: 1,
-    justifyContent: "center",
     flexDirection: "column",
     gap: 5,
-    minHeight: 62,
+    justifyContent: "center",
+    minHeight: 68,
   },
   shortcutText: {
-    color: studentTheme.color.text,
+    color: studentTheme.color.ink,
     fontSize: 12,
     fontWeight: "800",
-  },
-  courseCard: {
-    backgroundColor: studentTheme.color.surface,
-    borderColor: studentTheme.color.border,
-    borderRadius: studentTheme.radius.card,
-    borderWidth: 1,
-    padding: 16,
-  },
-  courseCardTitle: {
-    color: studentTheme.color.text,
-    fontSize: 18,
-    fontWeight: "900",
-  },
-  courseCardMeta: {
-    color: studentTheme.color.textMuted,
-    fontSize: 12,
-    marginTop: 5,
-  },
-  progressTrack: {
-    backgroundColor: "#e7eef8",
-    borderRadius: 999,
-    height: 8,
-    marginTop: 16,
-    overflow: "hidden",
-  },
-  progressFill: {
-    backgroundColor: studentTheme.color.primary,
-    borderRadius: 999,
-    height: 8,
-  },
-  cardFooter: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 12,
-  },
-  cardMeta: {
-    color: studentTheme.color.textMuted,
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  continueButton: {
-    backgroundColor: studentTheme.color.surfaceBlue,
-    borderRadius: studentTheme.radius.medium,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  continueText: {
-    color: studentTheme.color.primary,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  emptyCard: {
-    backgroundColor: studentTheme.color.surface,
-    borderColor: studentTheme.color.border,
-    borderRadius: studentTheme.radius.card,
-    borderWidth: 1,
-    padding: 16,
-  },
-  emptyTitle: {
-    color: studentTheme.color.text,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-  emptyText: {
-    color: studentTheme.color.textMuted,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 6,
   },
   suggestion: {
     alignItems: "center",
@@ -557,7 +1134,7 @@ const styles = StyleSheet.create({
   },
   suggestionIndex: {
     alignItems: "center",
-    backgroundColor: studentTheme.color.surfaceBlue,
+    backgroundColor: studentTheme.color.primarySoft,
     borderRadius: studentTheme.radius.medium,
     height: 34,
     justifyContent: "center",
@@ -572,63 +1149,127 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   suggestionTitle: {
-    color: studentTheme.color.text,
+    color: studentTheme.color.ink,
     fontSize: 14,
     fontWeight: "900",
   },
   suggestionMeta: {
-    color: studentTheme.color.textMuted,
+    color: studentTheme.color.inkMuted,
     fontSize: 12,
     marginTop: 4,
   },
-  askCard: {
+  emptyCard: {
     backgroundColor: studentTheme.color.surface,
     borderColor: studentTheme.color.border,
     borderRadius: studentTheme.radius.card,
     borderWidth: 1,
     padding: 16,
   },
-  askTitle: {
-    color: studentTheme.color.text,
-    fontSize: 17,
+  emptyTitle: {
+    color: studentTheme.color.ink,
+    fontSize: 16,
     fontWeight: "900",
+  },
+  emptyText: {
+    color: studentTheme.color.inkMuted,
+    fontSize: 13,
+    lineHeight: 20,
+    marginTop: 6,
+  },
+  askCard: {
+    backgroundColor: studentTheme.color.surface,
+    borderColor: "#dce8f7",
+    borderRadius: studentTheme.radius.aiCard,
+    borderWidth: 1,
+    padding: 14,
+    shadowColor: studentTheme.color.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  askHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  askBrand: {
+    alignItems: "center",
+    flexDirection: "row",
+    flexShrink: 0,
+    gap: 7,
+  },
+  askTitle: {
+    color: studentTheme.color.ink,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  askHint: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginLeft: 8,
+  },
+  askHintText: {
+    color: studentTheme.color.inkMuted,
+    flexShrink: 1,
+    fontSize: 10,
+  },
+  askInputRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
   },
   askInput: {
-    backgroundColor: studentTheme.color.surfaceSoft,
-    borderColor: studentTheme.color.border,
-    borderRadius: studentTheme.radius.medium,
+    backgroundColor: "#fbfdff",
+    borderColor: "#dce8f7",
+    borderRadius: 14,
     borderWidth: 1,
-    color: studentTheme.color.text,
-    fontSize: 14,
-    marginTop: 12,
-    minHeight: 76,
-    padding: 12,
-    textAlignVertical: "top",
-  },
-  primaryButton: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: studentTheme.color.primary,
-    borderRadius: studentTheme.radius.medium,
-    justifyContent: "center",
-    marginTop: 14,
+    color: studentTheme.color.ink,
+    flex: 1,
+    fontSize: 13,
     minHeight: 44,
-    paddingHorizontal: 18,
+    paddingHorizontal: 12,
   },
-  primaryButtonText: {
+  askImageButton: {
+    alignItems: "center",
+    borderColor: "#dce8f7",
+    borderRadius: 13,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  askSubmitButton: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.primary,
+    borderRadius: 14,
+    justifyContent: "center",
+    minHeight: 44,
+    minWidth: 112,
+    paddingHorizontal: 13,
+  },
+  askSubmitButtonCompact: {
+    minWidth: 98,
+    paddingHorizontal: 10,
+  },
+  askSubmitText: {
     color: "#ffffff",
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "900",
+  },
+  footerStats: {
+    color: studentTheme.color.textSubtle,
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: "center",
   },
   pressed: {
     opacity: 0.76,
   },
   disabled: {
-    opacity: 0.5,
-  },
-  footerStats: {
-    color: studentTheme.color.textMuted,
-    fontSize: 12,
-    textAlign: "center",
+    opacity: 0.48,
   },
 });

@@ -5,7 +5,7 @@ import { studentTheme } from "@/constants/student-theme";
 export type PrimaryRoute = "ai" | "courses" | "me";
 
 const items: { route: PrimaryRoute; label: string }[] = [
-  { route: "ai", label: "AI助学" },
+  { route: "ai", label: "AI 助学" },
   { route: "courses", label: "课程" },
   { route: "me", label: "我的" },
 ];
@@ -21,6 +21,8 @@ export function PrimaryNavigation({
     <View style={styles.container}>
       <View style={styles.brand}>
         <View style={styles.logo}>
+          <View style={styles.logoHighlight} />
+          <View style={styles.logoDot} />
           <Text style={styles.logoText}>E</Text>
         </View>
         <Text style={styles.brandText}>ECHO</Text>
@@ -31,10 +33,15 @@ export function PrimaryNavigation({
           return (
             <Pressable
               key={item.route}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
               onPress={() => onSelect(item.route)}
               style={({ pressed }) => [styles.item, pressed && styles.pressed]}
             >
-              <Text style={[styles.itemText, selected && styles.itemTextSelected]}>
+              <Text
+                numberOfLines={1}
+                style={[styles.itemText, selected && styles.itemTextSelected]}
+              >
                 {item.label}
               </Text>
               {selected ? <View style={styles.indicator} /> : null}
@@ -49,49 +56,78 @@ export function PrimaryNavigation({
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    backgroundColor: studentTheme.color.surface,
-    borderBottomColor: studentTheme.color.border,
-    borderBottomWidth: 1,
+    backgroundColor: "transparent",
     flexDirection: "row",
-    minHeight: 54,
-    paddingHorizontal: 16,
+    justifyContent: "space-between",
+    minHeight: 62,
+    paddingHorizontal: 12,
   },
   brand: {
     alignItems: "center",
     flexDirection: "row",
+    flexShrink: 0,
     gap: 8,
   },
   logo: {
     alignItems: "center",
-    backgroundColor: studentTheme.color.text,
-    borderRadius: 8,
-    height: 32,
+    backgroundColor: studentTheme.color.primary,
+    borderRadius: 14,
+    height: 38,
     justifyContent: "center",
-    width: 32,
+    shadowColor: studentTheme.color.primary,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    elevation: 4,
+    width: 38,
+  },
+  logoHighlight: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+    borderRadius: 999,
+    height: 15,
+    left: 6,
+    position: "absolute",
+    top: 5,
+    transform: [{ rotate: "-28deg" }],
+    width: 8,
+  },
+  logoDot: {
+    backgroundColor: "#8ec5ff",
+    borderColor: "#ffffff",
+    borderRadius: 999,
+    borderWidth: 2,
+    height: 10,
+    position: "absolute",
+    right: -2,
+    top: -2,
+    width: 10,
   },
   logoText: {
     color: "#ffffff",
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: "900",
   },
   brandText: {
     color: studentTheme.color.text,
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: "900",
+    letterSpacing: 0,
   },
   items: {
+    alignItems: "stretch",
     flex: 1,
     flexDirection: "row",
+    flexShrink: 1,
     justifyContent: "flex-end",
   },
   item: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 52,
-    paddingHorizontal: 12,
+    minHeight: 56,
+    paddingHorizontal: 8,
   },
   itemText: {
-    color: studentTheme.color.textMuted,
+    color: studentTheme.color.inkMuted,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -102,10 +138,10 @@ const styles = StyleSheet.create({
   indicator: {
     backgroundColor: studentTheme.color.primary,
     borderRadius: 999,
-    bottom: 3,
+    bottom: 2,
     height: 3,
     position: "absolute",
-    width: 24,
+    width: 30,
   },
   pressed: {
     opacity: 0.7,
