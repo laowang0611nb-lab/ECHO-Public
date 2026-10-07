@@ -1,11 +1,12 @@
 import { router } from "expo-router";
+import { BlurView } from "expo-blur";
 import { SymbolView, type AndroidSymbol } from "expo-symbols";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   ImageBackground,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   ScrollView,
@@ -32,7 +33,7 @@ import { isOfflineError } from "@/lib/service-status";
 import { useCurrentCourse } from "@/providers/current-course-provider";
 import { useStudentSession } from "@/providers/student-session-provider";
 
-const ASK_ECHO_RESERVED_HEIGHT = 184;
+const ASK_ECHO_RESERVED_HEIGHT = 160;
 
 export default function AISupportScreen() {
   const { user } = useStudentSession();
@@ -42,6 +43,7 @@ export default function AISupportScreen() {
   const insets = useSafeAreaInsets();
   const compact = width < 390;
   const [question, setQuestion] = useState("");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const archived = selectedCourse?.status === "archived";
   const offline = isOfflineError(error);
 
@@ -49,6 +51,20 @@ export default function AISupportScreen() {
     user?.id ?? "",
     selectedCourse?.id ?? null,
   );
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
   const knowledgePointNames = useMemo(
     () =>
       new Map(
@@ -292,11 +308,12 @@ export default function AISupportScreen() {
           </Text>
         </ScrollView>
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          keyboardVerticalOffset={0}
+        <View
           pointerEvents="box-none"
-          style={styles.floatingKeyboardLayer}
+          style={[
+            styles.floatingKeyboardLayer,
+            { paddingBottom: keyboardHeight },
+          ]}
         >
           <View
             pointerEvents="auto"
@@ -314,7 +331,7 @@ export default function AISupportScreen() {
               question={question}
             />
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </View>
     </PageFade>
   );
@@ -335,14 +352,14 @@ function HeroCard({
   heroTextWidth: number;
   onOpenCourse: () => void;
 }) {
-  const robotSize = compact ? 126 : 154;
+  const robotSize = compact ? 112 : 136;
   return (
     <View
       style={[
         styles.hero,
         {
-          minHeight: compact ? 228 : 244,
-          padding: compact ? 16 : 20,
+          minHeight: compact ? 198 : 212,
+          padding: compact ? 14 : 16,
         },
       ]}
     >
@@ -544,8 +561,8 @@ function CourseLearningCard({
           style={[
             styles.courseCover,
             {
-              height: compact ? 108 : 122,
-              width: compact ? 78 : 88,
+              height: compact ? 96 : 108,
+              width: compact ? 70 : 78,
             },
           ]}
         >
@@ -632,7 +649,12 @@ function AskEchoCard({
 }) {
   const submitDisabled = archived || !question.trim();
   return (
-    <View style={styles.askCard}>
+    <BlurView
+      blurMethod="dimezisBlurViewSdk31Plus"
+      intensity={62}
+      tint="light"
+      style={styles.askCard}
+    >
       <View style={styles.askHeader}>
         <View style={styles.askBrand}>
           <SymbolView
@@ -699,7 +721,7 @@ function AskEchoCard({
           </Text>
         </Pressable>
       </View>
-    </View>
+    </BlurView>
   );
 }
 
@@ -740,8 +762,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: 14,
-    paddingTop: 2,
+    gap: 11,
+    paddingTop: 0,
   },
   emptyContent: {
     padding: 16,
@@ -757,7 +779,7 @@ const styles = StyleSheet.create({
     elevation: 20,
   },
   floatingAskWrapper: {
-    marginHorizontal: 16,
+    marginHorizontal: 14,
   },
   hero: {
     backgroundColor: studentTheme.color.aiHero,
@@ -796,44 +818,44 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
     maxWidth: "100%",
-    minHeight: 38,
-    paddingHorizontal: 9,
+    minHeight: 34,
+    paddingHorizontal: 8,
   },
   courseCapsuleIcon: {
     alignItems: "center",
     backgroundColor: studentTheme.color.primarySoft,
-    borderRadius: 10,
-    height: 26,
+    borderRadius: 9,
+    height: 24,
     justifyContent: "center",
-    width: 26,
+    width: 24,
   },
   courseCapsuleName: {
     color: studentTheme.color.ink,
     flexShrink: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "900",
   },
   courseCapsuleTerm: {
     color: studentTheme.color.inkMuted,
     flexShrink: 1,
-    fontSize: 11,
+    fontSize: 10,
   },
   heroTitle: {
     color: studentTheme.color.ink,
-    fontSize: 30,
+    fontSize: 27,
     fontWeight: "900",
-    lineHeight: 38,
-    marginTop: 15,
+    lineHeight: 34,
+    marginTop: 11,
   },
   heroTitleCompact: {
-    fontSize: 27,
-    lineHeight: 34,
+    fontSize: 25,
+    lineHeight: 31,
   },
   heroDescription: {
     color: studentTheme.color.inkMuted,
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 5,
   },
   startButton: {
     alignItems: "center",
@@ -843,27 +865,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     justifyContent: "center",
-    marginTop: 16,
-    minHeight: 48,
-    paddingHorizontal: 21,
+    marginTop: 12,
+    minHeight: 42,
+    paddingHorizontal: 18,
   },
   startButtonText: {
     color: "#ffffff",
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
   },
   heroRobotFrame: {
     alignItems: "center",
     bottom: -1,
-    height: 172,
+    height: 150,
     justifyContent: "flex-end",
     position: "absolute",
     right: -1,
-    width: 172,
+    width: 150,
   },
   heroRobotFrameCompact: {
-    height: 142,
-    width: 142,
+    height: 122,
+    width: 122,
   },
   archivedBanner: {
     alignItems: "center",
@@ -884,7 +906,7 @@ const styles = StyleSheet.create({
   abilityGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
   abilityCard: {
     backgroundColor: studentTheme.color.surface,
@@ -893,9 +915,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexBasis: "47%",
     flexGrow: 1,
-    minHeight: 158,
+    minHeight: 140,
     minWidth: 140,
-    padding: 14,
+    padding: 12,
     shadowColor: studentTheme.color.shadow,
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.08,
@@ -907,11 +929,11 @@ const styles = StyleSheet.create({
   },
   abilityIcon: {
     alignItems: "center",
-    borderRadius: 18,
-    height: 58,
+    borderRadius: 16,
+    height: 50,
     justifyContent: "center",
     overflow: "hidden",
-    width: 58,
+    width: 50,
   },
   abilityImage: {
     height: "100%",
@@ -922,18 +944,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 6,
     justifyContent: "space-between",
-    marginTop: 14,
+    marginTop: 11,
   },
   abilityTitle: {
     color: studentTheme.color.ink,
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "900",
   },
   abilityDescription: {
     color: studentTheme.color.inkMuted,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     marginTop: 5,
   },
   abilityMeta: {
@@ -947,7 +969,7 @@ const styles = StyleSheet.create({
     borderColor: studentTheme.color.border,
     borderRadius: studentTheme.radius.aiCard,
     borderWidth: 1,
-    padding: 16,
+    padding: 14,
     shadowColor: studentTheme.color.shadow,
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.07,
@@ -968,7 +990,7 @@ const styles = StyleSheet.create({
   courseCardTitle: {
     color: studentTheme.color.ink,
     flexShrink: 1,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: "900",
   },
   courseCardActions: {
@@ -995,8 +1017,8 @@ const styles = StyleSheet.create({
   courseBody: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 14,
-    marginTop: 16,
+    gap: 12,
+    marginTop: 13,
   },
   courseCover: {
     borderRadius: 14,
@@ -1032,7 +1054,7 @@ const styles = StyleSheet.create({
   },
   courseName: {
     color: studentTheme.color.ink,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
   },
   courseTerm: {
@@ -1044,7 +1066,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 14,
+    marginTop: 11,
   },
   progressLabel: {
     color: studentTheme.color.inkMuted,
@@ -1072,7 +1094,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 6,
-    marginTop: 12,
+    marginTop: 10,
   },
   currentChapterText: {
     color: studentTheme.color.inkMuted,
@@ -1087,8 +1109,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     justifyContent: "center",
-    marginTop: 16,
-    minHeight: 48,
+    marginTop: 13,
+    minHeight: 44,
   },
   continueButtonText: {
     color: "#ffffff",
@@ -1177,15 +1199,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   askCard: {
-    backgroundColor: studentTheme.color.surface,
-    borderColor: "#dce8f7",
+    backgroundColor: "rgba(255,255,255,0.58)",
+    borderColor: "rgba(214,229,247,0.76)",
     borderRadius: studentTheme.radius.aiCard,
     borderWidth: 1,
-    padding: 14,
+    overflow: "hidden",
+    padding: 12,
     shadowColor: studentTheme.color.shadow,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
     elevation: 8,
   },
   askHeader: {
@@ -1201,7 +1224,7 @@ const styles = StyleSheet.create({
   },
   askTitle: {
     color: studentTheme.color.ink,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
   },
   askHint: {
@@ -1220,39 +1243,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     gap: 8,
-    marginTop: 10,
+    marginTop: 8,
   },
   askInput: {
     backgroundColor: "#fbfdff",
     borderColor: "#dce8f7",
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     color: studentTheme.color.ink,
     flex: 1,
     fontSize: 13,
-    minHeight: 44,
-    paddingHorizontal: 12,
+    minHeight: 40,
+    paddingHorizontal: 10,
   },
   askImageButton: {
     alignItems: "center",
     borderColor: "#dce8f7",
-    borderRadius: 13,
+    borderRadius: 11,
     borderWidth: 1,
-    height: 42,
+    height: 38,
     justifyContent: "center",
-    width: 42,
+    width: 38,
   },
   askSubmitButton: {
     alignItems: "center",
     backgroundColor: studentTheme.color.primary,
-    borderRadius: 14,
+    borderRadius: 12,
     justifyContent: "center",
-    minHeight: 44,
-    minWidth: 112,
-    paddingHorizontal: 13,
+    minHeight: 40,
+    minWidth: 108,
+    paddingHorizontal: 11,
   },
   askSubmitButtonCompact: {
-    minWidth: 98,
+    minWidth: 94,
     paddingHorizontal: 10,
   },
   askSubmitText: {
