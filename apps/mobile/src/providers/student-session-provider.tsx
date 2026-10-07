@@ -24,6 +24,7 @@ import {
   isDevelopmentAuth,
   studentAuthService,
   type StudentLoginInput,
+  type StudentSmsLoginInput,
   type StudentRegisterInput,
 } from "@/services/student-auth";
 import { clearPendingCourseCode } from "@/services/pending-course-storage";
@@ -38,6 +39,7 @@ interface StudentSessionValue {
   user: User | null;
   ready: boolean;
   login: (input: StudentLoginInput) => Promise<User>;
+  loginWithSms: (input: StudentSmsLoginInput) => Promise<User>;
   register: (input: StudentRegisterInput) => Promise<User>;
   refreshUser: () => Promise<User | null>;
   logout: () => Promise<void>;
@@ -126,6 +128,11 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     return applyAuthResult(result.user, result.session);
   }
 
+  async function loginWithSms(input: StudentSmsLoginInput) {
+    const result = await studentAuthService.loginWithSms(input);
+    return applyAuthResult(result.user, result.session);
+  }
+
   async function register(input: StudentRegisterInput) {
     const result = await studentAuthService.register(input);
     return applyAuthResult(result.user, result.session);
@@ -163,7 +170,15 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
-  const value = { user, ready, login, register, refreshUser, logout };
+  const value = {
+    user,
+    ready,
+    login,
+    loginWithSms,
+    register,
+    refreshUser,
+    logout,
+  };
 
   return (
     <StudentSessionContext.Provider value={value}>
