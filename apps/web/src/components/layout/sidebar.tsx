@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   AnimatePresence,
@@ -69,6 +70,18 @@ const FALLOFF = 104;
 const PROXIMITY_EXPONENT = 2.8;
 const SPRING = { stiffness: 480, damping: 18, mass: 0.34 };
 const EASE = "easeOut" as const;
+
+function NavPendingIndicator() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute right-3 top-1/2 z-20 size-2 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_0_4px_rgba(47,124,246,0.18)] transition-opacity duration-150"
+      data-link-pending={pending ? "true" : "false"}
+      style={{ opacity: pending ? 1 : 0 }}
+    />
+  );
+}
 
 function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -161,6 +174,7 @@ const NavLink = memo(function NavLink({
   const collapsedValue = useMotionValue(collapsed ? 1 : 0);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     const element = wrapperRef.current;
@@ -182,6 +196,14 @@ const NavLink = memo(function NavLink({
   useEffect(() => {
     collapsedValue.set(collapsed ? 1 : 0);
   }, [collapsed, collapsedValue]);
+
+  useEffect(() => {
+    if (!pendingHref) return;
+    const timer = window.setTimeout(() => {
+      setPendingHref((current) => current === item.href ? null : current);
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [item.href, pendingHref]);
 
   const distanceY = useTransform<number, number>(
     [pointerY, itemCenterY],
@@ -211,18 +233,36 @@ const NavLink = memo(function NavLink({
   };
   const expandedHighlighted = !collapsed && (hovered || focused);
   const iconShift = reducedMotion ? 0 : collapsed ? (nested ? -24 : 0) : expandedHighlighted ? 4 : 0;
+  const navigating = pendingHref === item.href && !active;
+  const visuallyActive = active || navigating;
 
   const link = (
     <Link
       aria-current={active ? "page" : undefined}
+      aria-busy={navigating || undefined}
       aria-label={collapsed ? item.label : undefined}
       className={cn(
         "relative flex h-10 w-full touch-manipulation select-none items-center gap-3 rounded-lg px-3 text-sm text-sidebar-foreground/70 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-inset",
         nested && "pl-9",
         !collapsed && "hover:text-sidebar-accent-foreground",
-        active && "text-sidebar-accent-foreground",
+        visuallyActive && "text-sidebar-accent-foreground",
+        navigating && "cursor-progress",
       )}
       href={item.href}
+      onClick={() => {
+        if (!active) setPendingHref(item.href);
+      }}
+      onKeyDown={(event) => {
+        if ((event.key === "Enter" || event.key === " ") && !active) {
+          setPendingHref(item.href);
+        }
+      }}
+      onPointerDown={() => {
+        if (!active) {
+          setPendingHref(item.href);
+          onPrefetch(item.href);
+        }
+      }}
       onBlur={() => setFocused(false)}
       onFocus={() => {
         setFocused(true);
@@ -243,7 +283,7 @@ const NavLink = memo(function NavLink({
           transition={collapseTransition}
         />
       ) : null}
-      {active ? (
+      {visuallyActive ? (
         <motion.span
           animate={{ left: collapsed ? 12 : 0, right: collapsed ? 12 : 0, opacity: collapsed ? 0 : 1 }}
           className="absolute inset-y-0 z-0 rounded-lg bg-sidebar-accent"
@@ -251,7 +291,7 @@ const NavLink = memo(function NavLink({
           transition={collapseTransition}
         />
       ) : null}
-      {active ? (
+      {visuallyActive ? (
         <motion.span
           animate={{ opacity: collapsed ? 0 : 1 }}
           className="absolute inset-y-2 left-0 z-10 w-0.5 rounded-full bg-primary"
@@ -266,7 +306,7 @@ const NavLink = memo(function NavLink({
         style={{ scale: reducedMotion ? 1 : scale }}
         transition={collapseTransition}
       >
-        {active ? (
+        {visuallyActive ? (
           <motion.span
             animate={{ opacity: collapsed ? 1 : 0 }}
             className="absolute inset-0 rounded-lg bg-sidebar-accent"
@@ -277,9 +317,9 @@ const NavLink = memo(function NavLink({
         <MaterialSymbol
           className={cn(
             "relative z-10 shrink-0",
-            active ? "text-primary" : "text-sidebar-foreground/60",
+            visuallyActive ? "text-primary" : "text-sidebar-foreground/60",
           )}
-          filled={active}
+          filled={visuallyActive}
           name={item.icon}
           size={20}
         />
@@ -289,6 +329,13 @@ const NavLink = memo(function NavLink({
           {item.label}
         </SidebarLabel>
       ) : null}
+      {navigating ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute right-3 top-1/2 z-20 size-2 -translate-y-1/2 animate-pulse rounded-full bg-primary shadow-[0_0_0_4px_rgba(47,124,246,0.18)]"
+        />
+      ) : null}
+      <NavPendingIndicator />
     </Link>
   );
 
@@ -359,6 +406,16 @@ export function Sidebar({
     },
     [router],
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      [...primaryItems, ...aiItems, ...moduleItems, accountItem].forEach((item) => {
+        prefetchRoute(item.href);
+      });
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [prefetchRoute]);
 
   useLayoutEffect(() => {
     scheduleMeasure();

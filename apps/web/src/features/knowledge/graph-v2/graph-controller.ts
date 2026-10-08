@@ -30,6 +30,8 @@ import type {
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 2;
 const ORBIT_PERIOD = 160_000;
+const ORBIT_TARGET_FPS = 90;
+const ORBIT_POSITION_INTERVAL_MS = 1000 / ORBIT_TARGET_FPS;
 const FOCUS_HOVER_ORBIT_SCALE = 0.25;
 const IDLE_RESUME_MS = 2_400;
 
@@ -1188,7 +1190,7 @@ export class KnowledgeGraphController {
         // Ease between normal and focus-hover speed without resetting phase.
         this.orbitSpeed = mix(this.orbitSpeed, targetOrbitSpeed, 1 - Math.exp(-delta / 180));
         this.orbitAngle += (delta / ORBIT_PERIOD) * Math.PI * 2 * this.orbitSpeed;
-        if (now - this.orbitLastPosition >= 32) {
+        if (now - this.orbitLastPosition >= ORBIT_POSITION_INTERVAL_MS) {
           this.orbitLastPosition = now;
           // Keep one pre-orbit snapshot. Applying the cumulative phase to live
           // positions would compound every frame and make the orbit accelerate.
