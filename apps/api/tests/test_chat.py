@@ -655,7 +655,11 @@ async def test_conversation_and_sse_message_flow(
     stream_response = await client.post(
         f"/api/v1/conversations/{conversation['id']}/messages/stream",
         headers=auth_headers(teacher),
-        json={"content": "Explain alpha", "retrieval_limit": 3},
+        json={
+            "content": "Explain alpha",
+            "knowledge_point_id": course["knowledge_point_id"],
+            "retrieval_limit": 3,
+        },
     )
     messages_response = await client.get(
         f"/api/v1/conversations/{conversation['id']}/messages",
@@ -776,6 +780,49 @@ async def test_chat_without_resolved_point_does_not_reuse_course_latest_question
     assert chat_provider.last_complete_messages == []
 
 
+async def test_general_chat_does_not_auto_offer_quick_check_without_explicit_point(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "chat-general@example.com", "teacher")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    await create_question_item(
+        client,
+        teacher,
+        course,
+        knowledge_point_id=UUID(course["knowledge_point_id"]),
+        title="Should not auto-open",
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "General chat"},
+    )
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "Explain alpha"},
+    )
+    messages = await client.get(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages",
+        headers=auth_headers(teacher),
+    )
+
+    assert stream.status_code == 200
+    assert '"type": "hint"' not in stream.text
+    assert '"type": "quick_check"' not in stream.text
+    assistant = next(message for message in messages.json() if message["role"] == "assistant")
+    assert [block["type"] for block in assistant["blocks"]] == ["markdown", "citation"]
+    assert chat_provider.last_complete_messages == []
+
+
 async def test_relevant_course_question_uses_linked_quick_check(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -804,7 +851,10 @@ async def test_relevant_course_question_uses_linked_quick_check(
     stream = await client.post(
         f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
         headers=auth_headers(teacher),
-        json={"content": "Explain alpha"},
+        json={
+            "content": "Explain alpha",
+            "knowledge_point_id": course["knowledge_point_id"],
+        },
     )
     messages = await client.get(
         f"/api/v1/conversations/{conversation.json()['id']}/messages",

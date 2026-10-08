@@ -801,16 +801,16 @@ async def _stream_chat_response_contents(
     ]
     hint_block = None
     quick_check_block = None
-    quick_check_knowledge_point_id = (
-        await _relevant_chat_knowledge_point_id(
+    quick_check_knowledge_point_id = None
+    if knowledge_point_id is not None and _is_substantive_chat_question(question_with_attachments):
+        relevant_knowledge_point_id = await _relevant_chat_knowledge_point_id(
             session,
             conversation.course_id,
             resolved_knowledge_point_id,
             sources,
         )
-        if _is_substantive_chat_question(question_with_attachments)
-        else None
-    )
+        if relevant_knowledge_point_id == knowledge_point_id:
+            quick_check_knowledge_point_id = relevant_knowledge_point_id
     try:
         quick_check_item = await ensure_quick_check_for_chat(
             session,
