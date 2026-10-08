@@ -95,11 +95,6 @@
     min-height: 100vh;
     margin: 0;
     background-color: var(--background);
-    background-image: url("/web-background.png");
-    background-attachment: fixed;
-    background-position: center top;
-    background-repeat: no-repeat;
-    background-size: cover;
     @apply text-foreground;
   }
 
