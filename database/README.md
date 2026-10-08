@@ -74,6 +74,14 @@ Credentials:         database/runtime/postgresql/config/credentials.json
 A user logon task named `ECHO PostgreSQL` starts the server. Manual operations
 are documented in `scripts/database/README.md`.
 
+The start action launches `postgres.exe` as a detached hidden process instead
+of keeping PostgreSQL attached to the launcher console. This prevents the
+desktop startup window from sending `Ctrl+C` or console-close signals to the
+database after the services are reported ready.
+
+Server logs use the logging collector:
+`database/runtime/postgresql/logs/postgresql-server-YYYY-MM-DD.log`.
+
 ## Integration Status
 
 The API, tests, seed command, and Alembic command use this package directly.
