@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenCheck, MessageSquare, TriangleAlert, Users } from "lucide-react";
+import { ArrowRight, BookOpenCheck, MessageSquare, Network, Sparkles, TriangleAlert, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { motion } from "motion/react";
@@ -80,6 +80,36 @@ export function DashboardPage() {
         />
       </motion.div>
 
+      <motion.section className="space-y-3" variants={itemVariants}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">核心能力</h2>
+            <p className="mt-1 text-xs text-muted-foreground">从真实学习证据出发，查看洞察并定位课程知识关系。</p>
+          </div>
+          <span className="text-xs text-muted-foreground">当前课程：{selectedCourse.name}</span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <DashboardCapabilityCard
+            description={viewModel.topDifficulty
+              ? `优先关注「${viewModel.topDifficulty.name}」，当前平均掌握度 ${Math.round(viewModel.topDifficulty.average_score)}%，影响 ${viewModel.topDifficulty.affected_students} 名学生。`
+              : "暂无可展示的薄弱知识点，仍可进入 AI 教学洞察查看真实证据与分析状态。"}
+            href={`/ai-insights?courseId=${selectedCourseId}`}
+            icon={Sparkles}
+            label="AI 教学洞察"
+            metric={overview.stats.attention_knowledge_point_count}
+            metricLabel="个待关注知识点"
+          />
+          <DashboardCapabilityCard
+            description="从课程知识点与真实关系出发，进入完整图谱定位风险、查看掌握度和上下文。"
+            href={`/knowledge?courseId=${selectedCourseId}&tab=graph`}
+            icon={Network}
+            label="课程知识图谱"
+            metric={viewModel.knowledgePointCount}
+            metricLabel="个课程知识点"
+          />
+        </div>
+      </motion.section>
+
       <motion.section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" variants={itemVariants}>
         <DashboardMetricCard
           icon={Users}
@@ -131,6 +161,45 @@ export function DashboardPage() {
 }
 
 type DashboardMetricTone = "blue" | "sky" | "emerald" | "amber";
+function DashboardCapabilityCard({
+  description,
+  href,
+  icon: Icon,
+  label,
+  metric,
+  metricLabel,
+}: {
+  description: string;
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  metric: number;
+  metricLabel: string;
+}) {
+  return (
+    <Link className="group block h-full" href={href}>
+      <Card className="relative h-full gap-4 overflow-hidden border-blue-200/80 bg-gradient-to-br from-white via-blue-50/45 to-cyan-50/35 py-5 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/35 group-hover:shadow-[0_18px_40px_rgba(47,124,246,0.12)]">
+        <CardContent className="flex h-full flex-col px-5">
+          <div className="flex items-start justify-between gap-4">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_8px_22px_rgba(47,124,246,0.22)]">
+              <Icon className="size-5" />
+            </span>
+            <span className="text-right">
+              <strong className="block text-2xl font-semibold leading-none">{metric}</strong>
+              <span className="mt-1 block text-[11px] text-muted-foreground">{metricLabel}</span>
+            </span>
+          </div>
+          <div className="mt-5">
+            <h3 className="text-lg font-semibold">{label}</h3>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
+          </div>
+          <span className="mt-auto inline-flex items-center gap-1 pt-5 text-sm font-medium text-primary">进入模块 <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" /></span>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
 
 const metricToneClasses: Record<DashboardMetricTone, { bar: string; icon: string }> = {
   blue: { bar: "bg-blue-500", icon: "bg-blue-50 text-blue-600" },

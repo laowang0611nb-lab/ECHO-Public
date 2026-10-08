@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useLinkStatus } from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AnimatePresence,
   motion,
@@ -25,9 +25,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 
 type MaterialSymbolName =
   | "account_circle"
+  | "account_tree"
   | "dashboard"
   | "fact_check"
   | "groups"
@@ -49,15 +51,18 @@ interface NavItem {
 type RegisterNavItem = (element: HTMLDivElement, centerY: MotionValue<number>) => () => void;
 
 const primaryItems: NavItem[] = [{ href: "/dashboard", label: "总览 Dashboard", icon: "dashboard" }];
-const aiItems: NavItem[] = [
+const coreItems: NavItem[] = [
   { href: "/ai-insights", label: "AI 教学洞察", icon: "monitoring" },
-  { href: "/ai-review", label: "AI 回答审核", icon: "fact_check" },
-  { href: "/teaching-strategies", label: "教学策略", icon: "route" },
+  { href: "/knowledge?tab=graph", label: "课程知识图谱", icon: "account_tree" },
 ];
-const moduleItems: NavItem[] = [
+const managementItems: NavItem[] = [
   { href: "/courses", label: "课程管理", icon: "menu_book" },
   { href: "/students", label: "学生学情", icon: "groups" },
   { href: "/knowledge", label: "知识库", icon: "library_books" },
+];
+const assistItems: NavItem[] = [
+  { href: "/ai-review", label: "AI 回答审核", icon: "fact_check" },
+  { href: "/teaching-strategies", label: "教学策略", icon: "route" },
 ];
 const accountItem: NavItem = { href: "/me", label: "我的", icon: "account_circle" };
 
@@ -85,6 +90,25 @@ function NavPendingIndicator() {
 
 function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isNavItemActive(pathname: string, searchParams: URLSearchParams, item: NavItem) {
+  const [path, query = ""] = item.href.split("?");
+  if (path === "/knowledge") {
+    if (pathname !== "/knowledge") return false;
+    const requestedTab = new URLSearchParams(query).get("tab") ?? "resources";
+    const currentTab = searchParams.get("tab") ?? "resources";
+    return requestedTab === "graph" ? currentTab === "graph" : currentTab !== "graph";
+  }
+  return isActivePath(pathname, path);
+}
+
+function withCourseId(href: string, courseId: string | null) {
+  if (!courseId || href === "/dashboard" || href === "/me") return href;
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("courseId", courseId);
+  return `${path}?${params.toString()}`;
 }
 
 function SidebarLabel({
@@ -351,6 +375,27 @@ const NavLink = memo(function NavLink({
   );
 });
 
+function NavCategory({
+  children,
+  collapsed,
+  label,
+}: {
+  children: ReactNode;
+  collapsed: boolean;
+  label: string;
+}) {
+  return (
+    <section className="space-y-1">
+      {collapsed ? (
+        <span aria-hidden="true" className="mx-2 mb-1 mt-2 block h-px bg-sidebar-border/70" />
+      ) : (
+        <p className="px-2.5 pb-1 pt-2 text-[10px] font-semibold tracking-[0.08em] text-sidebar-foreground/45">{label}</p>
+      )}
+      {children}
+    </section>
+  );
+}
+
 export function Sidebar({
   collapsed,
   onToggle,
@@ -359,8 +404,9 @@ export function Sidebar({
   onToggle: () => void;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const [aiOpen, setAiOpen] = useState(true);
+  const { selectedCourseId } = useCourseWorkspace();
   const reducedMotion = useReducedMotion() ?? false;
   const pointerY = useMotionValue(Number.POSITIVE_INFINITY);
   const prefetchedRoutes = useRef(new Set<string>());
@@ -368,7 +414,6 @@ export function Sidebar({
   const measureFrame = useRef<number | null>(null);
   const navRef = useRef<HTMLElement>(null);
   const navContentRef = useRef<HTMLDivElement>(null);
-  const [expandedFromCollapsed, setExpandedFromCollapsed] = useState(false);
 
   const measureItems = useCallback(() => {
     itemRegistry.current.forEach((centerY, element) => {
@@ -409,17 +454,17 @@ export function Sidebar({
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      [...primaryItems, ...aiItems, ...moduleItems, accountItem].forEach((item) => {
-        prefetchRoute(item.href);
+      [...primaryItems, ...coreItems, ...managementItems, ...assistItems, accountItem].forEach((item) => {
+        prefetchRoute(withCourseId(item.href, selectedCourseId));
       });
     }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [prefetchRoute]);
+  }, [prefetchRoute, selectedCourseId]);
 
   useLayoutEffect(() => {
     scheduleMeasure();
-  }, [aiOpen, collapsed, scheduleMeasure]);
+  }, [collapsed, scheduleMeasure]);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -450,15 +495,30 @@ export function Sidebar({
 
   const handleToggle = () => {
     pointerY.set(Number.POSITIVE_INFINITY);
-    setExpandedFromCollapsed(collapsed);
     onToggle();
   };
 
-  const animateExpandedContent = !collapsed && expandedFromCollapsed && !reducedMotion;
   const contentTransition = {
     duration: reducedMotion ? 0.01 : 0.16,
     ease: EASE,
   };
+
+  const renderNavItems = (items: NavItem[], baseIndex: number) => items.map((item, index) => {
+    const resolvedItem = { ...item, href: withCourseId(item.href, selectedCourseId) };
+    return (
+      <NavLink
+        active={isNavItemActive(pathname, searchParams, item)}
+        collapsed={collapsed}
+        index={baseIndex + index}
+        item={resolvedItem}
+        key={item.href}
+        onPrefetch={prefetchRoute}
+        pointerY={pointerY}
+        reducedMotion={reducedMotion}
+        registerItem={registerItem}
+      />
+    );
+  });
 
   return (
     <TooltipProvider delay={150}>
@@ -520,106 +580,17 @@ export function Sidebar({
           )}
           ref={navRef}
         >
-          <div className="flex flex-col gap-2" ref={navContentRef}>
-            {primaryItems.map((item, index) => (
-              <NavLink
-                active={isActivePath(pathname, item.href)}
-                collapsed={collapsed}
-                index={index}
-                item={item}
-                key={item.href}
-                onPrefetch={prefetchRoute}
-                pointerY={pointerY}
-                reducedMotion={reducedMotion}
-                registerItem={registerItem}
-              />
-            ))}
-
-            <section
-              className={cn(
-                "rounded-xl border-t transition-[padding,background-color,border-color] duration-200 ease-out",
-                collapsed
-                  ? "border-sidebar-border bg-transparent p-0 pt-3"
-                  : "border-transparent bg-blue-400/8 p-2",
-              )}
-            >
-              <motion.div
-                animate={{ height: collapsed ? 0 : "auto", opacity: collapsed ? 0 : 1 }}
-                aria-hidden={collapsed}
-                className={cn("overflow-hidden", collapsed && "pointer-events-none")}
-                initial={false}
-                transition={contentTransition}
-              >
-                <button
-                  aria-expanded={aiOpen}
-                  className="flex h-9 w-full items-center gap-3 rounded-lg px-2.5 text-left text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
-                  onClick={() => setAiOpen((current) => !current)}
-                  tabIndex={collapsed ? -1 : undefined}
-                  type="button"
-                >
-                  <MaterialSymbol className="shrink-0 text-primary" filled name="neurology" size={20} />
-                  <SidebarLabel className="flex-1" collapsed={collapsed} index={1} reducedMotion={reducedMotion}>
-                    AI 教学
-                  </SidebarLabel>
-                  <span className="rounded-md bg-primary/20 px-1.5 py-0.5 text-[10px] font-semibold text-blue-100">
-                    AI
-                  </span>
-                  <motion.span
-                    animate={{ rotate: aiOpen ? 180 : 0 }}
-                    className="flex shrink-0"
-                    transition={contentTransition}
-                  >
-                    <MaterialSymbol name="keyboard_arrow_down" size={18} />
-                  </motion.span>
-                </button>
-              </motion.div>
-
-              <AnimatePresence initial={false}>
-                {collapsed || aiOpen ? (
-                  <motion.div
-                    animate={{ opacity: 1, y: 0 }}
-                    className={cn(
-                      "relative space-y-1",
-                      !collapsed &&
-                        "mt-1 before:absolute before:bottom-3 before:left-4 before:top-3 before:w-px before:bg-sidebar-border",
-                    )}
-                    exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }}
-                    initial={animateExpandedContent ? (reducedMotion ? { opacity: 0 } : { opacity: 0, y: -4 }) : false}
-                    key="ai-submenu"
-                    transition={contentTransition}
-                  >
-                    {aiItems.map((item, index) => (
-                      <NavLink
-                        active={isActivePath(pathname, item.href)}
-                        collapsed={collapsed}
-                        index={index + 2}
-                        item={item}
-                        key={item.href}
-                        nested
-                        onPrefetch={prefetchRoute}
-                        pointerY={pointerY}
-                        reducedMotion={reducedMotion}
-                        registerItem={registerItem}
-                      />
-                    ))}
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </section>
-
-            {moduleItems.map((item, index) => (
-              <NavLink
-                active={isActivePath(pathname, item.href)}
-                collapsed={collapsed}
-                index={index + 5}
-                item={item}
-                key={item.href}
-                onPrefetch={prefetchRoute}
-                pointerY={pointerY}
-                reducedMotion={reducedMotion}
-                registerItem={registerItem}
-              />
-            ))}
+          <div className="flex flex-col gap-3" ref={navContentRef}>
+            {renderNavItems(primaryItems, 0)}
+            <NavCategory collapsed={collapsed} label="核心能力">
+              {renderNavItems(coreItems, 1)}
+            </NavCategory>
+            <NavCategory collapsed={collapsed} label="教学管理">
+              {renderNavItems(managementItems, 3)}
+            </NavCategory>
+            <NavCategory collapsed={collapsed} label="智能辅助">
+              {renderNavItems(assistItems, 6)}
+            </NavCategory>
           </div>
         </nav>
 
