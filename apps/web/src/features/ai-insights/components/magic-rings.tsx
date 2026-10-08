@@ -29,7 +29,7 @@ const SCALE_RATE = 0.045;
 const ATTENUATION = 15;
 const RING_GAP = 1.42;
 const NOISE_AMOUNT = 0.008;
-const MAX_DPR = 2;
+const MAX_DPR = 1.5;
 const FRAME_INTERVAL = 1000 / 30;
 
 function hexToRgb(hex: string) {
