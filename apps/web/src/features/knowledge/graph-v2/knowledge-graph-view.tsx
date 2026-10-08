@@ -2,7 +2,7 @@
 
 import type { Chapter, KnowledgeGraph } from "@echo/shared-types";
 import { Crosshair, Maximize2, Minimize2, Network, RotateCcw, ScanSearch, Sparkles, ZoomIn } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -46,14 +46,10 @@ export function KnowledgeGraphView({
   const sidebarTransitioning = useSidebarTransitioning();
   const source = useMemo(() => (graph ? buildGraphSource(graph, chapters) : null), [chapters, graph]);
   const dashboardQuery = useKnowledgeCourseDashboard(courseId);
-  const [preferredFocusId] = useState<string | null>(() => {
-    if (typeof window === "undefined") {
-      return null;
-    }
-    return new URLSearchParams(window.location.search).get("pointId") ?? window.localStorage.getItem(`${LAST_FOCUS_PREFIX}.${courseId}`);
-  });
-  const [focusOverride, setFocusOverride] = useState<string | null>(null);
-  const [selectedOverride, setSelectedOverride] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const pointIdParam = searchParams.get("pointId");
+  const [focusOverride, setFocusOverride] = useState<{ id: string; pointId: string | null } | null>(null);
+  const [selectedOverride, setSelectedOverride] = useState<{ id: string; pointId: string | null } | null>(null);
   const [hovered, setHovered] = useState<GraphHoverState | null>(null);
   const [mode, setMode] = useState<KnowledgeGraphMode>("focused");
   const [zoom, setZoom] = useState(1);
@@ -66,22 +62,33 @@ export function KnowledgeGraphView({
   const controllerRef = useRef<KnowledgeGraphController | null>(null);
   const riskMapRef = useRef<ReadonlyMap<string, GraphRiskLevel>>(new Map());
   const focusIdRef = useRef<string | null>(null);
+  const pointIdRef = useRef(pointIdParam);
+
+  useEffect(() => {
+    pointIdRef.current = pointIdParam;
+  }, [pointIdParam]);
 
   const initialFocusId = useMemo(() => {
     if (!source) {
       return null;
     }
-    if (preferredFocusId && source.pointById.has(preferredFocusId)) {
-      return preferredFocusId;
-    }
-    const storedFocusId = typeof window === "undefined" ? null : window.localStorage.getItem(`${LAST_FOCUS_PREFIX}.${courseId}`);
-    if (storedFocusId && source.pointById.has(storedFocusId)) {
-      return storedFocusId;
+    if (pointIdParam && source.pointById.has(pointIdParam)) {
+      return pointIdParam;
     }
     return source.defaultFocusId;
-  }, [courseId, preferredFocusId, source]);
-  const focusId = focusOverride && source?.pointById.has(focusOverride) ? focusOverride : initialFocusId;
-  const selectedId = selectedOverride && source?.pointById.has(selectedOverride) ? selectedOverride : focusId;
+  }, [pointIdParam, source]);
+  const effectiveFocusOverride = focusOverride
+    && focusOverride.pointId === pointIdParam
+    && source?.pointById.has(focusOverride.id)
+    ? focusOverride.id
+    : null;
+  const effectiveSelectedOverride = selectedOverride
+    && selectedOverride.pointId === pointIdParam
+    && source?.pointById.has(selectedOverride.id)
+    ? selectedOverride.id
+    : null;
+  const focusId = effectiveFocusOverride ?? initialFocusId;
+  const selectedId = effectiveSelectedOverride ?? focusId;
 
   const analyticsQuery = useKnowledgePointAnalytics(courseId, selectedId ?? focusId);
   const baseRiskMap = useMemo(
@@ -123,7 +130,7 @@ export function KnowledgeGraphView({
   }, [sidebarTransitioning]);
 
   useEffect(() => {
-    if (!source || !initialFocusId || !canvasRef.current) {
+    if (!source || !source.defaultFocusId || !canvasRef.current) {
       return;
     }
     const canvas = canvasRef.current;
@@ -136,7 +143,7 @@ export function KnowledgeGraphView({
     const controller = new KnowledgeGraphController({
       container: element,
       source,
-      focusId: initialFocusId,
+      focusId: source.defaultFocusId,
       viewport: { width: Math.max(320, rect.width), height: Math.max(440, rect.height) },
       riskById: riskMapRef.current,
       reducedMotion: typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -154,8 +161,8 @@ export function KnowledgeGraphView({
           if (controllerRef.current) {
             controllerRef.current.setFocus(id);
           } else {
-            setFocusOverride(id);
-            setSelectedOverride(id);
+            setFocusOverride({ id, pointId: pointIdRef.current });
+            setSelectedOverride({ id, pointId: pointIdRef.current });
           }
         },
         onNodeHover: (id, client) => {
@@ -178,15 +185,24 @@ export function KnowledgeGraphView({
         },
         onBackgroundClick: () => {
           if (focusIdRef.current) {
-            setSelectedOverride(focusIdRef.current);
+            setSelectedOverride(focusIdRef.current ? { id: focusIdRef.current, pointId: pointIdRef.current } : null);
           }
         },
         onFocusCommit: (id) => {
-          setFocusOverride(id);
-          setSelectedOverride(id);
+          setFocusOverride({ id, pointId: pointIdRef.current });
+          setSelectedOverride({ id, pointId: pointIdRef.current });
         },
         onZoomChange: (nextZoom) => setZoom(nextZoom),
         onModeChange: setMode,
+        onReady: () => {
+          const requestedFocus = pointIdRef.current && source.pointById.has(pointIdRef.current)
+            ? pointIdRef.current
+            : focusIdRef.current;
+          if (requestedFocus) {
+            controllerRef.current?.setFocus(requestedFocus);
+            controllerRef.current?.setSelected(requestedFocus);
+          }
+        },
         onRenderError: (error) => {
           setRenderError(error instanceof Error ? error.message : "知识图谱渲染失败");
         },
@@ -213,7 +229,7 @@ export function KnowledgeGraphView({
         controllerRef.current = null;
       }
     };
-  }, [courseId, initialFocusId, router, source]);
+  }, [courseId, router, source]);
 
   useEffect(() => {
     if (focusId && controllerRef.current) {

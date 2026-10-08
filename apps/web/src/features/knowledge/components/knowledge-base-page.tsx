@@ -16,7 +16,7 @@ import {
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
@@ -64,10 +64,14 @@ export function KnowledgeBasePage({
   initialTab: KnowledgeBaseTab;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { user } = useTeacherSession();
   const { courses, selectedCourseId, selectedCourse, setSelectedCourseId } = useCourseWorkspace();
-  const [activeTab, setActiveTab] = useState<KnowledgeBaseTab>(initialTab);
+  const queryTab = searchParams.get("tab");
+  const activeTab: KnowledgeBaseTab = tabs.some((tab) => tab.value === queryTab)
+    ? queryTab as KnowledgeBaseTab
+    : initialTab;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "ready" | "failed">("all");
   const [uploadResourceType, setUploadResourceType] = useState<ResourceType>("textbook");
@@ -115,8 +119,7 @@ export function KnowledgeBasePage({
   }, [data.resources, search, statusFilter]);
 
   function handleTabChange(value: string) {
-    const next = tabs.some((tab) => tab.value === value) ? (value as KnowledgeBaseTab) : "graph";
-    setActiveTab(next);
+    const next = tabs.some((tab) => tab.value === value) ? (value as KnowledgeBaseTab) : "resources";
     const params = new URLSearchParams();
     if (courseId) params.set("courseId", courseId);
     params.set("tab", next);

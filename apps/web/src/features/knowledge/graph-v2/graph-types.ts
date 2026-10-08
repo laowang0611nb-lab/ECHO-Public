@@ -105,6 +105,7 @@ export interface GraphControllerCallbacks {
   onFocusCommit?: (id: string) => void;
   onZoomChange?: (zoom: number) => void;
   onModeChange?: (mode: KnowledgeGraphMode) => void;
+  onReady?: () => void;
   onRenderError?: (error: unknown) => void;
 }
 

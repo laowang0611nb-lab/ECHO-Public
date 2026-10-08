@@ -318,6 +318,7 @@ export class KnowledgeGraphController {
             return;
           }
           this.ready = true;
+          this.callbacks.onReady?.();
           if (this.pendingResize) {
             this.pendingResize = false;
             this.applyResize();

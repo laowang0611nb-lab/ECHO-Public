@@ -14,7 +14,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useReviewSummary } from "@/features/ai-review/queries";
-import { EvidenceSummary, FindingCard, KnowledgeGraphPreviewAnchor } from "@/features/ai-insights/components/ai-insight-sections";
+import { EvidenceSummary, FindingCard } from "@/features/ai-insights/components/ai-insight-sections";
+import { AiKnowledgeGraphPreview } from "@/features/ai-insights/components/ai-knowledge-graph-preview";
 import { AnalysisEngine, type SecondaryAnalysisState } from "@/features/ai-insights/components/analysis-engine";
 import { AnalysisResultPanel } from "@/features/ai-insights/components/analysis-result-panel";
 import { EvidenceFlow } from "@/features/ai-insights/components/evidence-flow";
@@ -447,7 +448,7 @@ function AiInsightsWorkspace({
             state={analysisState}
           />
           <FlowBridge direction="forward" state={analysisState} />
-          <KnowledgeGraphPreviewAnchor attentionCount={riskCount} courseId={courseId} difficulty={model.topDifficulty} />
+          <AiKnowledgeGraphPreview analysis={analysis} attentionCount={riskCount} chapters={knowledge.chapters} courseId={courseId} fallbackDifficulty={model.topDifficulty} />
         </div>
         {analysisError || analysis?.error_message ? (
           <p className="mt-3 rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">

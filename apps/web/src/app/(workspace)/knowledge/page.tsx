@@ -7,9 +7,9 @@ function first(value: string | string[] | undefined) {
 
 function normalizeTab(value: string | string[] | undefined): KnowledgeBaseTab {
   const tab = first(value);
-  return tab === "graph" || tab === "textbooks" || tab === "examples" || tab === "external" || tab === "recycle"
+  return tab === "resources" || tab === "graph" || tab === "textbooks" || tab === "examples" || tab === "external" || tab === "recycle"
     ? tab
-    : "graph";
+    : "resources";
 }
 
 export default async function KnowledgePage({
