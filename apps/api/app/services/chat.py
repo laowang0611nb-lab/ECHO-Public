@@ -18,7 +18,7 @@ from database.models.chat import (
 )
 from database.models.course import CourseMember
 from database.models.document import Document, DocumentStatus
-from database.models.knowledge import Chapter, KnowledgeChunk
+from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType
 from database.models.review import AIReviewFlag, ReviewStatus
 from database.models.user import User, UserRole
@@ -57,6 +57,75 @@ from app.services.storage import LocalDocumentStorage
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 MAX_LEARNING_EVENT_EVIDENCE = 2000
+CHAT_ONLY_INPUTS = frozenset(
+    {
+        "hi",
+        "hello",
+        "hey",
+        "你好",
+        "您好",
+        "嗨",
+        "哈喽",
+        "在吗",
+        "在么",
+        "在不在",
+        "有人吗",
+        "你好吗",
+        "您好吗",
+        "谢谢",
+        "多谢",
+        "感谢",
+        "thanks",
+        "thankyou",
+        "thx",
+        "ok",
+        "okay",
+        "好的",
+        "收到",
+        "了解",
+        "嗯",
+        "哦",
+        "哈哈",
+        "测试",
+        "test",
+        "testing",
+        "试一下",
+        "试试",
+    }
+)
+CONVERSATIONAL_PREFIX_PATTERN = re.compile(
+    r"^(?:你好|您好|嗨|哈喽|hi|hello|hey|thanks|thankyou|谢谢|多谢|感谢)"
+    r"[\s,，。.!！?？:：;；]*",
+    re.IGNORECASE,
+)
+CHAT_ONLY_REMAINDERS = frozenset({"老师", "你", "您", "请问"})
+
+
+def _compact_chat_text(value: str) -> str:
+    return re.sub(r"[\W_]+", "", value.casefold(), flags=re.UNICODE)
+
+
+def _is_substantive_chat_question(question: str) -> bool:
+    normalized = " ".join(question.casefold().split())
+    if not normalized:
+        return False
+    if _compact_chat_text(normalized) in CHAT_ONLY_INPUTS:
+        return False
+
+    remainder = normalized
+    for _ in range(3):
+        stripped = CONVERSATIONAL_PREFIX_PATTERN.sub("", remainder, count=1).strip()
+        if stripped == remainder:
+            break
+        remainder = stripped
+    if not remainder:
+        return False
+    compact_remainder = _compact_chat_text(remainder)
+    if len(compact_remainder) < 2:
+        return False
+    return (
+        compact_remainder not in CHAT_ONLY_INPUTS and compact_remainder not in CHAT_ONLY_REMAINDERS
+    )
 
 
 def _learning_event_evidence(value: str) -> str:
@@ -85,6 +154,51 @@ async def _course_has_searchable_material(session: AsyncSession, course_id: UUID
         )
         is not None
     )
+
+
+async def _relevant_chat_knowledge_point_id(
+    session: AsyncSession,
+    course_id: UUID,
+    knowledge_point_id: UUID | None,
+    sources: list[ChunkSearchResult],
+) -> UUID | None:
+    if knowledge_point_id is None:
+        return None
+    point = (
+        await session.execute(
+            select(KnowledgePoint.id, KnowledgePoint.chapter_id)
+            .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+            .join(Document, Document.id == Chapter.document_id)
+            .where(
+                KnowledgePoint.id == knowledge_point_id,
+                KnowledgePoint.course_id == course_id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
+                Document.status == DocumentStatus.READY,
+            )
+        )
+    ).first()
+    if point is None:
+        return None
+    if not sources:
+        return point.id
+    source_chunk_ids = [source.chunk_id for source in sources]
+    related_source = await session.scalar(
+        select(KnowledgeChunk.id)
+        .join(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
+        .join(Document, Document.id == KnowledgeChunk.document_id)
+        .where(
+            KnowledgeChunk.id.in_(source_chunk_ids),
+            KnowledgeChunk.course_id == course_id,
+            KnowledgeChunk.chapter_id == point.chapter_id,
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+            Document.status == DocumentStatus.READY,
+        )
+        .limit(1)
+    )
+    return point.id if related_source is not None else None
 
 
 async def _transcribe_audio_attachments(
@@ -687,6 +801,16 @@ async def _stream_chat_response_contents(
     ]
     hint_block = None
     quick_check_block = None
+    quick_check_knowledge_point_id = (
+        await _relevant_chat_knowledge_point_id(
+            session,
+            conversation.course_id,
+            resolved_knowledge_point_id,
+            sources,
+        )
+        if _is_substantive_chat_question(question_with_attachments)
+        else None
+    )
     try:
         quick_check_item = await ensure_quick_check_for_chat(
             session,
@@ -694,7 +818,7 @@ async def _stream_chat_response_contents(
             course_id=conversation.course_id,
             user_id=user_id,
             question=question_with_attachments,
-            knowledge_point_id=resolved_knowledge_point_id,
+            knowledge_point_id=quick_check_knowledge_point_id,
             sources=sources,
             teaching_policy=policy.content if policy else None,
         )

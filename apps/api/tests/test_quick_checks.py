@@ -479,3 +479,27 @@ async def test_explicit_quick_check_point_rejects_soft_deleted_document(
                 [],
                 point_id,
             )
+
+
+async def test_ensure_quick_check_skips_without_knowledge_point(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "no-point-quick-check@example.com", "teacher")
+    student = await login(client, "no-point-quick-check-student@example.com", "student")
+    course = await create_published_course(client, teacher, student)
+    await create_question(client, session_factory, teacher, course)
+
+    async with session_factory() as session:
+        result = await quick_checks.ensure_quick_check_for_chat(
+            session,
+            object(),
+            course_id=UUID(course["id"]),
+            user_id=UUID(student["id"]),
+            question="Explain the latest unrelated course question.",
+            knowledge_point_id=None,
+            sources=[],
+            teaching_policy=None,
+        )
+
+    assert result is None

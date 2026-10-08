@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from database.models.chat import Conversation, Message, MessageRole
-from database.models.document import Document
+from database.models.document import Document, DocumentStatus
 from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import (
     LearningEventType,
@@ -36,6 +36,7 @@ from app.services.course import get_course_for_member
 from app.services.learning import record_learning_event
 
 MAX_QUICK_CHECK_ATTEMPTS = 2
+MIN_QUICK_CHECK_SOURCE_CHARS = 80
 
 
 class QuickCheckNotFoundError(Exception):
@@ -177,6 +178,48 @@ async def _question_knowledge_point_id(
             Document.trashed_at.is_(None),
         )
     )
+
+
+async def _knowledge_point_material_supports_quick_check(
+    session: AsyncSession,
+    course_id: UUID,
+    knowledge_point_id: UUID,
+    sources: Sequence[ChunkSearchResult],
+) -> bool:
+    point = await session.scalar(
+        select(KnowledgePoint)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            KnowledgePoint.id == knowledge_point_id,
+            KnowledgePoint.course_id == course_id,
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+            Document.status == DocumentStatus.READY,
+        )
+    )
+    if point is None or not sources:
+        return False
+    matching_source_ids = set(
+        await session.scalars(
+            select(KnowledgeChunk.id)
+            .join(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
+            .join(Document, Document.id == KnowledgeChunk.document_id)
+            .where(
+                KnowledgeChunk.id.in_([source.chunk_id for source in sources]),
+                KnowledgeChunk.course_id == course_id,
+                KnowledgeChunk.chapter_id == point.chapter_id,
+                Chapter.trashed_at.is_(None),
+                Document.trashed_at.is_(None),
+                Document.status == DocumentStatus.READY,
+            )
+        )
+    )
+    relevant_source_chars = sum(
+        len(source.content.strip()) for source in sources if source.chunk_id in matching_source_ids
+    )
+    return relevant_source_chars >= MIN_QUICK_CHECK_SOURCE_CHARS
 
 
 async def resolve_knowledge_point_id(
@@ -663,6 +706,7 @@ async def _generate_question_draft(
     provider: ChatProvider,
     *,
     question: str,
+    knowledge_point: KnowledgePoint,
     sources: Sequence[ChunkSearchResult],
     teaching_policy: str | None,
 ) -> GeneratedQuickCheckDraft | None:
@@ -682,6 +726,8 @@ async def _generate_question_draft(
     )
     user_prompt = (
         f"STUDENT QUESTION:\n{question}\n\n"
+        f"KNOWLEDGE POINT:\n{knowledge_point.name}\n"
+        f"{knowledge_point.description or 'No description.'}\n\n"
         f"TEACHER POLICY:\n{teaching_policy or 'No additional policy.'}\n\n"
         f"COURSE MATERIAL:\n{source_text or 'No retrieved course material.'}\n\n"
         "Create a question that checks the key distinction needed to answer the "
@@ -725,19 +771,18 @@ async def ensure_quick_check_for_chat(
     sources: Sequence[ChunkSearchResult],
     teaching_policy: str | None,
 ) -> QuestionItem | None:
+    if knowledge_point_id is None:
+        return None
     statement = select(QuestionItem).where(
         QuestionItem.course_id == course_id,
         QuestionItem.trashed_at.is_(None),
         QuestionItem.type == QuestionType.SINGLE_CHOICE,
-    )
-    if knowledge_point_id is not None:
-        statement = statement.where(
-            QuestionItem.id.in_(
-                select(question_item_knowledge_points.c.question_item_id).where(
-                    question_item_knowledge_points.c.knowledge_point_id == knowledge_point_id
-                )
+        QuestionItem.id.in_(
+            select(question_item_knowledge_points.c.question_item_id).where(
+                question_item_knowledge_points.c.knowledge_point_id == knowledge_point_id
             )
-        )
+        ),
+    )
     candidates = list(
         await session.scalars(
             statement.order_by(QuestionItem.created_at.desc(), QuestionItem.id.desc()).limit(8)
@@ -751,9 +796,32 @@ async def ensure_quick_check_for_chat(
             continue
         return candidate
 
+    if not await _knowledge_point_material_supports_quick_check(
+        session,
+        course_id,
+        knowledge_point_id,
+        sources,
+    ):
+        return None
+    point = await session.scalar(
+        select(KnowledgePoint)
+        .join(Chapter, Chapter.id == KnowledgePoint.chapter_id)
+        .join(Document, Document.id == Chapter.document_id)
+        .where(
+            KnowledgePoint.id == knowledge_point_id,
+            KnowledgePoint.course_id == course_id,
+            KnowledgePoint.trashed_at.is_(None),
+            Chapter.trashed_at.is_(None),
+            Document.trashed_at.is_(None),
+            Document.status == DocumentStatus.READY,
+        )
+    )
+    if point is None:
+        return None
     draft = await _generate_question_draft(
         provider,
         question=question,
+        knowledge_point=point,
         sources=sources,
         teaching_policy=teaching_policy,
     )
@@ -772,14 +840,11 @@ async def ensure_quick_check_for_chat(
             "hint_levels": draft.hints,
             "max_attempts": MAX_QUICK_CHECK_ATTEMPTS,
             "generated": True,
-            "knowledge_point_id": str(knowledge_point_id) if knowledge_point_id else None,
+            "knowledge_point_id": str(knowledge_point_id),
         },
         created_by=user_id,
     )
-    if knowledge_point_id is not None:
-        point = await session.get(KnowledgePoint, knowledge_point_id)
-        if point is not None:
-            item.knowledge_points = [point]
+    item.knowledge_points = [point]
     session.add(item)
     await session.flush()
     return item
