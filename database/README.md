@@ -20,8 +20,10 @@ been removed so there is one source of truth.
 
 ## Current Schema
 
+- Verified at repository version `v0.0.209` on 2026-10-08; `alembic heads` returns one head only.
 - Existing history head: `d9e0f1a2b3c4`
 - Current workflow head: `e5f6a7b8c9d0`
+- Migration scripts: 30.
 - Added models: `UserCredential`, `AuthSession`, `TeacherProfile`,
   `StudentProfile`, `ReviewAnswerVersion`, `ReviewRegenerationRun`,
   `ReviewHistoryEntry`, `QuestionItem`, `ExternalResource`, `AIAnalysis`,

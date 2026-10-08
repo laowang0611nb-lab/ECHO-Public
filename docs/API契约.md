@@ -1,6 +1,8 @@
 # ECHO API 契约
 
 > 冻结版本：`v0.0.118`
+> 当前核对基线：`v0.0.209` / commit `a70f727`（2026-10-08）；实时 OpenAPI 共 123 条唯一路径、239 个 Schema。
+> 本文保留 `v0.0.118` 的冻结契约；后续只做向后兼容增量。本轮补充头像读取、资源恢复和聊天知识点上下文门控，并校正路径占位参数名。
 > 基础路径：`/api/v1`  
 > 当前认证：正式 Bearer JWT + Refresh Session；开发环境保留 `X-User-Id` 兼容入口。
 > 数据库层已具备 Argon2id、Access JWT、Refresh Session、手机号验证和 Profile 基础，正式手机号注册、密码登录、密码重置、刷新和退出接口已进入本契约。
@@ -176,6 +178,8 @@ Quick Check 由服务端校验答案并通过 `LearningEvent -> StudentKnowledge
 ```
 
 知识点关联从现有 `LearningEvent.message_id -> knowledge_point_id` 推导；助手消息会继承最近一条学生问题所关联的知识点。
+
+`v0.0.208` 起，普通课程聊天不再依据 RAG 命中结果自动推断知识点并生成 Hint/Quick Check。只有请求显式携带有效 `knowledge_point_id`、问题与知识点实质相关，且检索来源与知识点属于同一章节时，后端才继续知识点问答卡片；其他情况保持普通课程问答。
 
 ## 5. 教学规则与学习分析
 
@@ -641,6 +645,8 @@ AI 生成策略初始状态只能是 `suggested`，AI 生成周计划只能作�
 ### 10.6 AI 二次分析
 
 AI 二次分析使用 `ai_analyses`、`ai_analysis_evidence` 和 `ai_analysis_results` 持久化分析记录、证据链和结构化结果。分析输入支持课程、知识点、学生范围、时间窗口和教师关注点；二次分析通过 `previous_analysis_id` 保留前序分析，不覆盖原记录。
+
+阶段进度与幂等记录同时持久化到 `ai_analysis_stage_events`，因此该能力当前涉及四张表，而不是三张。
 
 证据来源包括 LearningEvent、MasterySnapshot、QuickCheckAttempt、Conversation/Message、ReviewFlag、MessageCitation、KnowledgeChunk 和前序分析结果。模型返回的每条 fact 必须引用当前分析中真实存在的 evidence_id；无效引用会被过滤。证据少于 2 条、模型明确证据不足或没有任何带证据的事实引用时，结果固定返回 `insufficient_evidence=true`，不能生成无依据的教学策略。
 

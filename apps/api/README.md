@@ -4,6 +4,10 @@ FastAPI backend for the ECHO education agent. The base scaffold follows the
 project technology baseline: FastAPI, Pydantic, SQLAlchemy, PostgreSQL, and
 pgvector.
 
+Current verified baseline: `0.0.209` on commit `a70f727` (2026-10-08).
+The live OpenAPI surface contains 123 paths and 239 schemas; the database
+Alembic head is `e5f6a7b8c9d0`.
+
 ## Local development
 
 ```powershell
@@ -228,6 +232,11 @@ GET  /api/v1/courses/{course_id}/conversations/{conversation_id}/messages
 The stream endpoint retrieves course chunks, builds a teaching prompt, emits
 `text_delta`, `citation`, `done`, or `error` SSE events, and persists the user
 message plus assistant message citations.
+As of `0.0.208`, a normal course question does not let RAG hits infer a
+knowledge point by themselves. Hint and Quick Check blocks are available only
+when the request carries a valid `knowledge_point_id`, the question is
+substantive and relevant to that point, and the retrieved source belongs to
+the same chapter.
 Course teachers can also read a student's conversation list and complete message
 evidence. Teacher message responses include `knowledgePointIds`, `citations`, and
 `reviewStatus`.
