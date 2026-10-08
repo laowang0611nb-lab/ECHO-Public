@@ -16,13 +16,13 @@ type MagicRingsProps = {
 
 const COLOR_ONE = "#2F80FF";
 const COLOR_TWO = "#62D4FF";
-const BASE_SPEED = 0.24;
-const PROCESSING_SPEED = 0.54;
-const HOVER_SPEED = 0.32;
-const BASE_OPACITY = 0.27;
-const PROCESSING_OPACITY = 0.35;
-const HOVER_OPACITY = 0.31;
-const LINE_THICKNESS = 1.2;
+const BASE_SPEED = 0.28;
+const PROCESSING_SPEED = 0.62;
+const HOVER_SPEED = 0.38;
+const BASE_OPACITY = 0.34;
+const PROCESSING_OPACITY = 0.48;
+const HOVER_OPACITY = 0.4;
+const LINE_THICKNESS = 1.35;
 const BASE_RADIUS = 0.28;
 const RADIUS_STEP = 0.095;
 const SCALE_RATE = 0.045;
@@ -30,6 +30,7 @@ const ATTENUATION = 15;
 const RING_GAP = 1.42;
 const NOISE_AMOUNT = 0.008;
 const MAX_DPR = 2;
+const FRAME_INTERVAL = 1000 / 30;
 
 function hexToRgb(hex: string) {
   const normalized = hex.replace("#", "");
@@ -72,6 +73,7 @@ export function MagicRings({ state, className }: MagicRingsProps) {
     let height = 0;
     let frame = 0;
     let lastTime = performance.now();
+    let lastRenderTime = 0;
     let inView = true;
     let currentSpeed = BASE_SPEED;
     let currentOpacity = BASE_OPACITY;
@@ -106,9 +108,14 @@ export function MagicRings({ state, className }: MagicRingsProps) {
     function draw(time: number) {
       frame = 0;
       if (!inView || document.visibilityState === "hidden") return;
+      if (time - lastRenderTime < FRAME_INTERVAL) {
+        frame = requestAnimationFrame(draw);
+        return;
+      }
 
       const delta = Math.min((time - lastTime) / 1000, 0.05);
       lastTime = time;
+      lastRenderTime = time;
       context.clearRect(0, 0, width, height);
 
       const currentState = stateRef.current;
@@ -134,6 +141,7 @@ export function MagicRings({ state, className }: MagicRingsProps) {
       const totalWeight = BASE_RADIUS + (ringCount - 1) * RADIUS_STEP * RING_GAP;
       const radiusScale = maxRadius / totalWeight;
       const rotation = (time / 1000) * currentSpeed;
+      const particleCount = mobile ? 3 : 8;
 
       for (let index = 0; index < ringCount; index += 1) {
         const normalizedRadius = (BASE_RADIUS + index * RADIUS_STEP * RING_GAP) * radiusScale;
@@ -159,6 +167,28 @@ export function MagicRings({ state, className }: MagicRingsProps) {
         context.lineWidth = LINE_THICKNESS + 0.2;
         context.lineCap = "round";
         context.stroke();
+      }
+
+      for (let index = 0; index < particleCount; index += 1) {
+        const ringIndex = index % ringCount;
+        const normalizedRadius = (BASE_RADIUS + ringIndex * RADIUS_STEP * RING_GAP) * radiusScale;
+        const wave = Math.sin(rotation * Math.PI * 2 + ringIndex * 0.74) * minDimension * SCALE_RATE * 0.22;
+        const radius = Math.max(8, normalizedRadius + wave);
+        const angle = rotation * (0.8 + ringIndex * 0.06) + index * 1.618;
+        const particleRadius = 1.15 + (index % 3) * 0.35;
+        const particleOpacity = currentOpacity * (currentState === "processing" ? 2.1 : 1.35);
+
+        context.beginPath();
+        context.arc(
+          width / 2 + Math.cos(angle) * radius,
+          height / 2 + Math.sin(angle) * radius,
+          particleRadius,
+          0,
+          Math.PI * 2,
+        );
+        context.fillStyle = mixColor(COLOR_ONE, COLOR_TWO, (index % 4) / 3);
+        context.globalAlpha = Math.min(0.72, particleOpacity);
+        context.fill();
       }
 
       context.globalAlpha = 1;

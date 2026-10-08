@@ -1,6 +1,6 @@
 [project]
 name = "echo-api"
-version = "0.0.213"
+version = "0.0.214"
 description = "ECHO education agent backend"
 requires-python = ">=3.11"
 dependencies = [

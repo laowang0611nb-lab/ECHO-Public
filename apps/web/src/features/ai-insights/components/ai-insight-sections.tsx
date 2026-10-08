@@ -2,6 +2,7 @@
 
 import { ArrowRight, BrainCircuit, ClipboardCheck, LibraryBig, MessageSquare, Network, type LucideIcon } from "lucide-react";
 import Link from "next/link";
+import { motion, useReducedMotion } from "motion/react";
 
 import { StatusBadge } from "@/components/common/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,7 @@ export function EvidenceSummary({
   analyzing: boolean;
   nodes: AiEvidenceNode[];
 }) {
+  const reducedMotion = useReducedMotion() ?? false;
   const summaryNodes = nodes.slice(0, 4);
 
   return (
@@ -47,15 +49,23 @@ export function EvidenceSummary({
         </p>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col gap-2 px-4">
-        {summaryNodes.map((node) => {
+        {summaryNodes.map((node, index) => {
           const Icon = evidenceSummaryIcons[node.id];
           const content = (
             <div
               className={cn(
-                "flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
+                "relative isolate flex min-w-0 items-center gap-3 overflow-hidden rounded-lg border px-3 py-2.5 transition-colors",
                 analyzing ? "border-primary/25 bg-primary/5" : "border-border/80 bg-white/65",
               )}
             >
+              {analyzing && !reducedMotion ? (
+                <motion.span
+                  aria-hidden="true"
+                  animate={{ opacity: [0.08, 0.42, 0.08], scale: [0.985, 1.008, 0.985] }}
+                  className="pointer-events-none absolute inset-0 z-0 rounded-lg border border-primary/35"
+                  transition={{ delay: index * 0.12, duration: 1.7, ease: "easeInOut", repeat: Infinity }}
+                />
+              ) : null}
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary text-primary">
                 <Icon className="size-4" />
               </span>

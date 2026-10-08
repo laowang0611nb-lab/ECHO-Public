@@ -431,7 +431,7 @@ function AiInsightsWorkspace({
         </div>
         <div className="relative grid gap-3 xl:grid-cols-[minmax(220px,0.72fr)_32px_minmax(360px,1.08fr)_32px_minmax(240px,0.82fr)] xl:items-stretch" data-ai-workspace-anchor="true">
           <EvidenceSummary analyzing={analysisState === "analyzing"} nodes={model.evidenceNodes} />
-          <FlowBridge active={analysisState === "analyzing"} />
+          <FlowBridge direction="forward" state={analysisState} />
           <AnalysisEngine
             actionDisabled={actionDisabled}
             actionLabel={actionLabel}
@@ -446,7 +446,7 @@ function AiInsightsWorkspace({
             reanalyzePending={reanalyzeAnalysis.isPending}
             state={analysisState}
           />
-          <FlowBridge active={analysisState === "analyzing"} />
+          <FlowBridge direction="forward" state={analysisState} />
           <KnowledgeGraphPreviewAnchor attentionCount={riskCount} courseId={courseId} difficulty={model.topDifficulty} />
         </div>
         {analysisError || analysis?.error_message ? (
