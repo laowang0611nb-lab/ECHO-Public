@@ -401,20 +401,20 @@ export function createApiClient({
       headers.set("X-User-Id", userId);
     }
 
-    let response = await fetchWithTimeout(`${root}${path}`, {
-      ...init,
-      headers,
-    });
+    let response = await fetchWithTimeout(
+      `${root}${path}`,
+      {...init, headers},
+    );
 
     if (response.status === 401 && canRefresh(path)) {
       accessToken = await refreshAccessToken();
       if (accessToken) {
         headers.set("Authorization", `Bearer ${accessToken}`);
         headers.delete("X-User-Id");
-        response = await fetchWithTimeout(`${root}${path}`, {
-          ...init,
-          headers,
-        });
+        response = await fetchWithTimeout(
+          `${root}${path}`,
+          {...init, headers},
+        );
       }
     }
 
@@ -424,7 +424,11 @@ export function createApiClient({
     return response;
   }
 
-  async function request<T>(path: string, init?: RequestInit, userId?: string): Promise<T> {
+  async function request<T>(
+    path: string,
+    init?: RequestInit,
+    userId?: string,
+  ): Promise<T> {
     const response = await authorizedFetch(path, init, userId);
     if (!response.ok) {
       throw await readError(response);
