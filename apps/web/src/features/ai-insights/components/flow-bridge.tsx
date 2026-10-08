@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 
 export function FlowBridge({ active = false }: { active?: boolean }) {
   return (
-    <div aria-hidden="true" className="relative hidden h-full min-h-[340px] items-center justify-center xl:flex">
+    <div aria-hidden="true" className="pointer-events-none relative hidden h-full min-h-[340px] items-center justify-center xl:flex">
       <div className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/45 to-transparent" />
       {[0, 0.45, 0.9].map((delay) => (
         <motion.span

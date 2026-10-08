@@ -4,7 +4,7 @@ FastAPI backend for the ECHO education agent. The base scaffold follows the
 project technology baseline: FastAPI, Pydantic, SQLAlchemy, PostgreSQL, and
 pgvector.
 
-Current repository version: `0.0.212`; OpenAPI behavior was last verified on commit `a70f727` (2026-10-08).
+Current repository version: `0.0.213`; OpenAPI behavior was last verified on commit `a70f727` (2026-10-08).
 The live OpenAPI surface contains 123 paths and 239 schemas; the database
 Alembic head is `e5f6a7b8c9d0`.
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BookOpen, ShieldCheck, Sparkles, Users, Waypoints } from "lucide-react";
+import { ArrowRight, BookOpen, ShieldCheck, Sparkles, TriangleAlert, Users, Waypoints, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -14,6 +14,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useReviewSummary } from "@/features/ai-review/queries";
+import { EvidenceSummary, FindingCard, KnowledgeGraphPreviewAnchor } from "@/features/ai-insights/components/ai-insight-sections";
 import { AnalysisEngine, type SecondaryAnalysisState } from "@/features/ai-insights/components/analysis-engine";
 import { AnalysisResultPanel } from "@/features/ai-insights/components/analysis-result-panel";
 import { EvidenceFlow } from "@/features/ai-insights/components/evidence-flow";
@@ -29,7 +30,7 @@ import {
 import {
   applyAIAnalysisToTeachingModel,
   buildAiTeachingModel,
-  type AiTeachingTone,
+  type AiAnalysisOutcome,
 } from "@/features/ai-insights/view-model";
 import { useTeacherDashboardOverview } from "@/features/dashboard/queries";
 import { localizeInsightSummary } from "@/features/dashboard/view-model";
@@ -38,15 +39,12 @@ import { summarizeKnowledgeBase } from "@/features/knowledge/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
-import { cn } from "@/lib/utils";
 
-const focusToneClasses: Record<AiTeachingTone, string> = {
-  blue: "border-blue-200 bg-blue-50/45",
-  emerald: "border-emerald-200 bg-emerald-50/45",
-  amber: "border-amber-200 bg-amber-50/55",
-  rose: "border-rose-200 bg-rose-50/45",
-  violet: "border-violet-200 bg-violet-50/45",
-  neutral: "border-border bg-muted/25",
+const findingIcons: Record<AiAnalysisOutcome["id"], LucideIcon> = {
+  "knowledge-point": TriangleAlert,
+  "student-scope": Users,
+  "error-pattern": ShieldCheck,
+  strategy: Waypoints,
 };
 
 function createClientRequestId(prefix: string) {
@@ -349,6 +347,14 @@ function AiInsightsWorkspace({
       : analysisState === "completed"
         ? analysisType === "secondary" ? "二次分析结果" : "初次分析结果"
         : "等待首次分析";
+  const riskCount = overview.stats.attention_knowledge_point_count;
+  const affectedStudentCount = analysis?.result?.affected_student_ids.length ?? 0;
+  const analysisSummary = analysisEvidenceCount > 0
+    ? insufficientEvidence
+      ? `本次分析基于 ${analysisEvidenceCount} 条学习证据，当前结论仍标记为证据不足；课程有 ${riskCount} 个待关注知识点。`
+      : `本次分析基于 ${analysisEvidenceCount} 条学习证据；当前课程有 ${riskCount} 个待关注知识点，分析涉及 ${affectedStudentCount} 名学生。`
+    : `当前课程有 ${riskCount} 个待关注知识点、${overview.stats.student_count} 名学生；尚未形成持久化分析证据。`;
+  const [primaryFinding, ...supportingFindings] = model.outcomes;
 
   return (
     <div className="space-y-5">
@@ -369,15 +375,15 @@ function AiInsightsWorkspace({
           </div>
         }
         breadcrumbs={[{ label: "AI 教学" }]}
-        description="ECHO 在已有学习分析上继续追问原因、影响和下一步行动。"
-        title="AI 教学主页"
+        description="基于当前课程的学习证据，定位高风险知识点、解释原因并生成可执行教学建议。"
+        title="AI 教学洞察"
       />
 
-      <section className="relative overflow-hidden rounded-xl border-2 border-blue-100 bg-gradient-to-br from-white via-blue-50/55 to-cyan-50/45 px-4 py-4 xl:px-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />AI 二次分析工作台</p>
-            <p className="mt-1 text-xs text-muted-foreground">证据 → 初次分析 → 进一步分析 → 原因 → 建议 → 行动</p>
+      <section aria-label="本次分析摘要" className="rounded-xl border-2 border-blue-100 bg-gradient-to-br from-white via-blue-50/55 to-cyan-50/45 px-4 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />分析摘要</p>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-[#314761]">{analysisSummary}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
@@ -388,15 +394,50 @@ function AiInsightsWorkspace({
             </StatusBadge>
           </div>
         </div>
-        <div className="relative grid gap-3 xl:h-[480px] xl:grid-cols-[minmax(0,1fr)_36px_minmax(320px,0.76fr)_36px_minmax(0,1fr)] xl:items-stretch">
-          <EvidenceFlow analyzing={analysisState === "analyzing"} nodes={model.evidenceNodes} />
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 border-t border-blue-100 pt-3 text-xs text-muted-foreground">
+          <span>重点知识点 <strong className="font-semibold text-foreground">{riskCount}</strong></span>
+          <span>影响学生 <strong className="font-semibold text-foreground">{affectedStudentCount}</strong></span>
+          <span>课程学生 <strong className="font-semibold text-foreground">{overview.stats.student_count}</strong></span>
+        </div>
+      </section>
+
+      <section aria-labelledby="ai-findings-title" className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground" id="ai-findings-title">关键发现</h2>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">先看最需要处理的问题，再进入推理链和证据回查。</p>
+          </div>
+          <span className="text-xs text-muted-foreground">只展示当前可追溯到真实学习证据的内容</span>
+        </div>
+        {primaryFinding ? (
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <div className="md:col-span-3 xl:col-span-2">
+              <FindingCard icon={findingIcons[primaryFinding.id]} outcome={primaryFinding} prominent />
+            </div>
+            {supportingFindings.slice(0, 3).map((outcome) => (
+              <FindingCard icon={findingIcons[outcome.id]} key={outcome.id} outcome={outcome} />
+            ))}
+          </div>
+        ) : <EmptyState description="当前没有可展示的分析结论。" title="暂无关键发现" />}
+      </section>
+
+      <section aria-label="AI 推理与知识图谱预览" className="relative overflow-hidden rounded-xl border-2 border-blue-100 bg-gradient-to-br from-white via-blue-50/45 to-cyan-50/35 px-3 py-4 xl:px-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />AI 推理核心与证据链路</p>
+            <p className="mt-1 text-xs text-muted-foreground">证据摘要先进入推理核心，再承接课程知识图谱。</p>
+          </div>
+          <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
+        </div>
+        <div className="relative grid gap-3 xl:grid-cols-[minmax(220px,0.72fr)_32px_minmax(360px,1.08fr)_32px_minmax(240px,0.82fr)] xl:items-stretch" data-ai-workspace-anchor="true">
+          <EvidenceSummary analyzing={analysisState === "analyzing"} nodes={model.evidenceNodes} />
           <FlowBridge active={analysisState === "analyzing"} />
           <AnalysisEngine
             actionDisabled={actionDisabled}
             actionLabel={actionLabel}
             actionPendingLabel={actionPendingLabel}
             actionPending={analysisPending || createStrategy.isPending}
-            affectedStudentCount={analysis?.result?.affected_student_ids.length ?? 0}
+            affectedStudentCount={affectedStudentCount}
             evidenceCount={analysisEvidenceCount}
             modelName={analysis?.result?.model_name}
             onAction={handleAnalysisAction}
@@ -406,7 +447,7 @@ function AiInsightsWorkspace({
             state={analysisState}
           />
           <FlowBridge active={analysisState === "analyzing"} />
-          <AnalysisResultPanel analyzing={analysisState === "analyzing"} outcomes={model.outcomes} />
+          <KnowledgeGraphPreviewAnchor attentionCount={riskCount} courseId={courseId} difficulty={model.topDifficulty} />
         </div>
         {analysisError || analysis?.error_message ? (
           <p className="mt-3 rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
@@ -415,46 +456,47 @@ function AiInsightsWorkspace({
         ) : null}
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] xl:items-start">
-        <Card className="gap-4 self-start py-5">
-          <CardHeader className="px-5">
-            <CardTitle>当前关注</CardTitle>
-            <p className="text-xs text-muted-foreground">只展示当前可以追溯到真实学习证据的事项。</p>
-          </CardHeader>
-          <CardContent className="grid gap-3 px-5 md:grid-cols-2">
-            {model.focusItems.length ? model.focusItems.slice(0, 4).map((item) => (
-              <Link className={cn("rounded-lg border-2 px-4 py-4 transition-colors hover:border-primary/35", focusToneClasses[item.tone])} href={item.href} key={item.id}>
-                <p className="text-sm font-semibold">{item.title}</p>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">{item.description}</p>
-                <p className="mt-3 text-xs font-medium">{item.evidence}</p>
-                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">查看依据 <ArrowRight className="size-3.5" /></span>
-              </Link>
-            )) : <div className="md:col-span-2"><EmptyState description="当前没有达到风险阈值的事项。" title="暂无需要关注的问题" /></div>}
-          </CardContent>
-        </Card>
+      <section aria-labelledby="ai-results-title" className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground" id="ai-results-title">分析结果与依据</h2>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">发现的问题、证据依据、原因和下一步行动集中在这里，长文本不截断事实含义。</p>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)] xl:items-start">
+          <AnalysisResultPanel analyzing={analysisState === "analyzing"} outcomes={model.outcomes} />
+          <Card className="gap-4 py-4">
+            <CardHeader className="px-4">
+              <CardTitle>证据依据</CardTitle>
+              <p className="text-xs leading-5 text-muted-foreground">每条依据都可以回到学生、资源或分析记录。</p>
+            </CardHeader>
+            <CardContent className="space-y-3 px-4">
+              {model.evidenceReasons.map((reason) => (
+                <Link className="flex items-start justify-between gap-4 rounded-lg border-2 border-border px-3.5 py-3 transition-colors hover:border-primary/35" href={reason.href} key={reason.id}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{reason.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">{reason.description}</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-primary">{reason.value}</span>
+                </Link>
+              ))}
+              <div className="rounded-lg border-2 border-border bg-muted/25 px-3.5 py-3">
+                <p className="text-xs font-semibold text-muted-foreground">当前后端洞察</p>
+                <p className="mt-2 text-sm leading-6">{localizeInsightSummary(overview.insight.summary)}</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">生成时间 {overview.insight.generated_at.slice(0, 16).replace("T", " ")}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
 
-        <Card className="gap-4 self-start py-5">
-          <CardHeader className="px-5">
-            <CardTitle>为什么得到这个结论</CardTitle>
-            <p className="text-xs text-muted-foreground">每条结论都可以回查证据来源，不生成无依据推断。</p>
-          </CardHeader>
-          <CardContent className="space-y-3 px-5">
-            {model.evidenceReasons.map((reason) => (
-              <Link className="flex items-start justify-between gap-4 rounded-lg border-2 border-border px-3.5 py-3 transition-colors hover:border-primary/35" href={reason.href} key={reason.id}>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{reason.label}</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">{reason.description}</p>
-                </div>
-                <span className="shrink-0 text-sm font-semibold text-primary">{reason.value}</span>
-              </Link>
-            ))}
-            <div className="rounded-lg border-2 border-border bg-muted/25 px-3.5 py-3">
-              <p className="text-xs font-semibold text-muted-foreground">当前后端洞察</p>
-              <p className="mt-2 text-sm leading-6">{localizeInsightSummary(overview.insight.summary)}</p>
-              <p className="mt-2 text-[11px] text-muted-foreground">生成时间 {overview.insight.generated_at.slice(0, 16).replace("T", " ")}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <section aria-labelledby="ai-evidence-title" className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground" id="ai-evidence-title">完整证据回查</h2>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">展开每类证据，回到原始学生、资源或审核记录。</p>
+          </div>
+          <StatusBadge tone="neutral">{analysisEvidenceCount > 0 ? `${analysisEvidenceCount} 条可回查证据` : "等待证据入库"}</StatusBadge>
+        </div>
+        <EvidenceFlow analyzing={analysisState === "analyzing"} nodes={model.evidenceNodes} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-3">
