@@ -289,23 +289,8 @@ def _stable_fraction(key: str) -> float:
     return int.from_bytes(digest, "big") / (2**64 - 1)
 
 
-def _local_embedding(text_value: str, dimension: int = 1024) -> list[float]:
-    vector = [0.0] * dimension
-    tokens = re.findall(r"[\w\u4e00-\u9fff]+", text_value.casefold())
-    if not tokens:
-        tokens = [text_value.casefold()]
-    for token in tokens:
-        digest = hashlib.blake2b(token.encode("utf-8"), digest_size=16).digest()
-        primary = int.from_bytes(digest[:8], "big") % dimension
-        secondary = int.from_bytes(digest[8:], "big") % dimension
-        sign = 1.0 if digest[0] & 1 else -1.0
-        vector[primary] += sign
-        vector[secondary] += sign * 0.5
-    norm = math.sqrt(sum(value * value for value in vector))
-    if norm == 0:
-        vector[0] = 1.0
-        return vector
-    return [round(value / norm, 8) for value in vector]
+
+
 
 
 def _chunk_text(text_value: str, *, size: int = 760, overlap: int = 90) -> list[str]:
@@ -785,13 +770,18 @@ def _build_resources(
                 resource_definition.key,
                 page_number,
             )
+            chapter_id = (
+                _chapter_id(chapter_index)
+                if resource_definition.key == "textbook"
+                else None
+            )
             for part in _chunk_text(page_text):
                 chunks.append(
                     {
                         "id": _seed_id("chunk", document_id, chunk_index),
                         "course_id": course_id,
                         "document_id": document_id,
-                        "chapter_id": _chapter_id(chapter_index),
+                        "chapter_id": chapter_id,
                         "chunk_index": chunk_index,
                         "page_start": page_number,
                         "page_end": page_number,
@@ -801,9 +791,9 @@ def _build_resources(
                             "seed": DATASET_NAME,
                             "page_number": page_number,
                             "bbox": [44.0, 64.0, 545.0, 770.0],
-                            "embedding_source": "deterministic_local_v1",
+                            "embedding_source": "pending",
                         },
-                        "embedding": _local_embedding(part),
+                        "embedding": None,
                         "created_at": now - timedelta(days=80),
                     }
                 )

@@ -3,9 +3,9 @@ from uuid import UUID
 
 from database.models.course import CourseMember
 from database.models.document import Document, DocumentStatus
-from database.models.knowledge import Chapter, KnowledgeChunk
+from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.user import UserRole
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -67,6 +67,12 @@ async def embed_document_chunks(
 
     for chunk, vector in zip(chunks, vectors, strict=True):
         chunk.embedding = vector
+        chunk.metadata_json = {
+            **(chunk.metadata_json or {}),
+            "embedding_source": "qwen",
+            "embedding_model": settings.embedding_model,
+            "embedding_dimension": settings.embedding_dimension,
+        }
     await session.commit()
     return len(chunks)
 
@@ -105,7 +111,13 @@ async def search_course_chunks(
         rows = await session.execute(
             select(KnowledgeChunk, Document.original_name, Chapter.title, distance)
             .join(Document, Document.id == KnowledgeChunk.document_id)
-            .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
+            .outerjoin(
+                Chapter,
+                and_(
+                    Chapter.id == KnowledgeChunk.chapter_id,
+                    Chapter.document_id == KnowledgeChunk.document_id,
+                ),
+            )
             .where(
                 KnowledgeChunk.course_id == course_id,
                 Document.status == DocumentStatus.READY,
@@ -138,7 +150,13 @@ async def search_course_chunks(
         await session.execute(
             select(KnowledgeChunk, Document.original_name, Chapter.title)
             .join(Document, Document.id == KnowledgeChunk.document_id)
-            .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
+            .outerjoin(
+                Chapter,
+                and_(
+                    Chapter.id == KnowledgeChunk.chapter_id,
+                    Chapter.document_id == KnowledgeChunk.document_id,
+                ),
+            )
             .where(
                 KnowledgeChunk.course_id == course_id,
                 Document.status == DocumentStatus.READY,
@@ -176,4 +194,56 @@ async def search_course_chunks(
             distance=distance_value,
         )
         for distance_value, chunk, document_name, chapter_title in ranked[:limit]
+    ]
+
+
+async def load_knowledge_point_chunks(
+    session: AsyncSession,
+    course_id: UUID,
+    knowledge_point_id: UUID,
+    limit: int,
+) -> list[ChunkSearchResult]:
+    rows = list(
+        await session.execute(
+            select(KnowledgeChunk, Document.original_name, Chapter.title)
+            .select_from(KnowledgeChunk)
+            .join(
+                KnowledgePoint,
+                and_(
+                    KnowledgePoint.id == knowledge_point_id,
+                    KnowledgePoint.chapter_id == KnowledgeChunk.chapter_id,
+                ),
+            )
+            .join(
+                Chapter,
+                and_(
+                    Chapter.id == KnowledgePoint.chapter_id,
+                    Chapter.document_id == KnowledgeChunk.document_id,
+                ),
+            )
+            .join(Document, Document.id == KnowledgeChunk.document_id)
+            .where(
+                KnowledgeChunk.course_id == course_id,
+                KnowledgePoint.course_id == course_id,
+                KnowledgePoint.trashed_at.is_(None),
+                Chapter.trashed_at.is_(None),
+                Document.status == DocumentStatus.READY,
+                Document.trashed_at.is_(None),
+            )
+            .order_by(KnowledgeChunk.chunk_index)
+            .limit(limit)
+        )
+    )
+    return [
+        ChunkSearchResult(
+            chunk_id=chunk.id,
+            document_id=chunk.document_id,
+            document_name=document_name,
+            chapter_title=chapter_title,
+            page_start=chunk.page_start,
+            page_end=chunk.page_end,
+            content=chunk.content,
+            distance=0.0,
+        )
+        for chunk, document_name, chapter_title in rows
     ]

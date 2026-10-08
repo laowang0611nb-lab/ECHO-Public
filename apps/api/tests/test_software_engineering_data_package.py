@@ -75,6 +75,17 @@ def test_software_engineering_handoff_package_is_complete_and_valid(
         assert len(PdfReader(str(path)).pages) == resource["pageCount"]
         assert len(resource["citationPages"]) == len(set(resource["citationPages"]))
 
+    chunk_rows = [
+        json.loads(line)
+        for line in (package_root / "data" / "knowledge-chunks.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip()
+    ]
+    assert len(chunk_rows) == 140
+    assert all(row["embedding"] is None for row in chunk_rows)
+    assert all(row["metadata_json"]["embedding_source"] == "pending" for row in chunk_rows)
+
     report = validate_package(package_root)
     assert report["status"] == "passed"
     assert report["errors"] == []

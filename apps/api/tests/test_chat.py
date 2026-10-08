@@ -15,7 +15,7 @@ from database.models.review import (
     ReviewStatus,
 )
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.dependencies import get_asr_provider, get_chat_attachment_storage
@@ -875,6 +875,50 @@ async def test_relevant_course_question_uses_linked_quick_check(
     assert chat_provider.last_complete_messages == []
 
 
+async def test_explicit_point_uses_chapter_material_when_search_misses(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "chat-chapter-fallback@example.com", "teacher")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Chapter fallback"},
+    )
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={
+            "content": "解释量子纠缠",
+            "knowledge_point_id": course["knowledge_point_id"],
+        },
+    )
+    messages = await client.get(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages",
+        headers=auth_headers(teacher),
+    )
+
+    assert stream.status_code == 200
+    assert '"type": "hint"' in stream.text
+    assert '"type": "quick_check"' in stream.text
+    assistant = next(message for message in messages.json() if message["role"] == "assistant")
+    assert [block["type"] for block in assistant["blocks"]] == [
+        "markdown",
+        "citation",
+        "hint",
+        "quick_check",
+    ]
+    assert chat_provider.last_complete_messages
+
+
 async def test_relevant_question_without_material_does_not_generate_quick_check(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -887,6 +931,11 @@ async def test_relevant_question_without_material_does_not_generate_quick_check(
         teacher,
         include_knowledge_point=True,
     )
+    async with session_factory() as session:
+        await session.execute(
+            delete(KnowledgeChunk).where(KnowledgeChunk.course_id == UUID(course["id"]))
+        )
+        await session.commit()
     conversation = await client.post(
         f"/api/v1/courses/{course['id']}/conversations",
         headers=auth_headers(teacher),

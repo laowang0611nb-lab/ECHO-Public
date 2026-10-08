@@ -210,6 +210,7 @@ async def _knowledge_point_material_supports_quick_check(
                 KnowledgeChunk.id.in_([source.chunk_id for source in sources]),
                 KnowledgeChunk.course_id == course_id,
                 KnowledgeChunk.chapter_id == point.chapter_id,
+                KnowledgeChunk.document_id == Chapter.document_id,
                 Chapter.trashed_at.is_(None),
                 Document.trashed_at.is_(None),
                 Document.status == DocumentStatus.READY,
@@ -256,6 +257,7 @@ async def resolve_knowledge_point_id(
                 KnowledgeChunk.id.in_(source_chunk_ids),
                 KnowledgeChunk.course_id == course_id,
                 KnowledgeChunk.chapter_id.is_not(None),
+                KnowledgeChunk.document_id == Chapter.document_id,
                 Chapter.trashed_at.is_(None),
                 Document.trashed_at.is_(None),
             )

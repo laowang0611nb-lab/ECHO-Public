@@ -22,7 +22,7 @@ from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType
 from database.models.review import AIReviewFlag, ReviewStatus
 from database.models.user import User, UserRole
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -52,7 +52,7 @@ from app.services.quick_checks import (
     resolve_knowledge_point_id,
 )
 from app.services.review import attach_auto_review_flags
-from app.services.search import search_course_chunks
+from app.services.search import load_knowledge_point_chunks, search_course_chunks
 from app.services.storage import LocalDocumentStorage
 
 CITATION_PATTERN = re.compile(r"\[(\d+)\]")
@@ -139,7 +139,13 @@ async def _course_has_searchable_material(session: AsyncSession, course_id: UUID
         await session.scalar(
             select(KnowledgeChunk.id)
             .join(Document, Document.id == KnowledgeChunk.document_id)
-            .outerjoin(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
+            .outerjoin(
+                Chapter,
+                and_(
+                    Chapter.id == KnowledgeChunk.chapter_id,
+                    Chapter.document_id == KnowledgeChunk.document_id,
+                ),
+            )
             .where(
                 KnowledgeChunk.course_id == course_id,
                 Document.status == DocumentStatus.READY,
@@ -192,6 +198,7 @@ async def _relevant_chat_knowledge_point_id(
             KnowledgeChunk.id.in_(source_chunk_ids),
             KnowledgeChunk.course_id == course_id,
             KnowledgeChunk.chapter_id == point.chapter_id,
+            KnowledgeChunk.document_id == Chapter.document_id,
             Chapter.trashed_at.is_(None),
             Document.trashed_at.is_(None),
             Document.status == DocumentStatus.READY,
@@ -230,6 +237,24 @@ def _referenced_sources(
 ) -> list[tuple[int, ChunkSearchResult]]:
     indexes = {int(match) for match in CITATION_PATTERN.findall(answer)}
     return [(index, source) for index, source in enumerate(sources, start=1) if index in indexes]
+
+
+def _merge_chunk_sources(
+    primary: list[ChunkSearchResult],
+    secondary: list[ChunkSearchResult],
+    *,
+    limit: int,
+) -> list[ChunkSearchResult]:
+    merged: list[ChunkSearchResult] = []
+    seen: set[UUID] = set()
+    for source in [*primary, *secondary]:
+        if source.chunk_id in seen:
+            continue
+        seen.add(source.chunk_id)
+        merged.append(source)
+        if len(merged) >= limit:
+            break
+    return merged
 
 
 class ConversationNotFoundError(Exception):
@@ -680,6 +705,18 @@ async def _stream_chat_response_contents(
         content,
         retrieval_limit,
     )
+    if knowledge_point_id is not None:
+        knowledge_point_sources = await load_knowledge_point_chunks(
+            session,
+            conversation.course_id,
+            knowledge_point_id,
+            min(retrieval_limit, 3),
+        )
+        sources = _merge_chunk_sources(
+            knowledge_point_sources,
+            sources,
+            limit=retrieval_limit,
+        )
     policy = await session.scalar(
         select(TeachingPolicy).where(TeachingPolicy.course_id == conversation.course_id)
     )

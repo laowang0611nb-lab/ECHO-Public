@@ -78,7 +78,7 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
         assert counts["chapters"] == 12
         assert counts["knowledgePoints"] == 84
         assert counts["chunks"] == 140
-        assert counts["embeddedChunks"] == 140
+        assert counts["embeddedChunks"] == 0
         assert counts["learningEvents"] == 2183
         assert counts["knowledgeStates"] == 4032
         assert counts["masterySnapshots"] == 28320
@@ -224,6 +224,42 @@ async def test_software_engineering_seed_is_complete_repeatable_and_resettable(
                     .where(KnowledgeChunk.course_id == course_id)
                 )
                 == 140
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(KnowledgeChunk)
+                    .where(
+                        KnowledgeChunk.course_id == course_id,
+                        KnowledgeChunk.embedding.is_not(None),
+                    )
+                )
+                == 0
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(KnowledgeChunk)
+                    .join(Chapter, Chapter.id == KnowledgeChunk.chapter_id)
+                    .where(
+                        KnowledgeChunk.course_id == course_id,
+                        Chapter.document_id != KnowledgeChunk.document_id,
+                    )
+                )
+                == 0
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(KnowledgeChunk)
+                    .join(Document, Document.id == KnowledgeChunk.document_id)
+                    .where(
+                        KnowledgeChunk.course_id == course_id,
+                        Document.original_name != "软件工程核心讲义.pdf",
+                        KnowledgeChunk.chapter_id.is_not(None),
+                    )
+                )
+                == 0
             )
             assert (
                 await session.scalar(
