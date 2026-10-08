@@ -4,7 +4,7 @@
 > 快照：HEAD `934c4b1` / `v0.0.97`，OpenAPI 92 条路径、110 个操作，数据库 head `b0c1d2e3f4a5`。  
 > 本文描述当前真实代码和数据流；如果代码与本文冲突，以源码、Pydantic Schema、SQLAlchemy Model 和 Alembic 为准。
 
-> 2026-10-08 状态：正文仍是 `v0.0.97` 历史快照。当前检查基线为 `v0.0.209` / `a70f727`，OpenAPI 123 条唯一路径、239 个 Schema，数据库唯一 head 为 `e5f6a7b8c9d0`。实时契约请先看 `docs/API契约.md`、`docs/api/接口索引.md`、`database/README.md` 和源码。
+> 2026-10-08 状态：正文仍是 `v0.0.97` 历史快照。当前索引版本为 `v0.0.210`，契约行为核对于 `a70f727`，OpenAPI 123 条唯一路径、239 个 Schema，数据库唯一 head 为 `e5f6a7b8c9d0`。实时契约请先看 `docs/API契约.md`、`docs/api/接口索引.md`、`database/README.md` 和源码。
 
 ## 1. 机器可读快照
 
