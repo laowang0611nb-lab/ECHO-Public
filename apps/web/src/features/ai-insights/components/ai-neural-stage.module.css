@@ -24,3 +24,45 @@
 @media (max-width:760px){.stage{grid-template-columns:1fr;padding:62px 12px 50px;border-radius:18px}.stageSequence{position:relative;inset:auto;grid-column:1;grid-row:1;min-width:0;max-width:100%;flex-wrap:wrap}.stageIdentity{top:11px;left:12px;font-size:11px}.evidencePanel{grid-column:1;grid-row:3}.centerArea{grid-column:1;grid-row:2}.graphPanel{grid-column:1;grid-row:4}.orbArea{width:min(100%,420px);height:375px}.stageFooter{flex-wrap:wrap}.signalLayer{display:none}.insightRibbon{align-items:flex-start;flex-wrap:wrap}.ribbonModel{display:none}}
 @media (max-width:450px){.stageSequence{gap:1px}.sequenceStep{font-size:9px}.sequenceDivider{margin-left:1px}.orbArea{transform:scale(.84);margin:-29px 0}.graphPanel{min-height:355px}.ribbonSummary{flex-basis:100%}.stageFooter{font-size:9px}.evidenceNote{margin-bottom:5px}}
 @media (prefers-reduced-motion:reduce){.stage *, .stage:after,.insightRibbon *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+/* 78a536c visual fix: contour is always solid; only a small light-tracer moves.
+   Static depth, no animated z-index, filters, masks or SVG path geometry. */
+.orbitGlow{fill:none;stroke-width:8;stroke-linecap:round;opacity:.22}
+.orbitSolidRear{fill:none;stroke-width:1.7;stroke-linecap:round;opacity:.50}
+.orbitSolidFront{fill:none;stroke-width:1.85;stroke-linecap:round;opacity:.83}
+.orbitTrace{fill:none;stroke-width:2.8;stroke-linecap:round;stroke-dasharray:4 115;animation:orbitSignal var(--orb-speed,15s) linear infinite;opacity:.78}
+@keyframes orbitSignal{to{stroke-dashoffset:-476}}
+.orbArea[data-activity="hovering-orb"] .sphere,.orbArea[data-activity="consuming"] .sphere{box-shadow:0 0 0 8px color-mix(in srgb,var(--orb-active-color),transparent 75%),0 0 42px var(--orb-active-color),inset 14px 18px 36px rgba(194,243,255,.46),inset -22px -24px 35px rgba(6,18,76,.65)}
+.orbArea[data-activity="consuming"] .coreOuterRing,.orbArea[data-activity="analyzing-item"] .coreOuterRing{animation-duration:6s}
+.orbActivityMessage{position:absolute;z-index:9;bottom:33px;left:50%;transform:translateX(-50%);white-space:nowrap;max-width:94%;overflow:hidden;text-overflow:ellipsis;padding:5px 12px;border-radius:99px;border:1px solid #a8c9fa;background:rgba(246,251,255,.95);box-shadow:0 5px 20px rgba(60,112,207,.14);color:#2865c7;font-size:11px;font-weight:700}
+.stage[data-paused=true] :is(.orbitTrace,.orbActivityMessage){animation-play-state:paused!important}
+
+/* Continuous, color-stable paths; a moving tracer is decoration, not the main line. */
+.signalTracer{stroke-linecap:round;opacity:.55;animation:signalTraverse 16s linear infinite}
+@keyframes signalTraverse{to{stroke-dashoffset:-330}}
+.stage[data-paused=true] .signalTracer{animation-play-state:paused!important}
+
+/* Knowledge preview: real directed relationships, not a decorative dot ring. */
+.graphRelations{position:relative;z-index:2;display:flex;gap:5px;padding:4px 11px 3px;overflow-x:auto;scrollbar-width:thin;max-width:100%;white-space:nowrap;color:#abc6e6;font-size:9px}
+.graphRelations span{display:inline-flex;align-items:center;gap:4px;border:1px solid rgba(125,166,218,.18);background:rgba(35,64,100,.4);border-radius:6px;padding:3px 5px}
+.graphRelations i{width:6px;height:6px;display:inline-block;border-radius:50%}
+.graphPeripheralNode{border-radius:5px;width:10px;height:10px;box-shadow:0 0 6px rgba(125,166,216,.35)}
+.graphUniverse{background:radial-gradient(circle at 50% 51%,rgba(66,105,216,.14),transparent 65%)}
+.graphNode{transition:left .55s ease,top .55s ease,opacity .22s ease,box-shadow .22s ease,transform .22s ease}
+
+/* Evidence panel interaction: separate review link and keyboard-accessible delivery. */
+.evidenceRow[data-draggable=true]{cursor:grab;touch-action:none;user-select:none}
+.evidenceRow[data-draggable=true]:active{cursor:grabbing}
+.evidenceRowActive{border-color:var(--evidence-accent);background:linear-gradient(100deg,rgba(255,255,255,.97),color-mix(in srgb,var(--evidence-accent),white 94%));box-shadow:0 0 0 3px color-mix(in srgb,var(--evidence-accent),transparent 85%),0 10px 25px rgba(52,116,210,.14)}
+.evidenceDeliver,.evidenceOpen{position:relative;z-index:2;flex:none;display:grid;place-items:center;width:25px;height:26px;color:#347fce;border:1px solid rgba(99,155,228,.32);border-radius:8px;background:rgba(243,250,255,.9);cursor:pointer}
+.evidenceDeliver{margin-left:auto;color:var(--evidence-accent)}
+.evidenceDeliver:hover:not(:disabled),.evidenceOpen:hover{background:#e2f1ff;transform:translateY(-1px)}
+.evidenceDeliver:disabled{opacity:.4;cursor:not-allowed}
+.evidenceDeliver:focus-visible,.evidenceOpen:focus-visible{outline:2px solid #388dff;outline-offset:2px}
+.evidenceGhost{position:absolute;z-index:12;pointer-events:none;display:flex;align-items:center;gap:6px;transform:translate(-50%,-50%);padding:9px 13px;border-radius:99px;border:1px solid var(--ghost-color);background:rgba(248,253,255,.96);color:#235b9e;box-shadow:0 0 12px var(--ghost-color),0 6px 30px rgba(57,118,216,.3);white-space:nowrap;font-size:12px;font-weight:750;will-change:left,top,opacity,transform}
+.evidenceGhostConsume{left:var(--ghost-target-x)!important;top:var(--ghost-target-y)!important;opacity:0;transform:translate(-50%,-50%) scale(.08) rotate(160deg);transition:left .62s cubic-bezier(.32,.6,.2,1),top .62s cubic-bezier(.32,.6,.2,1),transform .62s ease-in,opacity .62s ease-in}
+@media(max-width:1550px){.evidencePulse{display:none}.evidenceRow{gap:5px;padding-right:6px}.evidenceDeliver,.evidenceOpen{width:23px;height:24px}.evidenceText strong{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.evidenceGhost,.evidenceGhostConsume{display:none}}
+.graphPeripheralNode:disabled{cursor:default}
+.graphPeripheralNode:disabled:hover{outline:none;transform:translate(-50%,-50%)}
+.graphToggle:disabled{opacity:.6;cursor:default}
