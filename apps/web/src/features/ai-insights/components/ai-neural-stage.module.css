@@ -66,3 +66,48 @@
 .graphPeripheralNode:disabled{cursor:default}
 .graphPeripheralNode:disabled:hover{outline:none;transform:translate(-50%,-50%)}
 .graphToggle:disabled{opacity:.6;cursor:default}
+
+/* db4b998 visual stabilization: the flow must sit ABOVE the diffuse stage
+   background, but BELOW interactive evidence/cards and the AI globe. */
+.signalLayer {
+  z-index: 3;
+  opacity: 1;
+  overflow: hidden;
+  contain: layout paint;
+}
+.centerArea { z-index: 4; }
+.evidencePanel, .graphPanel { z-index: 5; }
+.stageIdentity, .stageSequence { z-index: 7; }
+.flowTrail { transition: opacity .18s ease; }
+/* Two synchronized copies of each complete orbit use fixed geometric clips.
+   pathLength=1000 gives exactly one circulating tracer per closed orbit. */
+.orbitGlow { fill: none; stroke-width: 7; opacity: .15; stroke-linecap: round; }
+.orbitSolidRear { fill: none; stroke-width: 1.7; opacity: .57; stroke-linecap: round; }
+.orbitSolidFront { fill: none; stroke-width: 1.9; opacity: .86; stroke-linecap: round; }
+.orbitTrace {
+  fill: none;
+  stroke-width: 3.3;
+  stroke-linecap: round;
+  stroke-dasharray: 14 986;
+  stroke-dashoffset: 0;
+  opacity: .85;
+  animation: orbitTravel var(--orb-speed, 15s) linear infinite;
+  animation-delay: var(--orbit-delay, 0s);
+}
+@keyframes orbitTravel { to { stroke-dashoffset: -1000; } }
+.orbArea[data-motion="paused"] .orbitTrace { animation-play-state: paused; }
+/* Never change depth/z-index on interaction. Only the tracer speed changes. */
+@media (max-width: 1250px) {
+  /* Below this width the stage becomes two columns. The original opacity:.55
+     rule erased the only cross-region visual connection. */
+  .signalLayer { opacity: 1; }
+}
+@media (max-width: 760px) {
+  /* Mobile layout stacks the three regions; do not draw incorrect diagonal
+     connectors across unrelated rows. All source/graph content stays usable. */
+  .signalLayer { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbitTrace { animation: none !important; stroke-dasharray: none; opacity: .28; }
+  .flowTrail { transition: none; }
+}
