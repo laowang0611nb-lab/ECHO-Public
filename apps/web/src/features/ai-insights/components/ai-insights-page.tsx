@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, BookOpen, ShieldCheck, Sparkles, TriangleAlert, Users, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowRight, BookOpen, ShieldCheck, Users, Waypoints } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -14,12 +14,10 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useReviewSummary } from "@/features/ai-review/queries";
-import { EvidenceSummary, FindingCard } from "@/features/ai-insights/components/ai-insight-sections";
-import { AiKnowledgeGraphPreview } from "@/features/ai-insights/components/ai-knowledge-graph-preview";
-import { AnalysisEngine, type SecondaryAnalysisState } from "@/features/ai-insights/components/analysis-engine";
+import { type SecondaryAnalysisState } from "@/features/ai-insights/components/analysis-engine";
 import { AnalysisResultPanel } from "@/features/ai-insights/components/analysis-result-panel";
 import { EvidenceFlow } from "@/features/ai-insights/components/evidence-flow";
-import { FlowBridge } from "@/features/ai-insights/components/flow-bridge";
+import { AiNeuralStage } from "@/features/ai-insights/components/ai-neural-stage";
 import {
   useAIAnalysis,
   useAIAnalysisList,
@@ -31,7 +29,6 @@ import {
 import {
   applyAIAnalysisToTeachingModel,
   buildAiTeachingModel,
-  type AiAnalysisOutcome,
 } from "@/features/ai-insights/view-model";
 import { useTeacherDashboardOverview } from "@/features/dashboard/queries";
 import { localizeInsightSummary } from "@/features/dashboard/view-model";
@@ -40,13 +37,6 @@ import { summarizeKnowledgeBase } from "@/features/knowledge/view-model";
 import { useStudentAnalytics } from "@/features/students/queries";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
-
-const findingIcons: Record<AiAnalysisOutcome["id"], LucideIcon> = {
-  "knowledge-point": TriangleAlert,
-  "student-scope": Users,
-  "error-pattern": ShieldCheck,
-  strategy: Waypoints,
-};
 
 function createClientRequestId(prefix: string) {
   const randomId = globalThis.crypto?.randomUUID?.()
@@ -334,29 +324,6 @@ function AiInsightsWorkspace({
     return <EmptyState description="当前课程还没有可用于 AI 教学的证据。" title="暂无分析证据" />;
   }
 
-  const statusTone = analysisState === "analyzing"
-    ? "info"
-    : analysisState === "failed"
-      ? "danger"
-      : analysisState === "completed"
-        ? "success"
-        : "neutral";
-  const statusLabel = analysisState === "analyzing"
-    ? analysisType === "secondary" ? "二次分析进行中" : "初次分析进行中"
-    : analysisState === "failed"
-      ? analysisType === "secondary" ? "二次分析失败" : "初次分析失败"
-      : analysisState === "completed"
-        ? analysisType === "secondary" ? "二次分析结果" : "初次分析结果"
-        : "等待首次分析";
-  const riskCount = overview.stats.attention_knowledge_point_count;
-  const affectedStudentCount = analysis?.result?.affected_student_ids.length ?? 0;
-  const analysisSummary = analysisEvidenceCount > 0
-    ? insufficientEvidence
-      ? `本次分析基于 ${analysisEvidenceCount} 条学习证据，当前结论仍标记为证据不足；课程有 ${riskCount} 个待关注知识点。`
-      : `本次分析基于 ${analysisEvidenceCount} 条学习证据；当前课程有 ${riskCount} 个待关注知识点，分析涉及 ${affectedStudentCount} 名学生。`
-    : `当前课程有 ${riskCount} 个待关注知识点、${overview.stats.student_count} 名学生；尚未形成持久化分析证据。`;
-  const [primaryFinding, ...supportingFindings] = model.outcomes;
-
   return (
     <div className="space-y-5">
       <PageHeader
@@ -380,82 +347,29 @@ function AiInsightsWorkspace({
         title="AI 教学洞察"
       />
 
-      <section aria-label="本次分析摘要" className="rounded-xl border-2 border-blue-100 bg-gradient-to-br from-white via-blue-50/55 to-cyan-50/45 px-4 py-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />分析摘要</p>
-            <p className="mt-2 max-w-4xl text-sm leading-6 text-[#314761]">{analysisSummary}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
-            <StatusBadge tone="neutral">
-              {analysisEvidenceCount > 0
-                ? `${analysisEvidenceCount} 条持久化证据`
-                : analysisStatus === "analyzing" ? "正在收集证据" : "等待证据分析"}
-            </StatusBadge>
-          </div>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 border-t border-blue-100 pt-3 text-xs text-muted-foreground">
-          <span>重点知识点 <strong className="font-semibold text-foreground">{riskCount}</strong></span>
-          <span>影响学生 <strong className="font-semibold text-foreground">{affectedStudentCount}</strong></span>
-          <span>课程学生 <strong className="font-semibold text-foreground">{overview.stats.student_count}</strong></span>
-        </div>
-      </section>
-
-      <section aria-labelledby="ai-findings-title" className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground" id="ai-findings-title">关键发现</h2>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">先看最需要处理的问题，再进入推理链和证据回查。</p>
-          </div>
-          <span className="text-xs text-muted-foreground">只展示当前可追溯到真实学习证据的内容</span>
-        </div>
-        {primaryFinding ? (
-          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-            <div className="md:col-span-3 xl:col-span-2">
-              <FindingCard icon={findingIcons[primaryFinding.id]} outcome={primaryFinding} prominent />
-            </div>
-            {supportingFindings.slice(0, 3).map((outcome) => (
-              <FindingCard icon={findingIcons[outcome.id]} key={outcome.id} outcome={outcome} />
-            ))}
-          </div>
-        ) : <EmptyState description="当前没有可展示的分析结论。" title="暂无关键发现" />}
-      </section>
-
-      <section aria-label="AI 推理与知识图谱预览" className="relative overflow-hidden rounded-xl border-2 border-blue-100 bg-gradient-to-br from-white via-blue-50/45 to-cyan-50/35 px-3 py-4 xl:px-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="size-4 text-primary" />AI 推理核心与证据链路</p>
-            <p className="mt-1 text-xs text-muted-foreground">证据摘要先进入推理核心，再承接课程知识图谱。</p>
-          </div>
-          <StatusBadge tone={statusTone}>{statusLabel}</StatusBadge>
-        </div>
-        <div className="relative grid gap-3 xl:grid-cols-[minmax(220px,0.72fr)_32px_minmax(360px,1.08fr)_32px_minmax(240px,0.82fr)] xl:items-stretch" data-ai-workspace-anchor="true">
-          <EvidenceSummary analyzing={analysisState === "analyzing"} nodes={model.evidenceNodes} />
-          <FlowBridge direction="forward" state={analysisState} />
-          <AnalysisEngine
-            actionDisabled={actionDisabled}
-            actionLabel={actionLabel}
-            actionPendingLabel={actionPendingLabel}
-            actionPending={analysisPending || createStrategy.isPending}
-            affectedStudentCount={affectedStudentCount}
-            evidenceCount={analysisEvidenceCount}
-            modelName={analysis?.result?.model_name}
-            onAction={handleAnalysisAction}
-            onReanalyze={showReanalyze ? handleReanalyze : undefined}
-            progress={progress}
-            reanalyzePending={reanalyzeAnalysis.isPending}
-            state={analysisState}
-          />
-          <FlowBridge direction="forward" state={analysisState} />
-          <AiKnowledgeGraphPreview analysis={analysis} attentionCount={riskCount} chapters={knowledge.chapters} courseId={courseId} fallbackDifficulty={model.topDifficulty} />
-        </div>
-        {analysisError || analysis?.error_message ? (
-          <p className="mt-3 rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            {analysis?.error_message ?? (analysisError instanceof Error ? analysisError.message : "AI 分析操作失败。")}
-          </p>
-        ) : null}
-      </section>
+      <AiNeuralStage
+        actionDisabled={actionDisabled}
+        actionLabel={actionLabel}
+        actionPending={analysisPending || createStrategy.isPending}
+        actionPendingLabel={actionPendingLabel}
+        analysis={analysis}
+        chapters={knowledge.chapters}
+        courseId={courseId}
+        evidenceCount={analysisEvidenceCount}
+        evidenceNodes={model.evidenceNodes}
+        fallbackDifficulty={model.topDifficulty}
+        onAction={handleAnalysisAction}
+        onReanalyze={showReanalyze ? handleReanalyze : undefined}
+        outcomes={model.outcomes}
+        progress={progress}
+        reanalyzePending={reanalyzeAnalysis.isPending}
+        state={analysisState}
+      />
+      {analysisError || analysis?.error_message ? (
+        <p role="alert" className="rounded-lg border-2 border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {analysis?.error_message ?? (analysisError instanceof Error ? analysisError.message : "AI 分析操作失败。")}
+        </p>
+      ) : null}
 
       <section aria-labelledby="ai-results-title" className="space-y-3">
         <div>
