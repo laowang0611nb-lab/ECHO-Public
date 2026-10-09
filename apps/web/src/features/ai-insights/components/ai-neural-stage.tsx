@@ -58,8 +58,6 @@ export function AiNeuralStage(props: Props) {
   const [delivery, setDelivery] = useState<Delivery | null>(null);
   const stageRef = useRef<HTMLElement>(null);
   const pointerRef = useRef<PointerSession | null>(null);
-  const pointerFrameRef = useRef(0);
-  const pointerPendingRef = useRef<{ id: string; position: Point; destination: Point; over: boolean } | null>(null);
   const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   useEffect(() => {
@@ -79,9 +77,6 @@ export function AiNeuralStage(props: Props) {
       for (const timeout of timers) clearTimeout(timeout);
       timers.clear();
       pointerRef.current = null;
-      pointerPendingRef.current = null;
-      cancelAnimationFrame(pointerFrameRef.current);
-      pointerFrameRef.current = 0;
     };
   }, [props.courseId]);
 
@@ -151,27 +146,12 @@ export function AiNeuralStage(props: Props) {
     session.dragging = true;
     const destination = getDropCenter();
     if (!destination) return;
-    // Pointer hardware may emit 100+ events/s. Only commit the latest position
-    // once per animation frame so the G6 preview and AI stage are not repeatedly
-    // reconciled for intermediate pointer coordinates.
-    pointerPendingRef.current = { id: session.id, position: inStage(current), destination, over: overSphere(current) };
-    if (!pointerFrameRef.current) {
-      pointerFrameRef.current = requestAnimationFrame(() => {
-        pointerFrameRef.current = 0;
-        const next = pointerPendingRef.current;
-        pointerPendingRef.current = null;
-        if (!next || !pointerRef.current || pointerRef.current.id !== next.id) return;
-        setDelivery({ id: next.id, phase: next.over ? "hovering-orb" : "dragging", position: next.position, destination: next.destination });
-      });
-    }
+    setDelivery({ id: session.id, phase: overSphere(current) ? "hovering-orb" : "dragging", position: inStage(current), destination });
   };
   const dragEnd = (event: ReactPointerEvent<HTMLDivElement>, cancelled = false) => {
     const session = pointerRef.current;
     if (!session || session.pointerId !== event.pointerId) return;
     pointerRef.current = null;
-    pointerPendingRef.current = null;
-    if (pointerFrameRef.current) cancelAnimationFrame(pointerFrameRef.current);
-    pointerFrameRef.current = 0;
     if (!cancelled && session.dragging && overSphere({ x: event.clientX, y: event.clientY })) {
       consumeEvidence(session.id, inStage({ x: event.clientX, y: event.clientY }));
     } else setDelivery(null);
@@ -181,7 +161,7 @@ export function AiNeuralStage(props: Props) {
     <>
       <section className={styles.stage} aria-label="AI 教学分析神经协同工作台" ref={stageRef} data-state={props.state} data-paused={paused ? "true" : "false"}>
         <div className={styles.stageGrid} aria-hidden="true" />
-        <AiStageFlow hostRef={stageRef} evidenceSignature={`${props.courseId}|${usableEvidence.map((node) => `${node.id}:${node.value}`).join("|")}`} activeEvidenceId={activeEvidenceId} activityPhase={delivery?.phase} paused={paused} state={props.state} />
+        <AiStageFlow hostRef={stageRef} evidenceCount={usableEvidence.length} activeEvidenceId={activeEvidenceId} activityPhase={delivery?.phase} paused={paused} state={props.state} />
         <div className={styles.stageIdentity}><span className={styles.identityLight} /><span>AI 教学分析 · 神经协同工作台</span></div>
         <div className={styles.stageSequence} aria-label="分析推理步骤">
           {pipeline.map((step, index) => {
@@ -234,7 +214,7 @@ export function AiNeuralStage(props: Props) {
             {props.onReanalyze ? <button className={styles.reanalyzeButton} disabled={props.actionPending || props.state === "analyzing" || props.reanalyzePending} onClick={props.onReanalyze} type="button" title="重新分析"><RotateCcw size={16} /><span>重新分析</span></button> : null}
           </div>
         </div>
-        <AiStageGraph analysis={props.analysis} chapters={props.chapters} courseId={props.courseId} fallbackDifficulty={props.fallbackDifficulty} activeEvidenceId={activeEvidenceId} />
+        <AiStageGraph analysis={props.analysis} chapters={props.chapters} courseId={props.courseId} fallbackDifficulty={props.fallbackDifficulty} activeEvidenceId={activeEvidenceId} paused={paused} />
         {delivery && !reducedMotion && (delivery.phase === "dragging" || delivery.phase === "hovering-orb" || delivery.phase === "consuming") ? (
           <div aria-hidden="true" className={`${styles.evidenceGhost} ${delivery.phase === "consuming" ? styles.evidenceGhostConsume : ""}`} style={{
             left: delivery.position.x, top: delivery.position.y, "--ghost-target-x": `${delivery.destination.x}px`, "--ghost-target-y": `${delivery.destination.y}px`, "--ghost-color": activeColor ?? "#398bff",

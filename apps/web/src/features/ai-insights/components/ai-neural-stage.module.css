@@ -67,47 +67,57 @@
 .graphPeripheralNode:disabled:hover{outline:none;transform:translate(-50%,-50%)}
 .graphToggle:disabled{opacity:.6;cursor:default}
 
-/* db4b998 visual stabilization: the flow must sit ABOVE the diffuse stage
-   background, but BELOW interactive evidence/cards and the AI globe. */
-.signalLayer {
-  z-index: 3;
-  opacity: 1;
-  overflow: hidden;
-  contain: layout paint;
-}
-.centerArea { z-index: 4; }
-.evidencePanel, .graphPanel { z-index: 5; }
-.stageIdentity, .stageSequence { z-index: 7; }
-.flowTrail { transition: opacity .18s ease; }
-/* Two synchronized copies of each complete orbit use fixed geometric clips.
-   pathLength=1000 gives exactly one circulating tracer per closed orbit. */
-.orbitGlow { fill: none; stroke-width: 7; opacity: .15; stroke-linecap: round; }
-.orbitSolidRear { fill: none; stroke-width: 1.7; opacity: .57; stroke-linecap: round; }
-.orbitSolidFront { fill: none; stroke-width: 1.9; opacity: .86; stroke-linecap: round; }
-.orbitTrace {
-  fill: none;
-  stroke-width: 3.3;
-  stroke-linecap: round;
-  stroke-dasharray: 14 986;
-  stroke-dashoffset: 0;
-  opacity: .85;
-  animation: orbitTravel var(--orb-speed, 15s) linear infinite;
-  animation-delay: var(--orbit-delay, 0s);
-}
-@keyframes orbitTravel { to { stroke-dashoffset: -1000; } }
-.orbArea[data-motion="paused"] .orbitTrace { animation-play-state: paused; }
-/* Never change depth/z-index on interaction. Only the tracer speed changes. */
-@media (max-width: 1250px) {
-  /* Below this width the stage becomes two columns. The original opacity:.55
-     rule erased the only cross-region visual connection. */
-  .signalLayer { opacity: 1; }
-}
-@media (max-width: 760px) {
-  /* Mobile layout stacks the three regions; do not draw incorrect diagonal
-     connectors across unrelated rows. All source/graph content stays usable. */
-  .signalLayer { display: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .orbitTrace { animation: none !important; stroke-dasharray: none; opacity: .28; }
-  .flowTrail { transition: none; }
-}
+/* ==== graph rewrite: denser local network, stronger ambient motion ==== */
+.graphPanel{background:radial-gradient(circle at 48% 48%,rgba(46,108,203,.28),transparent 38%),radial-gradient(circle at 15% 18%,rgba(90,184,255,.12),transparent 22%),linear-gradient(150deg,#081a37 0%,#0a2346 48%,#0b1d3c 100%);box-shadow:0 16px 46px rgba(12,53,117,.24),0 0 0 4px rgba(219,234,255,.56)}
+.graphHeader{padding:16px 14px 4px;align-items:flex-start}
+.graphTitle{font-size:14px;font-weight:800;letter-spacing:.01em}
+.graphTitle strong{font-size:14px}
+.graphTabs{display:flex;gap:8px;flex:none}
+.graphTab{padding:8px 12px;border-radius:13px;border:1px solid rgba(104,153,224,.55);background:rgba(26,55,102,.72);color:#c2d9ff;font-size:12px;font-weight:700;cursor:pointer;transition:background .2s ease,border-color .2s ease,color .2s ease,transform .2s ease}
+.graphTab:hover:not(:disabled){transform:translateY(-1px);background:rgba(34,69,124,.88)}
+.graphTab:disabled{opacity:.5;cursor:default}
+.graphTabActive{background:linear-gradient(180deg,#398aff,#2a64d7);border-color:#71b4ff;color:#ffffff;box-shadow:0 0 0 1px rgba(144,206,255,.25),0 8px 18px rgba(38,101,216,.3)}
+.graphSubtitle{padding:1px 16px 6px;font-size:11px;color:#b4cdf1}
+.graphStats{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 8px;color:#c1d6f4;font-size:10px}
+.graphStats span{display:inline-flex;align-items:center;gap:4px;padding:5px 8px;border-radius:999px;border:1px solid rgba(110,156,218,.2);background:rgba(20,42,76,.38)}
+.graphUniverse{position:relative;min-height:clamp(180px,24vh,330px);margin:0 10px;border:1px solid rgba(110,156,218,.18);border-radius:20px;background:radial-gradient(circle at 50% 50%,rgba(51,110,220,.22),transparent 42%),linear-gradient(180deg,rgba(8,21,44,.26),rgba(9,26,56,.18));box-shadow:inset 0 0 0 1px rgba(118,165,228,.07)}
+.graphUniverse::before{content:"";position:absolute;inset:0;border-radius:20px;pointer-events:none;background-image:linear-gradient(rgba(119,171,236,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(119,171,236,.06) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,.65));}
+.graphAmbientHalo{position:absolute;inset:auto;left:50%;top:51%;width:180px;height:180px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(68,141,255,.28),rgba(68,141,255,.08) 42%,transparent 70%);filter:blur(10px);animation:graphHalo 7.8s ease-in-out infinite}
+.graphAmbientRings{position:absolute;inset:0;pointer-events:none}
+.graphAmbientRings span{position:absolute;left:50%;top:51%;border-radius:50%;transform:translate(-50%,-50%);border:1px solid rgba(105,160,241,.17)}
+.graphAmbientRings span:nth-child(1){width:158px;height:158px;animation:graphRingPulse 8s ease-in-out infinite}
+.graphAmbientRings span:nth-child(2){width:232px;height:182px;animation:graphRingPulse 8s ease-in-out infinite 1.8s}
+.graphAmbientRings span:nth-child(3){width:305px;height:226px;animation:graphRingPulse 8s ease-in-out infinite 3.6s}
+.graphEdges{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.graphEdgeFlow{stroke-linecap:round;animation:graphEdgeSweep 6s linear infinite;opacity:.92;filter:drop-shadow(0 0 4px currentColor)}
+.graphNode{display:grid;place-items:center;border:1.5px solid rgba(218,240,255,.58);background:radial-gradient(circle at 35% 35%,rgba(227,245,255,.9),color-mix(in srgb,var(--node-color),#6ab3ff 25%) 32%,color-mix(in srgb,var(--node-color),#173d7f 38%) 100%);box-shadow:0 0 0 5px color-mix(in srgb,var(--node-color),transparent 88%),0 0 18px color-mix(in srgb,var(--node-color),transparent 45%)}
+.graphNodePulse{position:absolute;inset:-8px;border-radius:50%;border:1px solid color-mix(in srgb,var(--node-color),transparent 45%);opacity:var(--node-halo,.7);animation:graphNodePulse 4.4s ease-in-out infinite}
+.graphNodeLight{inset:-5px;opacity:.5}
+.graphNode:hover,.graphNode:focus-visible{transform:translate(-50%,-50%) scale(1.16)}
+.graphNodeSelected{box-shadow:0 0 0 9px color-mix(in srgb,var(--node-color),transparent 84%),0 0 28px 6px var(--node-color),0 0 60px color-mix(in srgb,var(--node-color),transparent 55%)}
+.graphNodeSelected .graphNodePulse{animation-duration:2.6s}
+.graphNodeLabel{top:auto;bottom:calc(100% + 7px);background:rgba(7,24,51,.62);padding:2px 6px;border-radius:999px;border:1px solid rgba(130,177,240,.18);backdrop-filter:blur(6px);font-size:10.5px;max-width:124px}
+.graphPeripheralNode{opacity:.8}
+.graphRelations{padding:7px 11px 4px;gap:6px;font-size:9.5px}
+.graphRelations span{padding:4px 7px;border-radius:999px;background:rgba(24,47,84,.52)}
+.graphLegend{padding:8px 13px 10px;font-size:10px;gap:10px;flex-wrap:wrap}
+.graphFocus{gap:9px;align-items:center;padding:11px 12px 12px 13px;background:linear-gradient(180deg,rgba(20,44,78,.74),rgba(16,37,68,.86));border-top:1px solid rgba(100,144,197,.28)}
+.graphFocusText{gap:5px}
+.graphFocusText small{font-size:10px}
+.graphFocusText strong{font-size:14px}
+.graphOpen{padding:9px 10px;font-size:11px;border-radius:13px;box-shadow:0 8px 18px rgba(255,255,255,.06)}
+.graphReset{width:28px;height:28px;border-radius:10px;border:1px solid rgba(111,161,230,.24);background:rgba(26,51,86,.4)}
+.signalLayer{opacity:.95}
+.signalTracer{opacity:.75;animation-duration:10.5s}
+.orbitTrace{stroke-dasharray:8 108;opacity:.95}
+.orbitGlow{opacity:.27}
+.orbitSolidRear{opacity:.58}
+.orbitSolidFront{opacity:.88}
+.coreOuterRing{box-shadow:0 0 0 21px rgba(110,176,255,.05),0 0 0 40px rgba(104,159,255,.04),0 0 40px rgba(91,137,250,.15)}
+.coreAura{background:radial-gradient(circle,rgba(62,137,248,.2),rgba(91,148,255,.12) 42%,transparent 70%)}
+.stage[data-paused=true] :is(.graphAmbientHalo,.graphAmbientRings span,.graphNodePulse,.graphEdgeFlow){animation-play-state:paused!important}
+@keyframes graphHalo{50%{transform:translate(-50%,-50%) scale(1.05);opacity:.72}}
+@keyframes graphRingPulse{50%{transform:translate(-50%,-50%) scale(1.035);opacity:.55}}
+@keyframes graphNodePulse{50%{transform:scale(1.15);opacity:.18}}
+@keyframes graphEdgeSweep{to{stroke-dashoffset:-200}}
+@media (max-width:1250px){.graphUniverse{min-height:290px}.graphStats{padding-bottom:6px}.graphTab{padding:7px 10px;font-size:11px}}
