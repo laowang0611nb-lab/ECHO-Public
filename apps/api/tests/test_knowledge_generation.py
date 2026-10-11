@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from database.models.course import CourseMember
 from database.models.document import Document
-from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
+from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint, KnowledgeRelation
 from database.models.learning import MasterySnapshot, StudentKnowledgeState
 from database.models.user import UserRole
 from httpx import AsyncClient
@@ -11,7 +11,7 @@ from pypdf import PdfWriter
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft
+from app.schemas.knowledge import ChapterDraft, KnowledgePointDraft, KnowledgeRelationDraft
 from app.services.knowledge import _replace_document_structure
 from app.services.llm import LLMProviderTimeoutError
 
@@ -86,6 +86,40 @@ async def test_teacher_generates_and_lists_structure(
     assert len(generated.json()[0]["knowledge_points"]) == 2
     assert listed.status_code == 200
     assert listed.json()[0]["knowledge_points"][0]["name"] == "Point 1"
+
+
+async def test_generation_persists_model_relations(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    knowledge_provider,
+) -> None:
+    teacher = await login(client, "knowledge-relations@example.com", "teacher")
+    _, document = await create_ready_document(client, teacher)
+
+    async def generate_relations(
+        points: list[object],
+    ) -> list[KnowledgeRelationDraft]:
+        assert len(points) == 3
+        return [
+            KnowledgeRelationDraft(
+                source_key=points[0].key,
+                target_key=points[1].key,
+                relation_type="prerequisite",
+                reason="test relation",
+            )
+        ]
+
+    knowledge_provider.generate_relations = generate_relations
+    response = await client.post(
+        f"/api/v1/documents/{document['id']}/generate-structure",
+        headers=auth_headers(teacher),
+    )
+
+    assert response.status_code == 200
+    async with session_factory() as session:
+        relations = list(await session.scalars(select(KnowledgeRelation)))
+    assert len(relations) >= 1
+    assert relations[0].relation_type == "prerequisite"
 
 
 async def test_generation_writes_chapter_ids_back_to_existing_chunks(

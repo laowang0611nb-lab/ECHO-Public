@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from database.models.course import CourseMember
 from database.models.document import Document, DocumentPage, DocumentStatus
@@ -23,6 +23,8 @@ from app.schemas.knowledge import (
     KnowledgePointCreate,
     KnowledgePointMergeRequest,
     KnowledgePointUpdate,
+    KnowledgeRelationDraft,
+    KnowledgeRelationPointDraft,
 )
 from app.services.chunk_mapping import assign_document_chunks_to_chapters
 from app.services.course import get_course_for_member
@@ -64,6 +66,7 @@ async def _replace_document_structure(
     session: AsyncSession,
     document: Document,
     drafts: list[ChapterDraft],
+    point_key_map: dict[str, UUID] | None = None,
 ) -> list[Chapter]:
     existing_chapters = list(
         await session.scalars(
@@ -96,6 +99,8 @@ async def _replace_document_structure(
     for chapter in existing_chapters:
         chapters_by_title.setdefault(chapter.title.casefold(), []).append(chapter)
         for point in chapter.knowledge_points:
+            if point.trashed_at is not None:
+                continue
             points_by_name.setdefault(point.name.casefold(), []).append(point)
 
     reused_chapter_ids: set[UUID] = set()
@@ -129,7 +134,7 @@ async def _replace_document_structure(
         existing_points = {
             point.name.casefold(): point
             for point in chapter.knowledge_points
-            if point.id not in reused_point_ids
+            if point.trashed_at is None and point.id not in reused_point_ids
         }
         for point_index, point_draft in enumerate(draft.knowledge_points):
             name_key = point_draft.name.casefold()
@@ -142,6 +147,7 @@ async def _replace_document_structure(
 
             if point is None:
                 point = KnowledgePoint(
+                    id=uuid4(),
                     course_id=document.course_id,
                     chapter=chapter,
                     name=point_draft.name,
@@ -155,15 +161,20 @@ async def _replace_document_structure(
                 point.description = point_draft.description
                 point.order_index = point_index
                 reused_point_ids.add(point.id)
+            if point_key_map is not None:
+                point_key_map[f"c{chapter_index}:p{point_index}"] = point.id
         chapters.append(chapter)
 
     await session.flush()
     existing_point_ids = {
         point.id for chapter in existing_chapters for point in chapter.knowledge_points
     }
+    preserved_point_ids = (
+        set(point_key_map.values()) if point_key_map is not None else reused_point_ids
+    )
     await _remove_knowledge_points(
         session,
-        list(existing_point_ids - reused_point_ids),
+        list(existing_point_ids - preserved_point_ids),
     )
 
     unused_chapter_ids = set(existing_chapter_ids) - reused_chapter_ids
@@ -177,6 +188,134 @@ async def _replace_document_structure(
 
     await assign_document_chunks_to_chapters(session, document.id, chapters)
     return chapters
+
+
+def _draft_relation_points(
+    drafts: list[ChapterDraft],
+) -> list[KnowledgeRelationPointDraft]:
+    points: list[KnowledgeRelationPointDraft] = []
+    for chapter_index, draft in enumerate(drafts):
+        for point_index, point in enumerate(draft.knowledge_points):
+            points.append(
+                KnowledgeRelationPointDraft(
+                    key=f"c{chapter_index}:p{point_index}",
+                    name=point.name,
+                    description=point.description,
+                    chapter_title=draft.title,
+                    chapter_order=chapter_index,
+                )
+            )
+    return points
+
+
+def _structural_relation_fallback(
+    drafts: list[ChapterDraft],
+) -> list[KnowledgeRelationDraft]:
+    relations: list[KnowledgeRelationDraft] = []
+    previous_last_key: str | None = None
+    for chapter_index, draft in enumerate(drafts):
+        keys = [
+            f"c{chapter_index}:p{point_index}" for point_index in range(len(draft.knowledge_points))
+        ]
+        if previous_last_key is not None and keys:
+            relations.append(
+                KnowledgeRelationDraft(
+                    source_key=previous_last_key,
+                    target_key=keys[0],
+                    relation_type="prerequisite",
+                    reason="章节顺序前置",
+                )
+            )
+        for source_key, target_key in zip(keys, keys[1:], strict=False):
+            relations.append(
+                KnowledgeRelationDraft(
+                    source_key=source_key,
+                    target_key=target_key,
+                    relation_type="prerequisite",
+                    reason="同章节学习顺序",
+                )
+            )
+        if keys:
+            previous_last_key = keys[-1]
+    return relations
+
+
+def _structural_relation_fallback_for_groups(
+    groups: list[list[str]],
+) -> list[KnowledgeRelationDraft]:
+    relations: list[KnowledgeRelationDraft] = []
+    previous_last_key: str | None = None
+    for keys in groups:
+        if previous_last_key is not None and keys:
+            relations.append(
+                KnowledgeRelationDraft(
+                    source_key=previous_last_key,
+                    target_key=keys[0],
+                    relation_type="prerequisite",
+                    reason="章节顺序前置",
+                )
+            )
+        for source_key, target_key in zip(keys, keys[1:], strict=False):
+            relations.append(
+                KnowledgeRelationDraft(
+                    source_key=source_key,
+                    target_key=target_key,
+                    relation_type="prerequisite",
+                    reason="同章节学习顺序",
+                )
+            )
+        if keys:
+            previous_last_key = keys[-1]
+    return relations
+
+
+def _merge_relation_drafts(
+    primary: list[KnowledgeRelationDraft],
+    fallback: list[KnowledgeRelationDraft],
+) -> list[KnowledgeRelationDraft]:
+    merged: list[KnowledgeRelationDraft] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for relation in [*primary, *fallback]:
+        pair = tuple(sorted((relation.source_key, relation.target_key)))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        merged.append(relation)
+    return merged
+
+
+async def _replace_document_relations(
+    session: AsyncSession,
+    document: Document,
+    point_key_map: dict[str, UUID],
+    relation_drafts: list[KnowledgeRelationDraft],
+) -> None:
+    point_ids = set(point_key_map.values())
+    if point_ids:
+        await session.execute(
+            delete(KnowledgeRelation).where(
+                KnowledgeRelation.source_knowledge_point_id.in_(point_ids),
+                KnowledgeRelation.target_knowledge_point_id.in_(point_ids),
+            )
+        )
+    seen: set[tuple[UUID, UUID, str]] = set()
+    for relation in relation_drafts:
+        source_id = point_key_map.get(relation.source_key)
+        target_id = point_key_map.get(relation.target_key)
+        if source_id is None or target_id is None or source_id == target_id:
+            continue
+        key = (source_id, target_id, relation.relation_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        session.add(
+            KnowledgeRelation(
+                course_id=document.course_id,
+                source_knowledge_point_id=source_id,
+                target_knowledge_point_id=target_id,
+                relation_type=relation.relation_type,
+            )
+        )
 
 
 async def generate_document_structure(
@@ -221,20 +360,140 @@ async def generate_document_structure(
     if not drafts:
         raise KnowledgeStructureEmptyError
 
+    relation_points = _draft_relation_points(drafts)
+    relation_generator = getattr(provider, "generate_relations", None)
+    relation_drafts: list[KnowledgeRelationDraft] = []
+    if callable(relation_generator) and len(relation_points) >= 2:
+        relation_drafts = await relation_generator(relation_points)
+    relation_drafts = _merge_relation_drafts(
+        relation_drafts,
+        _structural_relation_fallback(drafts),
+    )
+
     try:
-        chapters = await _replace_document_structure(session, document, drafts)
+        point_key_map: dict[str, UUID] = {}
+        chapters = await _replace_document_structure(
+            session,
+            document,
+            drafts,
+            point_key_map=point_key_map,
+        )
+        await _replace_document_relations(
+            session,
+            document,
+            point_key_map,
+            relation_drafts,
+        )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
         raise KnowledgeStructureConflictError from exc
     chapter_ids = [chapter.id for chapter in chapters]
+    session.expire_all()
     result = await session.scalars(
         select(Chapter)
         .options(selectinload(Chapter.knowledge_points.and_(KnowledgePoint.trashed_at.is_(None))))
+        .execution_options(populate_existing=True)
         .where(Chapter.id.in_(chapter_ids))
         .order_by(Chapter.order_index)
     )
     return list(result)
+
+
+async def generate_document_relations(
+    session: AsyncSession,
+    provider: KnowledgeStructureProvider,
+    document_id: UUID,
+    requester_id: UUID,
+) -> dict[str, UUID | int]:
+    document = await session.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.trashed_at.is_(None),
+        )
+    )
+    if document is None:
+        raise KnowledgeDocumentNotFoundError
+
+    membership = await session.scalar(
+        select(CourseMember).where(
+            CourseMember.course_id == document.course_id,
+            CourseMember.user_id == requester_id,
+        )
+    )
+    if membership is None or membership.role != UserRole.TEACHER:
+        raise KnowledgeGenerationForbiddenError
+
+    chapters = list(
+        await session.scalars(
+            select(Chapter)
+            .where(
+                Chapter.document_id == document_id,
+                Chapter.trashed_at.is_(None),
+            )
+            .order_by(Chapter.order_index, Chapter.id)
+        )
+    )
+    relation_points: list[KnowledgeRelationPointDraft] = []
+    groups: list[list[str]] = []
+    for chapter in chapters:
+        points = list(
+            await session.scalars(
+                select(KnowledgePoint)
+                .where(
+                    KnowledgePoint.chapter_id == chapter.id,
+                    KnowledgePoint.trashed_at.is_(None),
+                )
+                .order_by(KnowledgePoint.order_index, KnowledgePoint.id)
+            )
+        )
+        keys: list[str] = []
+        for point in points:
+            key = f"p:{point.id}"
+            keys.append(key)
+            relation_points.append(
+                KnowledgeRelationPointDraft(
+                    key=key,
+                    name=point.name,
+                    description=point.description,
+                    chapter_title=chapter.title,
+                    chapter_order=chapter.order_index,
+                )
+            )
+        groups.append(keys)
+    if not relation_points:
+        raise KnowledgeStructureEmptyError
+
+    relation_generator = getattr(provider, "generate_relations", None)
+    model_relations: list[KnowledgeRelationDraft] = []
+    if callable(relation_generator):
+        model_relations = await relation_generator(relation_points)
+    relation_drafts = _merge_relation_drafts(
+        model_relations,
+        _structural_relation_fallback_for_groups(groups),
+    )
+    point_key_map = {point.key: UUID(point.key.removeprefix("p:")) for point in relation_points}
+    try:
+        await _replace_document_relations(
+            session,
+            document,
+            point_key_map,
+            relation_drafts,
+        )
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise KnowledgeStructureConflictError from exc
+    return {
+        "document_id": document.id,
+        "relation_count": len(relation_drafts),
+        "prerequisite_count": sum(
+            1 for relation in relation_drafts if relation.relation_type == "prerequisite"
+        ),
+        "related_count": sum(
+            1 for relation in relation_drafts if relation.relation_type == "related"
+        ),
+    }
 
 
 async def list_course_chapters(

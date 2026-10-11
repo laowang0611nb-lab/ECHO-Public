@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -41,6 +42,34 @@ class ChapterDraft(BaseModel):
             unique_points.append(point)
         self.knowledge_points = unique_points
         return self
+
+
+class KnowledgeRelationPointDraft(BaseModel):
+    key: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    chapter_title: str = Field(min_length=1, max_length=255)
+    chapter_order: int = Field(ge=0)
+
+
+class KnowledgeRelationDraft(BaseModel):
+    source_key: str = Field(min_length=1, max_length=64)
+    target_key: str = Field(min_length=1, max_length=64)
+    relation_type: Literal["prerequisite", "related"]
+    reason: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_distinct_points(self) -> "KnowledgeRelationDraft":
+        if self.source_key == self.target_key:
+            raise ValueError("knowledge relation source and target must differ")
+        return self
+
+
+class KnowledgeRelationGenerationResponse(BaseModel):
+    document_id: UUID
+    relation_count: int
+    prerequisite_count: int
+    related_count: int
 
 
 class ChapterCreate(BaseModel):

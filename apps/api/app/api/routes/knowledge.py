@@ -12,6 +12,7 @@ from app.schemas.knowledge import (
     KnowledgePointMergeRequest,
     KnowledgePointResponse,
     KnowledgePointUpdate,
+    KnowledgeRelationGenerationResponse,
 )
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
 from app.services.knowledge import (
@@ -26,6 +27,7 @@ from app.services.knowledge import (
     create_knowledge_point,
     delete_chapter,
     delete_knowledge_point,
+    generate_document_relations,
     generate_document_structure,
     list_course_chapters,
     merge_knowledge_points,
@@ -104,6 +106,66 @@ async def generate_structure(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="LLM provider failed to generate a valid structure",
         ) from exc
+
+
+@router.post(
+    "/documents/{document_id}/generate-relations",
+    response_model=KnowledgeRelationGenerationResponse,
+)
+async def generate_relations(
+    document_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+    provider: KnowledgeProviderDep,
+) -> KnowledgeRelationGenerationResponse:
+    try:
+        result = await generate_document_relations(
+            session,
+            provider,
+            document_id,
+            current_user.id,
+        )
+    except KnowledgeDocumentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        ) from exc
+    except KnowledgeGenerationForbiddenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only course teachers can generate document relations",
+        ) from exc
+    except KnowledgeStructureEmptyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No active knowledge points are available for relation generation",
+        ) from exc
+    except KnowledgeStructureConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Generated relations conflict with existing data",
+        ) from exc
+    except LLMConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM provider is not configured",
+        ) from exc
+    except LLMContextLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Knowledge structure exceeds the configured LLM context limit",
+        ) from exc
+    except LLMProviderTimeoutError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="LLM provider timed out while generating relations",
+        ) from exc
+    except LLMProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="LLM provider failed to generate valid relations",
+        ) from exc
+    return KnowledgeRelationGenerationResponse(**result)
 
 
 @router.get("/courses/{course_id}/chapters", response_model=list[ChapterResponse])

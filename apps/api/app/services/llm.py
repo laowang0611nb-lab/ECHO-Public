@@ -5,7 +5,11 @@ from typing import Protocol
 
 import httpx
 
-from app.schemas.knowledge import ChapterDraft
+from app.schemas.knowledge import (
+    ChapterDraft,
+    KnowledgeRelationDraft,
+    KnowledgeRelationPointDraft,
+)
 
 EXTRACTION_SYSTEM_PROMPT = "You extract educational knowledge structures. Return strict JSON only."
 MERGE_SYSTEM_PROMPT = "You merge partial educational knowledge structures. Return strict JSON only."
@@ -31,6 +35,22 @@ CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 WORD_PATTERN = re.compile(r"[A-Za-z0-9]+(?:[._/+:-][A-Za-z0-9]+)*")
 REQUEST_OVERHEAD_TOKENS = 16
 PART_SEPARATOR = "\n\n"
+
+RELATION_SYSTEM_PROMPT = (
+    "You extract explicit prerequisite and association relations between course "
+    "knowledge points. Return strict JSON only."
+)
+RELATION_PROMPT_PREFIX = (
+    "Analyze the following course knowledge points and return strict JSON only. "
+    'The JSON shape must be {"relations":[{"source_key":string,'
+    '"target_key":string,"relation_type":"prerequisite|related",'
+    '"reason":string}]}. Use prerequisite when the source must be understood '
+    "before the target. Use related only for strong, explicit mutual association. "
+    "Do not create weak generic links. Do not create self-links. Prefer a small "
+    "number of high-confidence edges over a dense graph. Keep every reason short. "
+    "Use only keys present in the input. Do not include markdown.\n\n"
+    "KNOWLEDGE POINTS:\n"
+)
 
 
 class LLMConfigurationError(Exception):
@@ -207,6 +227,45 @@ def _group_draft_batches(
     return groups
 
 
+MAX_RELATION_POINTS_PER_REQUEST = 120
+
+
+def _relation_point_batches(
+    points: list[KnowledgeRelationPointDraft],
+) -> list[list[KnowledgeRelationPointDraft]]:
+    batches: list[list[KnowledgeRelationPointDraft]] = []
+    current: list[KnowledgeRelationPointDraft] = []
+    for point in points:
+        if current and len(current) >= MAX_RELATION_POINTS_PER_REQUEST:
+            batches.append(current)
+            current = [current[-1]]
+        current.append(point)
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _deduplicate_relation_drafts(
+    relations: list[KnowledgeRelationDraft],
+    valid_keys: set[str],
+) -> list[KnowledgeRelationDraft]:
+    result: list[KnowledgeRelationDraft] = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for relation in relations:
+        if (
+            relation.source_key not in valid_keys
+            or relation.target_key not in valid_keys
+            or relation.source_key == relation.target_key
+        ):
+            continue
+        pair = tuple(sorted((relation.source_key, relation.target_key)))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        result.append(relation)
+    return result
+
+
 class QwenKnowledgeStructureProvider:
     def __init__(
         self,
@@ -226,6 +285,22 @@ class QwenKnowledgeStructureProvider:
         self.max_input_tokens = max_input_tokens
         self.batch_overlap_tokens = batch_overlap_tokens
         self.max_output_tokens = max_output_tokens
+
+    async def generate_relations(
+        self,
+        points: list[KnowledgeRelationPointDraft],
+    ) -> list[KnowledgeRelationDraft]:
+        if len(points) < 2:
+            return []
+        valid_keys = {point.key for point in points}
+        relations: list[KnowledgeRelationDraft] = []
+        for batch in _relation_point_batches(points):
+            prompt = RELATION_PROMPT_PREFIX + json.dumps(
+                {"points": [point.model_dump(mode="json") for point in batch]},
+                ensure_ascii=False,
+            )
+            relations.extend(await self._request_relations(RELATION_SYSTEM_PROMPT, prompt))
+        return _deduplicate_relation_drafts(relations, valid_keys)
 
     async def generate(self, pages: list[str]) -> list[ChapterDraft]:
         if not self.api_key:
@@ -347,6 +422,51 @@ class QwenKnowledgeStructureProvider:
         if not chapters:
             raise LLMProviderError("LLM returned no chapters")
         return chapters
+
+    async def _request_relations(
+        self,
+        system_prompt: str,
+        prompt: str,
+    ) -> list[KnowledgeRelationDraft]:
+        if _request_tokens(system_prompt, prompt) > self.max_input_tokens:
+            raise LLMContextLimitError(
+                "LLM relation request exceeds the configured input token budget"
+            )
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.1,
+                        "response_format": {"type": "json_object"},
+                        "max_tokens": self.max_output_tokens,
+                    },
+                )
+                response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            raise LLMProviderTimeoutError("LLM relation request timed out") from exc
+        except httpx.HTTPError as exc:
+            raise LLMProviderError("LLM relation request failed") from exc
+
+        try:
+            payload = response.json()
+            content = payload["choices"][0]["message"]["content"]
+            parsed = json.loads(_extract_json(content))
+            raw_relations = parsed["relations"]
+            if not isinstance(raw_relations, list):
+                raise TypeError("relations must be a list")
+            return [KnowledgeRelationDraft.model_validate(item) for item in raw_relations]
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise LLMProviderError("LLM returned invalid knowledge relations") from exc
 
 
 def _extract_json(content: str) -> str:
