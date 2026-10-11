@@ -12,6 +12,7 @@ def test_core_tables_are_registered() -> None:
         "chapters",
         "chat_attachments",
         "conversations",
+        "conversation_teaching_states",
         "document_pages",
         "documents",
         "external_resource_knowledge_points",
@@ -52,6 +53,7 @@ def test_core_tables_are_registered() -> None:
         "teaching_strategies",
         "teaching_strategy_versions",
         "teaching_policies",
+        "teaching_dialog_events",
         "user_credentials",
         "users",
     }

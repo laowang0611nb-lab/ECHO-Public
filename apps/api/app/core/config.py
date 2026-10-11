@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.217"
+    app_version: str = "0.0.227"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -114,6 +114,10 @@ class Settings(BaseSettings):
     chat_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     chat_model: str = "qwen3.8-flash"
     chat_timeout_seconds: float = 60.0
+    teaching_flow_enabled: bool = True
+    teaching_flow_llm_classifier_enabled: bool = True
+    teaching_flow_max_hint_levels: int = 3
+    teaching_flow_max_incorrect_attempts: int = 2
     embedding_api_key: str | None = None
     embedding_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     embedding_model: str = "text-embedding-v3"

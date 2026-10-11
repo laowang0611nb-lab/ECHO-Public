@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -25,7 +26,8 @@ from database.db.base_class import Base
 if TYPE_CHECKING:
     from database.models.course import Course
     from database.models.document import Document
-    from database.models.knowledge import KnowledgeChunk
+    from database.models.knowledge import KnowledgeChunk, KnowledgePoint
+    from database.models.resource import QuestionItem
     from database.models.user import User
 
 
@@ -50,12 +52,29 @@ class ChatAttachmentKind(StrEnum):
     VIDEO = "video"
 
 
+class TeachingIntent(StrEnum):
+    CHITCHAT = "chitchat"
+    CONCEPT = "concept"
+    EXERCISE = "exercise"
+    AMBIGUOUS = "ambiguous"
+    ATTEMPT = "attempt"
+    ANSWER_REQUEST = "answer_request"
+
+
+class TeachingStage(StrEnum):
+    IDLE = "idle"
+    CLARIFY_WAITING = "clarify_waiting"
+    AWAITING_ATTEMPT = "awaiting_attempt"
+    HINTING = "hinting"
+    EXPLAINING = "explaining"
+    READY_FOR_QUICK_CHECK = "ready_for_quick_check"
+    COMPLETED = "completed"
+
+
 class TeachingPolicy(Base):
     __tablename__ = "teaching_policies"
 
-    id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     course_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
@@ -87,9 +106,7 @@ class TeachingPolicy(Base):
 class Conversation(Base):
     __tablename__ = "conversations"
 
-    id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     course_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
@@ -120,6 +137,11 @@ class Conversation(Base):
         cascade="all, delete-orphan",
         order_by="Message.created_at",
     )
+    teaching_states: Mapped[list["ConversationTeachingState"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ConversationTeachingState.created_at",
+    )
 
 
 class Message(Base):
@@ -132,9 +154,7 @@ class Message(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     conversation_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
@@ -167,9 +187,7 @@ class Message(Base):
         nullable=False,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    blocks: Mapped[list[dict[str, object]]] = mapped_column(
-        JSON, default=list, nullable=False
-    )
+    blocks: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -186,6 +204,158 @@ class Message(Base):
         cascade="all, delete-orphan",
         order_by="ChatAttachment.created_at",
     )
+
+
+class ConversationTeachingState(Base):
+    __tablename__ = "conversation_teaching_states"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "topic_key",
+            name="uq_conversation_teaching_states_topic",
+        ),
+        CheckConstraint(
+            "hint_level >= 0",
+            name="ck_conversation_teaching_states_hint_level_nonnegative",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_conversation_teaching_states_attempt_count_nonnegative",
+        ),
+        CheckConstraint(
+            "consecutive_incorrect_count >= 0",
+            name="ck_conversation_teaching_states_incorrect_count_nonnegative",
+        ),
+        CheckConstraint(
+            "state_version >= 1",
+            name="ck_conversation_teaching_states_version_positive",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    conversation_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    knowledge_point_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("knowledge_points.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    topic_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    intent: Mapped[TeachingIntent] = mapped_column(
+        Enum(
+            TeachingIntent,
+            name="teaching_intent",
+            native_enum=False,
+            length=32,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        nullable=False,
+    )
+    stage: Mapped[TeachingStage] = mapped_column(
+        Enum(
+            TeachingStage,
+            name="teaching_stage",
+            native_enum=False,
+            length=32,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        default=TeachingStage.IDLE,
+        server_default=TeachingStage.IDLE.value,
+        nullable=False,
+    )
+    hint_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    consecutive_incorrect_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    answer_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    pending_question: Mapped[str | None] = mapped_column(Text)
+    last_user_message_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    last_assistant_message_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    quick_check_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("question_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    state_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    conversation: Mapped[Conversation] = relationship(back_populates="teaching_states")
+    knowledge_point: Mapped["KnowledgePoint | None"] = relationship()
+    quick_check: Mapped["QuestionItem | None"] = relationship()
+    events: Mapped[list["TeachingDialogEvent"]] = relationship(
+        back_populates="state",
+        cascade="all, delete-orphan",
+        order_by="TeachingDialogEvent.created_at",
+    )
+
+
+class TeachingDialogEvent(Base):
+    __tablename__ = "teaching_dialog_events"
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    state_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("conversation_teaching_states.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    message_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    from_stage: Mapped[TeachingStage | None] = mapped_column(
+        Enum(
+            TeachingStage,
+            name="teaching_event_from_stage",
+            native_enum=False,
+            length=32,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        nullable=True,
+    )
+    to_stage: Mapped[TeachingStage] = mapped_column(
+        Enum(
+            TeachingStage,
+            name="teaching_event_to_stage",
+            native_enum=False,
+            length=32,
+            create_constraint=True,
+            values_callable=lambda values: [value.value for value in values],
+        ),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(255))
+    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    state: Mapped[ConversationTeachingState] = relationship(back_populates="events")
 
 
 class ChatAttachment(Base):
@@ -209,9 +379,7 @@ class ChatAttachment(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -241,9 +409,7 @@ class ChatAttachment(Base):
     )
     mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
     file_name: Mapped[str | None] = mapped_column(String(255))
-    storage_key: Mapped[str] = mapped_column(
-        String(512), unique=True, index=True, nullable=False
-    )
+    storage_key: Mapped[str] = mapped_column(String(512), unique=True, index=True, nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
@@ -251,9 +417,7 @@ class ChatAttachment(Base):
     transcript: Mapped[str | None] = mapped_column(Text)
     model_file_url: Mapped[str | None] = mapped_column(Text)
     model_file_model: Mapped[str | None] = mapped_column(String(120))
-    model_file_expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True)
-    )
+    model_file_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
@@ -278,9 +442,7 @@ class MessageCitation(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid4
-    )
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     message_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("messages.id", ondelete="CASCADE"),

@@ -16,10 +16,14 @@ from database.models.chat import (
     ChatAttachment,
     ChatAttachmentKind,
     Conversation,
+    ConversationTeachingState,
     Message,
     MessageCitation,
     MessageStatus,
+    TeachingDialogEvent,
+    TeachingIntent,
     TeachingPolicy,
+    TeachingStage,
 )
 from database.models.course import Course, CourseInvite, CourseMember
 from database.models.document import Document, DocumentPage, ResourceType
@@ -98,6 +102,7 @@ __all__ = [
     "ChatAttachment",
     "ChatAttachmentKind",
     "Conversation",
+    "ConversationTeachingState",
     "Course",
     "CourseAnnouncement",
     "CourseAnnouncementRead",
@@ -147,6 +152,9 @@ __all__ = [
     "StudentProfile",
     "TeacherProfile",
     "TeachingPolicy",
+    "TeachingDialogEvent",
+    "TeachingIntent",
+    "TeachingStage",
     "TeachingStrategy",
     "TeachingStrategyHistoryAction",
     "TeachingStrategyPriority",

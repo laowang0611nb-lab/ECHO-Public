@@ -4,7 +4,16 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-from database.models.chat import ChatAttachment, Conversation, Message, MessageCitation, MessageRole
+from database.models.chat import (
+    ChatAttachment,
+    Conversation,
+    ConversationTeachingState,
+    Message,
+    MessageCitation,
+    MessageRole,
+    TeachingDialogEvent,
+    TeachingStage,
+)
 from database.models.document import Document, DocumentPage, DocumentStatus
 from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType
@@ -671,9 +680,9 @@ async def test_conversation_and_sse_message_flow(
     assert "event: text_delta" in stream_response.text
     assert "event: citation" in stream_response.text
     assert "event: done" in stream_response.text
-    assert "event: block" in stream_response.text
-    assert '"type": "hint"' in stream_response.text
-    assert '"type": "quick_check"' in stream_response.text
+    assert "event: block" not in stream_response.text
+    assert '"type": "hint"' not in stream_response.text
+    assert '"type": "quick_check"' not in stream_response.text
     assert '"correct_option_id"' not in stream_response.text
     assert messages_response.status_code == 200
     messages = messages_response.json()
@@ -683,8 +692,6 @@ async def test_conversation_and_sse_message_flow(
     assert [block["type"] for block in messages[1]["blocks"]] == [
         "markdown",
         "citation",
-        "hint",
-        "quick_check",
     ]
 
     async with session_factory() as session:
@@ -856,6 +863,15 @@ async def test_relevant_course_question_uses_linked_quick_check(
             "knowledge_point_id": course["knowledge_point_id"],
         },
     )
+    assert stream.status_code == 200
+    assert '"type": "hint"' not in stream.text
+    assert '"type": "quick_check"' not in stream.text
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "我懂了", "knowledge_point_id": course["knowledge_point_id"]},
+    )
     messages = await client.get(
         f"/api/v1/conversations/{conversation.json()['id']}/messages",
         headers=auth_headers(teacher),
@@ -865,7 +881,7 @@ async def test_relevant_course_question_uses_linked_quick_check(
     assert '"type": "hint"' in stream.text
     assert '"type": "quick_check"' in stream.text
     assert str(question["id"]) in stream.text
-    assistant = next(message for message in messages.json() if message["role"] == "assistant")
+    assistant = [message for message in messages.json() if message["role"] == "assistant"][-1]
     assert [block["type"] for block in assistant["blocks"]] == [
         "markdown",
         "citation",
@@ -897,7 +913,7 @@ async def test_explicit_point_uses_chapter_material_when_search_misses(
         f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
         headers=auth_headers(teacher),
         json={
-            "content": "解释量子纠缠",
+            "content": "直接给我答案：解释量子纠缠",
             "knowledge_point_id": course["knowledge_point_id"],
         },
     )
@@ -1237,6 +1253,10 @@ async def test_chat_uses_latest_course_teaching_policy(
     )
     assert first_stream.status_code == 200
     assert first_policy in chat_provider.last_stream_messages[0]["content"]
+    assert (
+        "Default to concise teaching responses" in chat_provider.last_stream_messages[0]["content"]
+    )
+    assert "800 Chinese characters" in chat_provider.last_stream_messages[0]["content"]
 
     updated = await client.put(
         f"/api/v1/courses/{course['id']}/teaching-policy",
@@ -1359,3 +1379,230 @@ async def test_cancelled_stream_persists_interrupted_partial_answer(
     assert assistant is not None
     assert assistant.content == "Partial answer"
     assert assistant.status.value == "interrupted"
+
+
+async def test_teaching_flow_exercise_waits_and_progresses_by_hints(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "teaching-flow-hints@example.com", "teacher")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    await create_question_item(
+        client,
+        teacher,
+        course,
+        knowledge_point_id=UUID(course["knowledge_point_id"]),
+        title="Hint progression question",
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Hints"},
+    )
+    conversation_id = conversation.json()["id"]
+
+    first = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(teacher),
+        json={
+            "content": "这道选择题应该选哪个？",
+            "knowledge_point_id": course["knowledge_point_id"],
+        },
+    )
+    assert first.status_code == 200
+    assert '"type": "hint"' not in first.text
+    assert '"type": "quick_check"' not in first.text
+
+    async with session_factory() as session:
+        state = await session.scalar(
+            select(ConversationTeachingState).where(
+                ConversationTeachingState.conversation_id == UUID(conversation_id)
+            )
+        )
+        assert state is not None
+        assert state.stage == TeachingStage.AWAITING_ATTEMPT
+        assert state.hint_level == 1
+        assert state.attempt_count == 0
+
+    second = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "我选 A"},
+    )
+    assert second.status_code == 200
+    assert '"type": "quick_check"' not in second.text
+
+    async with session_factory() as session:
+        state = await session.scalar(
+            select(ConversationTeachingState).where(
+                ConversationTeachingState.conversation_id == UUID(conversation_id)
+            )
+        )
+        assert state is not None
+        assert state.hint_level == 2
+        assert state.attempt_count == 1
+
+    third = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(teacher),
+        json={"content": "我懂了"},
+    )
+    assert third.status_code == 200
+    assert '"type": "hint"' in third.text
+    assert '"type": "quick_check"' in third.text
+
+    async with session_factory() as session:
+        state = await session.scalar(
+            select(ConversationTeachingState).where(
+                ConversationTeachingState.conversation_id == UUID(conversation_id)
+            )
+        )
+        assert state is not None
+        assert state.stage == TeachingStage.READY_FOR_QUICK_CHECK
+        assert state.quick_check_id is not None
+        events = list(
+            await session.scalars(
+                select(TeachingDialogEvent).where(TeachingDialogEvent.state_id == state.id)
+            )
+        )
+        assert [event.action for event in events] == ["hint", "hint", "explain"]
+
+
+async def test_explicit_answer_request_explains_then_offers_quick_check(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "teaching-flow-answer@example.com", "teacher")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    await create_question_item(
+        client,
+        teacher,
+        course,
+        knowledge_point_id=UUID(course["knowledge_point_id"]),
+        title="Explicit answer question",
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Explicit answer"},
+    )
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={
+            "content": "别提示了，直接给我答案",
+            "knowledge_point_id": course["knowledge_point_id"],
+        },
+    )
+    assert stream.status_code == 200
+    assert '"type": "hint"' in stream.text
+    assert '"type": "quick_check"' in stream.text
+
+    async with session_factory() as session:
+        state = await session.scalar(
+            select(ConversationTeachingState).where(
+                ConversationTeachingState.conversation_id == UUID(conversation.json()["id"])
+            )
+        )
+        assert state is not None
+        assert state.stage == TeachingStage.READY_FOR_QUICK_CHECK
+        assert state.answer_requested is True
+
+
+async def test_answer_leak_guard_replaces_direct_mcq_answer(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "teaching-flow-guard@example.com", "teacher")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Leak guard"},
+    )
+    chat_provider.answer = "答案：A"
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={
+            "content": "这道选择题应该选哪个？",
+            "knowledge_point_id": course["knowledge_point_id"],
+        },
+    )
+    assert stream.status_code == 200
+    assert "答案：A" not in stream.text
+    assert '"type": "quick_check"' not in stream.text
+    assert "先不直接给答案" in stream.text
+
+
+async def test_replayed_client_request_does_not_advance_teaching_state(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "teaching-flow-replay@example.com", "teacher")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Replay"},
+    )
+    payload = {
+        "content": "这道选择题应该选哪个？",
+        "knowledge_point_id": course["knowledge_point_id"],
+        "client_request_id": "same-teaching-request",
+    }
+
+    first = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json=payload,
+    )
+    replay = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json=payload,
+    )
+    assert first.status_code == 200
+    assert replay.status_code == 200
+
+    async with session_factory() as session:
+        state = await session.scalar(
+            select(ConversationTeachingState).where(
+                ConversationTeachingState.conversation_id == UUID(conversation.json()["id"])
+            )
+        )
+        assert state is not None
+        assert state.attempt_count == 0
+        assert state.hint_level == 1
+        events = list(
+            await session.scalars(
+                select(TeachingDialogEvent).where(TeachingDialogEvent.state_id == state.id)
+            )
+        )
+        assert len(events) == 1

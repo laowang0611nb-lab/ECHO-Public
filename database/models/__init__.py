@@ -15,11 +15,15 @@ from database.models.chat import (
     ChatAttachment,
     ChatAttachmentKind,
     Conversation,
+    ConversationTeachingState,
     Message,
     MessageCitation,
     MessageRole,
     MessageStatus,
+    TeachingDialogEvent,
+    TeachingIntent,
     TeachingPolicy,
+    TeachingStage,
 )
 from database.models.course import Course, CourseInvite, CourseMember, CourseStatus
 from database.models.document import (
@@ -102,6 +106,7 @@ __all__ = [
     "ChatAttachment",
     "ChatAttachmentKind",
     "Conversation",
+    "ConversationTeachingState",
     "Course",
     "CourseAnnouncement",
     "CourseAnnouncementRead",
@@ -154,6 +159,9 @@ __all__ = [
     "StudentProfile",
     "TeacherProfile",
     "TeachingPolicy",
+    "TeachingDialogEvent",
+    "TeachingIntent",
+    "TeachingStage",
     "TeachingStrategy",
     "TeachingStrategyHistoryAction",
     "TeachingStrategyPriority",
