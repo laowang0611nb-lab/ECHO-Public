@@ -171,11 +171,15 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
         <>
           <div className={styles.graphUniverse}>
             <svg aria-label="知识点真实连接及关系方向" role="img" viewBox="0 0 100 100" preserveAspectRatio="none" className={styles.graphEdges}>
-              <defs>{(Object.keys(RELATION_COLOR) as Relation[]).map((type) => (
+              <defs>
+                <radialGradient id={`${arrowId}-coreGlow`}><stop offset="0" stopColor="#dff8ff" stopOpacity=".95"/><stop offset=".35" stopColor="#5bc7ff" stopOpacity=".55"/><stop offset="1" stopColor="#5bc7ff" stopOpacity="0"/></radialGradient>
+                <filter id={`${arrowId}-softGlow`} x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="1.7" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                {(Object.keys(RELATION_COLOR) as Relation[]).map((type) => (
                 <marker key={type} id={`${arrowId}-${type}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto-start-reverse">
                   <path d="M 0 1 L 9 5 L 0 9 Z" fill={RELATION_COLOR[type]} />
                 </marker>
               ))}</defs>
+              {activeId ? <><circle cx="50" cy="48" r="20" fill={`url(#${arrowId}-coreGlow)`} opacity=".55"/><circle cx="50" cy="48" r="13" fill="none" stroke="#65d9ff" strokeOpacity=".28" strokeDasharray="1 3" className={styles.graphCoreOrbit}/><circle cx="50" cy="48" r="18" fill="none" stroke="#9d83ff" strokeOpacity=".22" strokeDasharray=".8 4" className={styles.graphCoreOrbitReverse}/></> : null}
               {view.links.map((edge) => {
                 const attached = edge.source === activeId || edge.target === activeId;
                 const highlighted = hovered && (edge.source === hovered || edge.target === hovered);
@@ -200,6 +204,7 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
                   style={{ left: `${node.x}%`, top: `${node.y}%`, "--node-color": node.kind === "knowledge_point" ? riskColor(node.risk) : "#7a91b2" } as CSSProperties}
                   title={`${node.label} · ${node.kind === "knowledge_point" ? riskLabel(node.risk) : node.kind}`}>
                   <span className={styles.graphNodeLight} />
+                  {selected ? <><span className={styles.graphNodeHalo} /><span className={styles.graphNodeSatellite} /></> : null}
                   {(selected || hovered === node.id || (node.depth === 1 && node.label.length <= 7)) ? <span className={styles.graphNodeLabel}>{node.label}</span> : null}
                 </button>
               );

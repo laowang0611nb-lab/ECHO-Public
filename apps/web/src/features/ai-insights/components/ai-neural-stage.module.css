@@ -111,3 +111,33 @@
   .orbitTrace { animation: none !important; stroke-dasharray: none; opacity: .28; }
   .flowTrail { transition: none; }
 }
+/* Neural visual pass: richer motion while keeping layout and real data stable. */
+.orbArea{isolation:isolate}
+.orbArea:before,.orbArea:after{content:"";position:absolute;left:50%;top:48%;width:310px;height:310px;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;z-index:0;border:1px solid rgba(83,176,255,.18);box-shadow:0 0 45px rgba(58,145,255,.12),inset 0 0 35px rgba(124,114,255,.11);animation:coreField 11s ease-in-out infinite}
+.orbArea:after{width:350px;height:190px;top:49%;border-color:rgba(164,126,255,.17);transform:translate(-50%,-50%) rotate(-18deg);animation:coreFieldTilt 15s linear infinite}
+.coreAura{animation:auraBreathe 4.6s ease-in-out infinite,coreAuraDrift 13s ease-in-out infinite alternate!important}
+.orbitTrace{filter:drop-shadow(0 0 3px currentColor)}
+.orbArea[data-state="analyzing"] .orbitTrace{stroke-width:5;opacity:1}
+.orbArea[data-activity="hovering-orb"]:before,.orbArea[data-activity="consuming"]:before{border-color:var(--orb-active-color);opacity:.7;animation-duration:3s}
+.sphereContent strong{animation:contentFlicker 5s ease-in-out infinite}
+.graphPanel{background:radial-gradient(circle at 50% 45%,rgba(70,131,255,.30),transparent 35%),radial-gradient(circle at 85% 5%,rgba(169,117,255,.20),transparent 35%),linear-gradient(145deg,#071936,#0c2348 55%,#07162f);box-shadow:0 18px 58px rgba(34,85,166,.34),0 0 0 1px rgba(122,199,255,.4),inset 0 0 60px rgba(75,147,255,.08)}
+.graphPanel:after{content:"";position:absolute;inset:10px;border:1px solid rgba(113,196,255,.12);border-radius:15px;pointer-events:none;box-shadow:inset 0 0 28px rgba(71,143,255,.08);animation:panelBreath 6s ease-in-out infinite}
+.graphUniverse{border-color:rgba(122,194,255,.28);background:radial-gradient(circle at 50% 48%,rgba(61,151,255,.25),transparent 38%),radial-gradient(circle at 25% 75%,rgba(161,111,255,.13),transparent 44%),linear-gradient(135deg,rgba(5,18,42,.35),rgba(15,45,83,.42));box-shadow:inset 0 0 32px rgba(64,148,255,.15)}
+.graphCoreOrbit{transform-origin:50px 48px;animation:graphOrbit 12s linear infinite}.graphCoreOrbitReverse{transform-origin:50px 48px;animation:graphOrbitReverse 18s linear infinite}
+.graphNode{width:15px;height:15px;border-width:1px;box-shadow:0 0 8px 2px var(--node-color),0 0 18px color-mix(in srgb,var(--node-color),transparent 55%)}
+.graphNodeSelected{width:29px;height:29px;box-shadow:0 0 0 8px color-mix(in srgb,var(--node-color),transparent 80%),0 0 30px 7px var(--node-color),inset 0 0 13px rgba(255,255,255,.7)}
+.graphNodeLight{animation:nodeHalo 3s ease-in-out infinite}
+.graphNodeHalo{position:absolute;inset:-12px;border:1px solid color-mix(in srgb,var(--node-color),transparent 25%);border-radius:50%;animation:haloExpand 2.8s ease-out infinite;pointer-events:none}
+.graphNodeSatellite{position:absolute;width:5px;height:5px;right:-12px;top:0;border-radius:50%;background:#dffaff;box-shadow:0 0 8px #7ce5ff;animation:satelliteOrbit 3.2s linear infinite;pointer-events:none}
+.graphEdgeFlow{animation:moveDash 4.5s linear infinite;filter:drop-shadow(0 0 2px currentColor)}
+@keyframes coreField{0%,100%{transform:translate(-50%,-50%) scale(.94);opacity:.5}50%{transform:translate(-50%,-50%) scale(1.06);opacity:1}}
+@keyframes coreFieldTilt{to{transform:translate(-50%,-50%) rotate(342deg)}}
+@keyframes coreAuraDrift{to{transform:translate(-46%,-54%) scale(1.12)}}
+@keyframes contentFlicker{0%,88%,100%{opacity:1}92%{opacity:.76}}
+@keyframes panelBreath{50%{opacity:.45;transform:scale(.985)}}
+@keyframes graphOrbit{to{transform:rotate(360deg)}}
+@keyframes graphOrbitReverse{to{transform:rotate(-360deg)}}
+@keyframes nodeHalo{50%{opacity:.85;transform:scale(1.25)}}
+@keyframes haloExpand{0%{opacity:.8;transform:scale(.65)}100%{opacity:0;transform:scale(1.55)}}
+@keyframes satelliteOrbit{to{transform:rotate(360deg) translateX(8px) rotate(-360deg)}}
+@media (prefers-reduced-motion:reduce){.orbArea:before,.orbArea:after,.graphCoreOrbit,.graphCoreOrbitReverse,.graphNodeHalo,.graphNodeSatellite,.graphPanel:after{animation:none!important}}
