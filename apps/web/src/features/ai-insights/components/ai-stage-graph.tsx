@@ -78,15 +78,22 @@ function sortNeighborIds(source: GraphSourceModel, ids: string[], riskMap: Reado
 /** A deliberately flat projection: real knowledge points only, no 3D orbit or fake nodes. */
 function buildFlatGraph(source: GraphSourceModel, focusId: string, riskMap: ReadonlyMap<string, GraphRiskLevel>) {
   const direct = source.adjacency.get(focusId) ?? [];
-  const firstIds = sortNeighborIds(source, direct.map((item) => item.neighborId), riskMap).slice(0, 7);
+  const firstIds = sortNeighborIds(source, direct.map((item) => item.neighborId), riskMap).slice(0, 6);
   const included = new Set<string>([focusId, ...firstIds]);
   const secondCandidates: string[] = [];
   firstIds.forEach((id) => secondCandidates.push(...(source.adjacency.get(id) ?? []).map((item) => item.neighborId)));
-  const secondIds = sortNeighborIds(source, secondCandidates, riskMap).filter((id) => !included.has(id)).slice(0, 7);
+  const secondIds = sortNeighborIds(source, secondCandidates, riskMap).filter((id) => !included.has(id)).slice(0, 5);
   secondIds.forEach((id) => included.add(id));
 
-  const innerPositions: Array<[number, number]> = [[25, 21], [50, 15], [75, 21], [88, 51], [75, 81], [25, 81], [12, 51]];
-  const outerPositions: Array<[number, number]> = [[9, 29], [32, 8], [68, 8], [91, 29], [91, 73], [68, 93], [32, 93]];
+  const ringPositions = (count: number, radiusX: number, radiusY: number, phase = -Math.PI / 2): Array<[number, number]> => {
+    if (count <= 0) return [];
+    return Array.from({ length: count }, (_, index) => {
+      const angle = phase + (index * Math.PI * 2) / count;
+      return [50 + Math.cos(angle) * radiusX, 50 + Math.sin(angle) * radiusY];
+    });
+  };
+  const innerPositions = ringPositions(firstIds.length, 31, 31);
+  const outerPositions = ringPositions(secondIds.length, 35, 35, -Math.PI / 2 + Math.PI / 5);
   const nodes = new Map<string, GraphNode>();
   const add = (id: string, depth: 0 | 1 | 2, index: number) => {
     const point = source.pointById.get(id);
@@ -163,6 +170,11 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
             <div className={graphStyles.scanLine} aria-hidden="true" />
             <svg className={graphStyles.svg} viewBox="0 0 100 100" role="img" aria-label="真实知识点二维关系网络">
               <defs><marker id={`${markerId}-arrow`} viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto"><path d="M 0 1 L 9 5 L 0 9 Z" fill={RELATION_COLOR.prerequisite} /></marker></defs>
+              <g className={graphStyles.guides} aria-hidden="true">
+                <circle cx="50" cy="50" r="31" className={graphStyles.guideRing} />
+                <circle cx="50" cy="50" r="35" className={graphStyles.guideRingOuter} />
+                <path d="M 50 9 V 91 M 9 50 H 91" className={graphStyles.guideCross} />
+              </g>
               {graph.links.map((edge) => {
                 const relation = relationOf(edge);
                 const attached = edge.source === activeId || edge.target === activeId;
@@ -183,9 +195,15 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
               const connected = selected || highlighted || graph.links.some((edge) => hovered !== null && (edge.source === hovered || edge.target === hovered) && (edge.source === node.id || edge.target === node.id));
               const muted = riskOnly && !isRisk(node.risk) && !selected;
               const color = selected ? "#57d8ff" : riskColor(node.risk);
+              const relationToFocus = graph.links.find((edge) => (edge.source === activeId && edge.target === node.id) || (edge.target === activeId && edge.source === node.id));
+              const nodeMeta = node.depth === 0
+                ? (selected ? "当前聚焦" : "知识中心")
+                : relationToFocus
+                  ? RELATION_LABEL[relationOf(relationToFocus)]
+                  : node.chapterTitle ?? "关联节点";
               return <button key={node.id} type="button" className={`${graphStyles.node} ${node.depth === 0 ? graphStyles.nodeCore : node.depth === 1 ? graphStyles.nodePrimary : graphStyles.nodeSatellite} ${selected ? graphStyles.nodeSelected : ""} ${highlighted ? graphStyles.nodeHover : ""} ${muted ? graphStyles.nodeMuted : ""}`} style={{ left: `${node.x}%`, top: `${node.y}%`, "--node-color": color } as CSSProperties} onMouseEnter={() => setHovered(node.id)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(node.id)} onBlur={() => setHovered(null)} onClick={() => setChoice({ id: node.id, base: baseId })} aria-pressed={selected} aria-label={`${node.label}，${riskLabel(node.risk)}${selected ? "，当前聚焦" : ""}`} title={`${node.label} · ${riskLabel(node.risk)}`}>
                 <span className={graphStyles.nodeSurface} aria-hidden="true" /><span className={graphStyles.nodeStatus} aria-hidden="true" />
-                <span className={graphStyles.nodeText}><strong>{node.label}</strong><small>{node.depth === 0 ? (selected ? "当前聚焦" : "知识中心") : node.depth === 1 ? "直接关系" : "关联节点"}</small></span>
+                <span className={graphStyles.nodeText}><strong>{node.label}</strong><small>{nodeMeta}</small></span>
                 {selected ? <span className={graphStyles.nodePulse} aria-hidden="true" /> : null}
                 {connected && !selected ? <span className={graphStyles.connectionMark} aria-hidden="true" /> : null}
               </button>;
