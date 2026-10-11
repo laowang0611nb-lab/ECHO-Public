@@ -92,8 +92,10 @@ function buildFlatGraph(source: GraphSourceModel, focusId: string, riskMap: Read
       return [50 + Math.cos(angle) * radiusX, 50 + Math.sin(angle) * radiusY];
     });
   };
-  const innerPositions = ringPositions(firstIds.length, 31, 31);
-  const outerPositions = ringPositions(secondIds.length, 35, 35, -Math.PI / 2 + Math.PI / 5);
+  const innerPositions = ringPositions(firstIds.length, 29, 29);
+  // Keep second-degree cards on the outside perimeter so they cannot cover direct neighbors.
+  const outerSlots: Array<[number, number]> = [[10, 11], [90, 11], [10, 89], [90, 89], [50, 94]];
+  const outerPositions = outerSlots.slice(0, secondIds.length);
   const nodes = new Map<string, GraphNode>();
   const add = (id: string, depth: 0 | 1 | 2, index: number) => {
     const point = source.pointById.get(id);
@@ -171,8 +173,8 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
             <svg className={graphStyles.svg} viewBox="0 0 100 100" role="img" aria-label="真实知识点二维关系网络">
               <defs><marker id={`${markerId}-arrow`} viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto"><path d="M 0 1 L 9 5 L 0 9 Z" fill={RELATION_COLOR.prerequisite} /></marker></defs>
               <g className={graphStyles.guides} aria-hidden="true">
-                <circle cx="50" cy="50" r="31" className={graphStyles.guideRing} />
-                <circle cx="50" cy="50" r="35" className={graphStyles.guideRingOuter} />
+                <circle cx="50" cy="50" r="29" className={graphStyles.guideRing} />
+                <circle cx="50" cy="50" r="42" className={graphStyles.guideRingOuter} />
                 <path d="M 50 9 V 91 M 9 50 H 91" className={graphStyles.guideCross} />
               </g>
               {graph.links.map((edge) => {
