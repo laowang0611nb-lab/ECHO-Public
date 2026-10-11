@@ -105,6 +105,7 @@ async def _replace_document_structure(
 
     reused_chapter_ids: set[UUID] = set()
     reused_point_ids: set[UUID] = set()
+    preserved_point_ids: set[UUID] = set()
     chapters: list[Chapter] = []
     for chapter_index, draft in enumerate(drafts):
         title_key = draft.title.casefold()
@@ -161,6 +162,7 @@ async def _replace_document_structure(
                 point.description = point_draft.description
                 point.order_index = point_index
                 reused_point_ids.add(point.id)
+            preserved_point_ids.add(point.id)
             if point_key_map is not None:
                 point_key_map[f"c{chapter_index}:p{point_index}"] = point.id
         chapters.append(chapter)
@@ -169,9 +171,6 @@ async def _replace_document_structure(
     existing_point_ids = {
         point.id for chapter in existing_chapters for point in chapter.knowledge_points
     }
-    preserved_point_ids = (
-        set(point_key_map.values()) if point_key_map is not None else reused_point_ids
-    )
     await _remove_knowledge_points(
         session,
         list(existing_point_ids - preserved_point_ids),
@@ -289,7 +288,7 @@ async def _replace_document_relations(
     document: Document,
     point_key_map: dict[str, UUID],
     relation_drafts: list[KnowledgeRelationDraft],
-) -> None:
+) -> tuple[int, int, int]:
     point_ids = set(point_key_map.values())
     if point_ids:
         await session.execute(
@@ -298,6 +297,8 @@ async def _replace_document_relations(
                 KnowledgeRelation.target_knowledge_point_id.in_(point_ids),
             )
         )
+    prerequisite_count = 0
+    related_count = 0
     seen: set[tuple[UUID, UUID, str]] = set()
     for relation in relation_drafts:
         source_id = point_key_map.get(relation.source_key)
@@ -308,6 +309,10 @@ async def _replace_document_relations(
         if key in seen:
             continue
         seen.add(key)
+        if relation.relation_type == "prerequisite":
+            prerequisite_count += 1
+        else:
+            related_count += 1
         session.add(
             KnowledgeRelation(
                 course_id=document.course_id,
@@ -316,6 +321,7 @@ async def _replace_document_relations(
                 relation_type=relation.relation_type,
             )
         )
+    return prerequisite_count + related_count, prerequisite_count, related_count
 
 
 async def generate_document_structure(
@@ -415,6 +421,9 @@ async def generate_document_relations(
     if document is None:
         raise KnowledgeDocumentNotFoundError
 
+    if document.status != DocumentStatus.READY:
+        raise KnowledgeDocumentNotReadyError
+
     membership = await session.scalar(
         select(CourseMember).where(
             CourseMember.course_id == document.course_id,
@@ -474,7 +483,7 @@ async def generate_document_relations(
     )
     point_key_map = {point.key: UUID(point.key.removeprefix("p:")) for point in relation_points}
     try:
-        await _replace_document_relations(
+        relation_count, prerequisite_count, related_count = await _replace_document_relations(
             session,
             document,
             point_key_map,
@@ -486,13 +495,9 @@ async def generate_document_relations(
         raise KnowledgeStructureConflictError from exc
     return {
         "document_id": document.id,
-        "relation_count": len(relation_drafts),
-        "prerequisite_count": sum(
-            1 for relation in relation_drafts if relation.relation_type == "prerequisite"
-        ),
-        "related_count": sum(
-            1 for relation in relation_drafts if relation.relation_type == "related"
-        ),
+        "relation_count": relation_count,
+        "prerequisite_count": prerequisite_count,
+        "related_count": related_count,
     }
 
 

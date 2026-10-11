@@ -428,6 +428,8 @@ class QwenKnowledgeStructureProvider:
         system_prompt: str,
         prompt: str,
     ) -> list[KnowledgeRelationDraft]:
+        if not self.api_key:
+            raise LLMConfigurationError("LLM API key is not configured")
         if _request_tokens(system_prompt, prompt) > self.max_input_tokens:
             raise LLMContextLimitError(
                 "LLM relation request exceeds the configured input token budget"
@@ -464,7 +466,13 @@ class QwenKnowledgeStructureProvider:
             raw_relations = parsed["relations"]
             if not isinstance(raw_relations, list):
                 raise TypeError("relations must be a list")
-            return [KnowledgeRelationDraft.model_validate(item) for item in raw_relations]
+            relations: list[KnowledgeRelationDraft] = []
+            for item in raw_relations:
+                try:
+                    relations.append(KnowledgeRelationDraft.model_validate(item))
+                except (TypeError, ValueError):
+                    continue
+            return relations
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise LLMProviderError("LLM returned invalid knowledge relations") from exc
 

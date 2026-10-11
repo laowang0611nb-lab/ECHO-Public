@@ -184,6 +184,38 @@ async def test_generation_timeout_returns_gateway_timeout(
     assert response.json()["detail"] == "LLM provider timed out while generating the structure"
 
 
+async def test_direct_structure_replacement_keeps_new_points_without_key_map(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "knowledge-direct-replace@example.com", "teacher")
+    _, document = await create_ready_document(client, teacher)
+    async with session_factory() as session:
+        stored_document = await session.get(Document, UUID(document["id"]))
+        assert stored_document is not None
+        chapters = await _replace_document_structure(
+            session,
+            stored_document,
+            [
+                ChapterDraft(
+                    title="Direct Chapter",
+                    knowledge_points=[
+                        KnowledgePointDraft(name="New Point 1"),
+                        KnowledgePointDraft(name="New Point 2"),
+                    ],
+                )
+            ],
+        )
+        await session.commit()
+        assert len(chapters) == 1
+
+    async with session_factory() as session:
+        names = list(
+            await session.scalars(select(KnowledgePoint.name).order_by(KnowledgePoint.order_index))
+        )
+    assert names == ["New Point 1", "New Point 2"]
+
+
 async def test_regeneration_reuses_point_when_chapter_title_changes(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

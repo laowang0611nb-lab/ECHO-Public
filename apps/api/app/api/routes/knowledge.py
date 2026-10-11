@@ -130,6 +130,11 @@ async def generate_relations(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
         ) from exc
+    except KnowledgeDocumentNotReadyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Document must be parsed and ready before generating relations",
+        ) from exc
     except KnowledgeGenerationForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
