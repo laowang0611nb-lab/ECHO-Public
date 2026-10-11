@@ -163,7 +163,7 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
         <div className={graphStyles.live}><i />LIVE</div>
       </div>
       <div className={graphStyles.toolbar}>
-        <span>{source ? `${source.points.length} 个知识点` : "课程知识点"}</span><b>·</b><span>{source?.semanticEdges.length ?? 0} 条真实关系</span>
+        <span>{source ? `课程 ${source.points.length} 点 · 当前展示 ${graph.nodes.length} 点` : "课程知识点"}</span><b>·</b><span>{source?.semanticEdges.length ?? 0} 条真实关系</span>
         <button type="button" aria-pressed={riskOnly} disabled={!hasVerifiedRisk} onClick={() => setRiskOnly((value) => !value)} className={graphStyles.riskButton} title={hasVerifiedRisk ? "突出有真实学情依据的风险点" : "当前没有风险数据"}>{riskOnly ? <ShieldAlert size={12} /> : <Sparkles size={12} />}{riskOnly ? "显示全部" : "风险聚焦"}</button>
       </div>
       {graphQuery.isLoading ? <div className={styles.graphPlaceholder} role="status">正在加载真实知识图谱…</div> : graphQuery.isError ? <div className={styles.graphPlaceholder} role="alert">图谱获取失败 <button type="button" onClick={() => void graphQuery.refetch()}>重试</button></div> : !hasGraph || !activeId ? <div className={styles.graphPlaceholder}>暂无课程知识点 · 等待知识结构</div> : (
@@ -201,8 +201,8 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
               const nodeMeta = node.depth === 0
                 ? (selected ? "当前聚焦" : "知识中心")
                 : relationToFocus
-                  ? RELATION_LABEL[relationOf(relationToFocus)]
-                  : node.chapterTitle ?? "关联节点";
+                  ? `${RELATION_LABEL[relationOf(relationToFocus)]}${node.chapterTitle ? ` · ${node.chapterTitle}` : ""}`
+                  : node.chapterTitle ?? "二级关系";
               return <button key={node.id} type="button" className={`${graphStyles.node} ${node.depth === 0 ? graphStyles.nodeCore : node.depth === 1 ? graphStyles.nodePrimary : graphStyles.nodeSatellite} ${selected ? graphStyles.nodeSelected : ""} ${highlighted ? graphStyles.nodeHover : ""} ${muted ? graphStyles.nodeMuted : ""}`} style={{ left: `${node.x}%`, top: `${node.y}%`, "--node-color": color } as CSSProperties} onMouseEnter={() => setHovered(node.id)} onMouseLeave={() => setHovered(null)} onFocus={() => setHovered(node.id)} onBlur={() => setHovered(null)} onClick={() => setChoice({ id: node.id, base: baseId })} aria-pressed={selected} aria-label={`${node.label}，${riskLabel(node.risk)}${selected ? "，当前聚焦" : ""}`} title={`${node.label} · ${riskLabel(node.risk)}`}>
                 <span className={graphStyles.nodeSurface} aria-hidden="true" /><span className={graphStyles.nodeStatus} aria-hidden="true" />
                 <span className={graphStyles.nodeText}><strong>{node.label}</strong><small>{nodeMeta}</small></span>
