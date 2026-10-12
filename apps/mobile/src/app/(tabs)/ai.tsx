@@ -149,9 +149,18 @@ export default function AISupportScreen() {
         />
         <AbilityCard
           accent="#7357c8"
-          description="增强版开放"
-          disabled
+          description={archived ? "课程已归档" : "查看课程知识点关系"}
+          disabled={archived}
           imageSource={require("@/assets/images/student/knowledge-graph.png")}
+          onPress={() =>
+            router.push({
+              pathname: "/knowledge-graph",
+              params: {
+                courseId: selectedCourse.id,
+                courseName: selectedCourse.name,
+              },
+            })
+          }
           title="知识图谱"
         />
       </View>
