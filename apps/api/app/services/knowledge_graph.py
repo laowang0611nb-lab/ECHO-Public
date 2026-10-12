@@ -48,10 +48,12 @@ async def get_knowledge_graph(
     course_id: UUID,
     requester_id: UUID,
     *,
+    allow_course_read: bool = False,
     chapter_id: UUID | None,
     point_id: UUID | None,
 ) -> KnowledgeGraphResponse:
-    await ensure_teacher(session, course_id, requester_id)
+    if not allow_course_read:
+        await ensure_teacher(session, course_id, requester_id)
     course = await session.get(Course, course_id)
     if course is None:
         raise TeacherContentNotFoundError

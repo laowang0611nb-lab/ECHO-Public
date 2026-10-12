@@ -159,3 +159,5 @@ Authorization: Bearer <scoped-embed-access-token>
 
 完成后报告：变更文件、接口示例、测试命令和结果、commit/tag、以及学生端联调所需的服务重启说明。
 ```
+
+后端状态：已于 `v0.0.234` / API `0.0.233` 实现，Alembic head 为 `b1c2d3e4f5a6`。详细契约见 [`../../api/学生知识图谱嵌入接口.md`](../../api/学生知识图谱嵌入接口.md)。

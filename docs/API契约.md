@@ -534,6 +534,8 @@ POST /api/v1/courses/{course_id}/resources/{resource_id}/trash
 POST /api/v1/courses/{course_id}/resources/{resource_id}/restore
 DELETE /api/v1/courses/{course_id}/resources/{resource_id}?permanent=true
 GET /api/v1/courses/{course_id}/knowledge-graph?chapterId=&pointId=
+POST /api/v1/courses/{course_id}/knowledge-graph/embed-session
+POST /api/v1/knowledge-graph/embed-sessions/exchange
 ```
 
 回收站覆盖普通资源、章节、知识点、习题和外部资源。永久删除必须显式传 `permanent=true`，并返回受影响引用数量。图谱节点和边全部来自数据库，不使用前端模拟关系。知识关系按兼容白名单映射：`prerequisite_of`/`prerequisite` 输出 `prerequisite`，`related_to`/`related`/`applied_in` 和未知值确定性输出 `related`。
@@ -683,3 +685,7 @@ AI 二次分析使用 `ai_analyses`、`ai_analysis_evidence` 和 `ai_analysis_re
 - 不得无迁移地改名或删除现有字段。
 - 破坏性变更必须提升版本并同步本文档与 `INDEX.md`。
 - 前端不得依赖未登记字段。 
+| POST | `/courses/{course_id}/knowledge-graph/embed-session` | 课程学生 | 创建 5 分钟一次性只读图谱嵌入票据 |
+| POST | `/knowledge-graph/embed-sessions/exchange` | 一次性票据 | 交换绑定课程与 `knowledge_graph:read` 的 5 分钟 token |
+学生端不能直接使用普通学生 token 访问教师图谱接口。课程内学生先创建一次性嵌入票据，教师 Web 壳层将其交换为绑定 `course_id` 的 `knowledge_graph:read` 短时 token；该 token 只允许读取图谱和章节，票据只存哈希且只能消费一次。
+

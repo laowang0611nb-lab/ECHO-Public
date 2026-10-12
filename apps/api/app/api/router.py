@@ -13,6 +13,7 @@ from app.api.routes import (
     documents,
     health,
     knowledge,
+    knowledge_graph_embed,
     learning,
     notifications,
     planning,
@@ -37,6 +38,7 @@ api_router.include_router(dashboard_details.router)
 api_router.include_router(demo.router)
 api_router.include_router(courses.router)
 api_router.include_router(documents.router)
+api_router.include_router(knowledge_graph_embed.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(learning.router)
 api_router.include_router(notifications.router)

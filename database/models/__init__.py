@@ -10,7 +10,12 @@ from database.models.analysis import (
     AIAnalysisType,
 )
 from database.models.announcement import CourseAnnouncement, CourseAnnouncementRead
-from database.models.auth import AuthSession, PhoneVerificationClaim, UserCredential
+from database.models.auth import (
+    AuthSession,
+    KnowledgeGraphEmbedSession,
+    PhoneVerificationClaim,
+    UserCredential,
+)
 from database.models.chat import (
     ChatAttachment,
     ChatAttachmentKind,
@@ -124,6 +129,7 @@ __all__ = [
     "ExternalResource",
     "ExternalResourceStatus",
     "KnowledgeChunk",
+    "KnowledgeGraphEmbedSession",
     "KnowledgePoint",
     "KnowledgeRelation",
     "LearningEvent",
@@ -158,9 +164,9 @@ __all__ = [
     "StudentKnowledgeState",
     "StudentProfile",
     "TeacherProfile",
-    "TeachingPolicy",
     "TeachingDialogEvent",
     "TeachingIntent",
+    "TeachingPolicy",
     "TeachingStage",
     "TeachingStrategy",
     "TeachingStrategyHistoryAction",
