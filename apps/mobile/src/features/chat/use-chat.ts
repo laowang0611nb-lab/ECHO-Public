@@ -503,7 +503,9 @@ export function useChatController({
           {
             content: messageContent,
             client_request_id: clientRequestId,
-            knowledge_point_id: knowledgePointId,
+            ...(knowledgePointId
+              ? { knowledge_point_id: knowledgePointId }
+              : {}),
             retrieval_limit: 5,
             attachments: uploadedAttachments,
           },
