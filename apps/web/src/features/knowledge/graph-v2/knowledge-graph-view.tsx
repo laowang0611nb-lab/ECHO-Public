@@ -18,6 +18,7 @@ import { GRAPH_THEME } from "./graph-theme";
 import { derivePointRisk, riskMapFromDashboard } from "./graph-risk";
 import type {
   GraphHoverState,
+  GraphPointRecord,
   GraphRiskLevel,
   KnowledgeGraphFilter,
   KnowledgeGraphMode,
@@ -33,6 +34,8 @@ export function KnowledgeGraphView({
   isLoading,
   isError,
   onRetry,
+  embedMode = false,
+  onAskAi,
 }: {
   courseId: string;
   courseName: string;
@@ -41,6 +44,8 @@ export function KnowledgeGraphView({
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  embedMode?: boolean;
+  onAskAi?: (point: GraphPointRecord) => void;
 }) {
   const router = useRouter();
   const sidebarTransitioning = useSidebarTransitioning();
@@ -404,9 +409,11 @@ export function KnowledgeGraphView({
       <KnowledgeGraphAnalyticsCard
         analytics={analyticsQuery.data ?? null}
         courseId={courseId}
+        embedMode={embedMode}
         filterActive={filter === "high-risk"}
         isError={analyticsQuery.isError}
         isLoading={analyticsQuery.isPending}
+        onAskAi={onAskAi}
         onRetry={() => void analyticsQuery.refetch()}
         point={selectedPoint}
         risk={selectedRisk}

@@ -2,7 +2,7 @@
 
 import type { KnowledgePointAnalytics } from "@echo/shared-types";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, ArrowUpRight, BookOpen, ChevronDown, ChevronUp, LoaderCircle, RefreshCw, UsersRound } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpen, ChevronDown, ChevronUp, LoaderCircle, MessageCircle, RefreshCw, UsersRound } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 
@@ -22,6 +22,8 @@ export function KnowledgeGraphAnalyticsCard({
   isError,
   filterActive,
   onRetry,
+  embedMode = false,
+  onAskAi,
 }: {
   courseId: string;
   point: GraphPointRecord | null;
@@ -31,6 +33,8 @@ export function KnowledgeGraphAnalyticsCard({
   isError: boolean;
   filterActive: boolean;
   onRetry: () => void;
+  embedMode?: boolean;
+  onAskAi?: (point: GraphPointRecord) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -141,18 +145,31 @@ export function KnowledgeGraphAnalyticsCard({
             </div>
           )}
 
-          <Link
-            className="mt-4 flex h-9 items-center justify-between rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-            href={buildPointHref(point.id, {
-              courseId,
-              from: "graph",
-              resourceId: point.chapterDocumentId ?? undefined,
-              tab: "overview",
-            })}
-          >
-            查看详细学情
-            <ArrowUpRight className="size-4" />
-          </Link>
+          {embedMode ? (
+            onAskAi ? (
+              <button
+                className="mt-4 flex h-9 w-full items-center justify-between rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                onClick={() => onAskAi(point)}
+                type="button"
+              >
+                向 AI 提问
+                <MessageCircle className="size-4" />
+              </button>
+            ) : null
+          ) : (
+            <Link
+              className="mt-4 flex h-9 items-center justify-between rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+              href={buildPointHref(point.id, {
+                courseId,
+                from: "graph",
+                resourceId: point.chapterDocumentId ?? undefined,
+                tab: "overview",
+              })}
+            >
+              查看详细学情
+              <ArrowUpRight className="size-4" />
+            </Link>
+          )}
               </motion.div>
             ) : null}
           </AnimatePresence>

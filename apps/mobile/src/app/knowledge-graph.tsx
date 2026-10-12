@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { WebView } from "react-native-webview";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import { studentTheme } from "@/constants/student-theme";
 import {
@@ -32,6 +32,48 @@ function readableError(error: unknown): string {
   return "知识图谱暂时无法打开。";
 }
 
+interface AskAiMessage {
+  type: "echo:ask-ai";
+  version: 1;
+  courseId: string;
+  knowledgePointId: string;
+  knowledgePointName?: string;
+}
+
+export function parseAskAiMessage(
+  raw: string,
+  expectedCourseId: string,
+): AskAiMessage | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const candidate = parsed as Partial<AskAiMessage>;
+    if (
+      candidate.type !== "echo:ask-ai" ||
+      candidate.version !== 1 ||
+      candidate.courseId !== expectedCourseId ||
+      typeof candidate.knowledgePointId !== "string" ||
+      !candidate.knowledgePointId.trim()
+    ) {
+      return null;
+    }
+
+    return {
+      type: "echo:ask-ai",
+      version: 1,
+      courseId: expectedCourseId,
+      knowledgePointId: candidate.knowledgePointId.trim(),
+      knowledgePointName:
+        typeof candidate.knowledgePointName === "string"
+          ? candidate.knowledgePointName.trim()
+          : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function KnowledgeGraphScreen() {
   const params = useLocalSearchParams<{
     courseId?: string | string[];
@@ -45,6 +87,8 @@ export default function KnowledgeGraphScreen() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [webLoading, setWebLoading] = useState(true);
   const [webError, setWebError] = useState<string | null>(null);
+  const [webKey, setWebKey] = useState(0);
+  const [webMounted, setWebMounted] = useState(true);
   const restoredRef = useRef(false);
 
   const graphUrl = useMemo(
@@ -59,19 +103,58 @@ export default function KnowledgeGraphScreen() {
     [courseId, session],
   );
 
+  const stopWebView = useCallback(() => {
+    setWebMounted(false);
+  }, []);
+
+  const restorePortrait = useCallback(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    void ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.PORTRAIT_UP,
+    ).catch(() => undefined);
+  }, []);
+
   const exitGraph = useCallback(() => {
-    if (!restoredRef.current) {
-      restoredRef.current = true;
-      void ScreenOrientation.lockAsync(
-        ScreenOrientation.OrientationLock.PORTRAIT_UP,
-      ).catch(() => undefined);
-    }
+    restorePortrait();
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace("/(tabs)/courses");
     }
-  }, []);
+  }, [restorePortrait]);
+
+  const askAi = useCallback(
+    (message: AskAiMessage) => {
+      if (!courseId) return;
+
+      restorePortrait();
+      stopWebView();
+      setSession(null);
+      setWebError(null);
+      setWebLoading(false);
+
+      router.replace({
+        pathname: "/chat",
+        params: {
+          courseId,
+          knowledgePointId: message.knowledgePointId,
+          knowledgePointName: message.knowledgePointName,
+          source: "knowledge-graph",
+        },
+      });
+    },
+    [courseId, restorePortrait, stopWebView],
+  );
+
+  const handleWebViewMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      if (!courseId) return;
+      const message = parseAskAiMessage(event.nativeEvent.data, courseId);
+      if (message) askAi(message);
+    },
+    [askAi, courseId],
+  );
 
   useEffect(() => {
     void ScreenOrientation.lockAsync(
@@ -147,6 +230,8 @@ export default function KnowledgeGraphScreen() {
 
   const retry = useCallback(() => {
     setAttempt((current) => current + 1);
+    setWebKey((current) => current + 1);
+    setWebMounted(true);
   }, []);
 
   const teacherOrigin = useMemo(() => {
@@ -162,7 +247,7 @@ export default function KnowledgeGraphScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar hidden />
-      {graphUrl && session && !sessionError ? (
+      {graphUrl && session && !sessionError && webMounted ? (
         <WebView
           allowsInlineMediaPlayback
           androidLayerType="hardware"
@@ -170,7 +255,7 @@ export default function KnowledgeGraphScreen() {
           domStorageEnabled
           injectedJavaScriptBeforeContentLoaded={bootstrapScript}
           javaScriptEnabled
-          key={`${courseId}:${attempt}`}
+          key={`${courseId}:${attempt}:${webKey}`}
           mediaPlaybackRequiresUserAction={false}
           mixedContentMode="always"
           onError={(event) => {
@@ -189,6 +274,7 @@ export default function KnowledgeGraphScreen() {
             setWebError(null);
             setWebLoading(true);
           }}
+          onMessage={handleWebViewMessage}
           onShouldStartLoadWithRequest={(request) => {
             if (!teacherOrigin) return true;
             try {

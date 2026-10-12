@@ -36,6 +36,7 @@ export default function ChatScreen() {
     courseId?: string | string[];
     conversationId?: string | string[];
     knowledgePointId?: string | string[];
+    knowledgePointName?: string | string[];
     question?: string | string[];
   }>();
   const first = (value: string | string[] | undefined) =>
@@ -43,6 +44,7 @@ export default function ChatScreen() {
   const courseId = first(params.courseId);
   const conversationId = first(params.conversationId);
   const knowledgePointId = first(params.knowledgePointId);
+  const knowledgePointNameParam = first(params.knowledgePointName);
   const initialQuestion = first(params.question);
   const { user } = useStudentSession();
   const { selectedCourse, loading } = useCurrentCourse();
@@ -69,8 +71,9 @@ export default function ChatScreen() {
       conversationId={conversationId}
       courseId={effectiveCourseId}
       initialQuestion={initialQuestion}
-      key={effectiveCourseId}
+      key={`${effectiveCourseId}:${knowledgePointId ?? "none"}`}
       knowledgePointId={knowledgePointId}
+      knowledgePointName={knowledgePointNameParam}
       userId={user.id}
     />
   );
@@ -80,21 +83,26 @@ function ChatWorkspace({
   courseId,
   conversationId,
   knowledgePointId,
+  knowledgePointName: knowledgePointNameParam,
   initialQuestion,
   userId,
 }: {
   courseId: string;
   conversationId: string | null;
   knowledgePointId: string | null;
+  knowledgePointName: string | null;
   initialQuestion: string | null;
   userId: string;
 }) {
   const { selectedCourse } = useCurrentCourse();
   const learning = useStudentLearningOverview(userId, courseId);
+  const [activeKnowledgePointId, setActiveKnowledgePointId] = useState(
+    knowledgePointId,
+  );
   const chat = useChatController({
     courseId,
     conversationId,
-    knowledgePointId,
+    knowledgePointId: activeKnowledgePointId,
     initialQuestion,
   });
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -104,17 +112,19 @@ function ChatWorkspace({
   const initialSentRef = useRef(false);
 
   const knowledgePointName = useMemo(() => {
-    if (!knowledgePointId) {
+    if (!activeKnowledgePointId) {
       return null;
     }
     for (const chapter of learning.chapters) {
-      const point = chapter.knowledge_points.find((item) => item.id === knowledgePointId);
+      const point = chapter.knowledge_points.find(
+        (item) => item.id === activeKnowledgePointId,
+      );
       if (point) {
         return point.name;
       }
     }
-    return "当前知识点";
-  }, [knowledgePointId, learning.chapters]);
+    return knowledgePointNameParam ?? "当前知识点";
+  }, [activeKnowledgePointId, knowledgePointNameParam, learning.chapters]);
 
   useEffect(() => {
     if (!initialQuestion || initialSentRef.current) {
@@ -202,7 +212,12 @@ function ChatWorkspace({
           onBack={() => router.back()}
           onOpenHistory={() => setDrawerVisible(true)}
         />
-        {knowledgePointName ? <ContextBanner label={knowledgePointName} /> : null}
+        {activeKnowledgePointId ? (
+          <ContextBanner
+            label={knowledgePointName ?? "当前知识点"}
+            onRemove={() => setActiveKnowledgePointId(null)}
+          />
+        ) : null}
         {chat.offline ? (
           <ChatReconnectBanner onRetry={chat.retryConnection} />
         ) : null}
