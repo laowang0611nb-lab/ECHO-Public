@@ -63,6 +63,13 @@
           "cameraPermission": "允许 ECHO 使用相机拍摄学习图片。",
           "microphonePermission": "允许 ECHO 使用麦克风录制学习语音。"
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允许 ECHO 使用相机扫描课程二维码。",
+          "recordAudioAndroid": false
+        }
       ]
     ],
     "experiments": {
