@@ -122,6 +122,47 @@ async def test_generation_persists_model_relations(
     assert relations[0].relation_type == "prerequisite"
 
 
+async def test_relation_endpoint_reports_persisted_count(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    knowledge_provider,
+) -> None:
+    teacher = await login(client, "knowledge-relation-count@example.com", "teacher")
+    _, document = await create_ready_document(client, teacher)
+    generated = await client.post(
+        f"/api/v1/documents/{document['id']}/generate-structure",
+        headers=auth_headers(teacher),
+    )
+    assert generated.status_code == 200
+
+    async def generate_relations(
+        points: list[object],
+    ) -> list[KnowledgeRelationDraft]:
+        return [
+            KnowledgeRelationDraft(
+                source_key=points[0].key,
+                target_key=points[1].key,
+                relation_type="related",
+            ),
+            KnowledgeRelationDraft(
+                source_key="missing-key",
+                target_key=points[0].key,
+                relation_type="related",
+            ),
+        ]
+
+    knowledge_provider.generate_relations = generate_relations
+    response = await client.post(
+        f"/api/v1/documents/{document['id']}/generate-relations",
+        headers=auth_headers(teacher),
+    )
+
+    assert response.status_code == 200
+    async with session_factory() as session:
+        stored_count = await session.scalar(select(func.count()).select_from(KnowledgeRelation))
+    assert response.json()["relation_count"] == stored_count
+
+
 async def test_generation_writes_chapter_ids_back_to_existing_chunks(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
