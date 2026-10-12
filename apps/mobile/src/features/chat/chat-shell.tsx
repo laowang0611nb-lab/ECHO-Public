@@ -1053,8 +1053,8 @@ const styles = StyleSheet.create({
   contextBanner: {
     alignItems: "center",
     backgroundColor: studentTheme.color.learningSoft,
-    borderBottomColor: studentTheme.color.learningBorder,
-    borderBottomWidth: 1,
+    borderTopColor: studentTheme.color.learningBorder,
+    borderTopWidth: 1,
     flexDirection: "row",
     gap: 7,
     minHeight: 36,

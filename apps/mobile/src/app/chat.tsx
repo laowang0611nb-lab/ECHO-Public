@@ -212,12 +212,6 @@ function ChatWorkspace({
           onBack={() => router.back()}
           onOpenHistory={() => setDrawerVisible(true)}
         />
-        {activeKnowledgePointId ? (
-          <ContextBanner
-            label={knowledgePointName ?? "当前知识点"}
-            onRemove={() => setActiveKnowledgePointId(null)}
-          />
-        ) : null}
         {chat.offline ? (
           <ChatReconnectBanner onRetry={chat.retryConnection} />
         ) : null}
@@ -270,6 +264,12 @@ function ChatWorkspace({
             {hasNewContent ? <NewContentButton onPress={() => scrollToBottom()} /> : null}
           </View>
         )}
+        {activeKnowledgePointId ? (
+          <ContextBanner
+            label={knowledgePointName ?? "当前知识点"}
+            onRemove={() => setActiveKnowledgePointId(null)}
+          />
+        ) : null}
         <ChatComposer
           disabled={chat.offline}
           attachmentError={chat.attachmentError}
