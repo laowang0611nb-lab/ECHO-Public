@@ -52,7 +52,7 @@ export function AnalysisStep({
         {running ? (
           <div className="rounded-lg border-2 border-blue-200 bg-blue-50/55 px-4 py-3 text-sm text-blue-900">
             <p className="font-medium">AI 正在读取教材并生成章节结构，通常需要 1 到 3 分钟。</p>
-            <p className="mt-1 text-xs leading-5 text-blue-800">已等待 {elapsedSeconds} 秒，最长等待约 4 分钟。请保持页面打开，不要重复点击“开始解析”或刷新页面。</p>
+            <p className="mt-1 text-xs leading-5 text-blue-800">已等待 {elapsedSeconds} 秒，单阶段最长等待约 10 分钟。请保持页面打开，不要重复点击“开始解析”或刷新页面。</p>
           </div>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-4">

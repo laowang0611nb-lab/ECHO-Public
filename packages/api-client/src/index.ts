@@ -177,6 +177,9 @@ export class ApiClientError extends Error {
   }
 }
 
+const LONG_RUNNING_REQUEST_TIMEOUT_MS = 10 * 60_000;
+
+
 export class ApiClientTimeoutError extends Error {
   readonly status = 408;
 
@@ -392,6 +395,7 @@ export function createApiClient({
     path: string,
     init?: RequestInit,
     userId?: string,
+    timeoutMs = requestTimeout,
   ): Promise<Response> {
     const root = resolveRoot();
     const headers = new Headers(init?.headers);
@@ -410,6 +414,7 @@ export function createApiClient({
     let response = await fetchWithTimeout(
       `${root}${path}`,
       {...init, headers},
+      timeoutMs,
     );
 
     if (response.status === 401 && canRefresh(path)) {
@@ -420,6 +425,7 @@ export function createApiClient({
         response = await fetchWithTimeout(
           `${root}${path}`,
           {...init, headers},
+          timeoutMs,
         );
       }
     }
@@ -434,8 +440,9 @@ export function createApiClient({
     path: string,
     init?: RequestInit,
     userId?: string,
+    timeoutMs = requestTimeout,
   ): Promise<T> {
-    const response = await authorizedFetch(path, init, userId);
+    const response = await authorizedFetch(path, init, userId, timeoutMs);
     if (!response.ok) {
       throw await readError(response);
     }
@@ -850,24 +857,28 @@ export function createApiClient({
         `/api/v1/documents/${documentId}/parse`,
         { method: "POST" },
         userId,
+        LONG_RUNNING_REQUEST_TIMEOUT_MS,
       ),
     generateKnowledgeStructure: (userId: string, documentId: string) =>
       request<Chapter[]>(
         `/api/v1/documents/${documentId}/generate-structure`,
         { method: "POST" },
         userId,
+        LONG_RUNNING_REQUEST_TIMEOUT_MS,
       ),
     createDocumentChunks: (userId: string, documentId: string) =>
       request<KnowledgeChunk[]>(
         `/api/v1/documents/${documentId}/chunks`,
         { method: "POST" },
         userId,
+        LONG_RUNNING_REQUEST_TIMEOUT_MS,
       ),
     createDocumentEmbeddings: (userId: string, documentId: string) =>
       request<EmbeddingResult>(
         `/api/v1/documents/${documentId}/embeddings`,
         { method: "POST" },
         userId,
+        LONG_RUNNING_REQUEST_TIMEOUT_MS,
       ),
     searchCourse: (userId: string, courseId: string, payload: ChunkSearchRequest) =>
       request<ChunkSearchResult[]>(
