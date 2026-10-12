@@ -2,7 +2,7 @@
 
 import type { KnowledgePointAnalytics } from "@echo/shared-types";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, ArrowUpRight, BookOpen, ChevronDown, ChevronUp, LoaderCircle, MessageCircle, RefreshCw, UsersRound } from "lucide-react";
+import { AlertCircle, ArrowUpRight, BookOpen, ChevronDown, ChevronUp, FileText, LoaderCircle, MessageCircle, Network, RefreshCw, UsersRound } from "lucide-react";
 import { useState } from "react";
 import Link from "next/link";
 
@@ -57,29 +57,41 @@ export function KnowledgeGraphAnalyticsCard({
                 <h3 className="truncate text-sm font-semibold leading-5">{analytics?.name ?? point.label}</h3>
               ) : (
                 <>
-                  <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">知识点学情</p>
+                  <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground">
+                    {embedMode ? "知识点" : "知识点学情"}
+                  </p>
                   <h3 className="mt-1 text-base font-semibold leading-6">{analytics?.name ?? point.label}</h3>
                 </>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                  risk === "high"
-                    ? "bg-violet-100 text-violet-700"
-                    : risk === "medium"
-                      ? "bg-red-50 text-red-600"
-                      : risk === "elevated"
-                        ? "bg-orange-50 text-orange-600"
-                        : "bg-blue-50 text-blue-700",
-                )}
-              >
-                {riskLabel(risk)}
-              </span>
+              {!embedMode ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                    risk === "high"
+                      ? "bg-violet-100 text-violet-700"
+                      : risk === "medium"
+                        ? "bg-red-50 text-red-600"
+                        : risk === "elevated"
+                          ? "bg-orange-50 text-orange-600"
+                          : "bg-blue-50 text-blue-700",
+                  )}
+                >
+                  {riskLabel(risk)}
+                </span>
+              ) : null}
               <button
                 aria-expanded={!collapsed}
-                aria-label={collapsed ? "展开学情卡片" : "收起学情卡片"}
+                aria-label={
+                  collapsed
+                    ? embedMode
+                      ? "展开知识点卡片"
+                      : "展开学情卡片"
+                    : embedMode
+                      ? "收起知识点卡片"
+                      : "收起学情卡片"
+                }
                 className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 onClick={() => setCollapsed((current) => !current)}
                 type="button"
@@ -99,77 +111,102 @@ export function KnowledgeGraphAnalyticsCard({
                 key="analytics-body"
                 transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               >
-          {filterActive && risk !== "high" ? (
-            <p className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs leading-5 text-orange-700">
-              当前焦点未命中“高风险”筛选，已保留在图中用于对照。
-            </p>
-          ) : null}
+                {embedMode ? (
+                  <div className="mt-4 space-y-2.5 text-sm text-muted-foreground">
+                    <p className="flex items-center gap-2">
+                      <BookOpen className="size-4 shrink-0 text-primary" />
+                      <span className="truncate">
+                        所属章节：{point.chapterTitle || "未归属章节"}
+                      </span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <BookOpen className="size-4 shrink-0 text-primary" />
+                      <span>章节内第 {point.orderIndex + 1} 个知识点</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <Network className="size-4 shrink-0 text-primary" />
+                      <span>{point.semanticDegree} 条直接关联</span>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <FileText className="size-4 shrink-0 text-primary" />
+                      <span>{point.evidenceCount} 处关联依据</span>
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {filterActive && risk !== "high" ? (
+                      <p className="mt-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs leading-5 text-orange-700">
+                        当前焦点未命中“高风险”筛选，已保留在图中用于对照。
+                      </p>
+                    ) : null}
 
-          {isLoading ? (
-            <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/45 bg-white/45 px-3 py-3 text-sm text-muted-foreground backdrop-blur-xl">
-              <LoaderCircle className="size-4 animate-spin" />
-              正在加载真实学情…
-            </div>
-          ) : isError ? (
-            <div className="mt-4 rounded-lg border border-destructive/20 bg-white/45 px-3 py-3 backdrop-blur-xl">
-              <p className="text-sm text-destructive">学情数据暂时不可用。</p>
-              <Button className="mt-2 h-8 px-3" onClick={onRetry} size="sm" type="button" variant="outline">
-                <RefreshCw data-icon="inline-start" />
-                重新加载
-              </Button>
-            </div>
-          ) : analytics ? (
-            <>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <Metric
-                  label="平均掌握度"
-                  value={analytics.average_mastery === null ? "暂无" : `${Math.round(analytics.average_mastery)}%`}
-                />
-                <Metric label="薄弱学生" value={`${analytics.affected_students} 人`} />
-              </div>
-              <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                <p className="flex items-center gap-2">
-                  <BookOpen className="size-3.5 text-primary" />
-                  <span className="truncate">{analytics.chapter_title || point.chapterTitle || "未归属章节"}</span>
-                </p>
-                <p className="flex items-center gap-2">
-                  <UsersRound className="size-3.5 text-primary" />
-                  <span>课程内已有 {analytics.students.length} 名学生的掌握度记录</span>
-                </p>
-              </div>
-            </>
-          ) : (
-            <div className="mt-4 flex items-start gap-2 rounded-lg border border-white/45 bg-white/45 px-3 py-3 text-sm text-muted-foreground backdrop-blur-xl">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" />
-              该知识点还没有可展示的学情记录。
-            </div>
-          )}
+                    {isLoading ? (
+                      <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/45 bg-white/45 px-3 py-3 text-sm text-muted-foreground backdrop-blur-xl">
+                        <LoaderCircle className="size-4 animate-spin" />
+                        正在加载真实学情…
+                      </div>
+                    ) : isError ? (
+                      <div className="mt-4 rounded-lg border border-destructive/20 bg-white/45 px-3 py-3 backdrop-blur-xl">
+                        <p className="text-sm text-destructive">学情数据暂时不可用。</p>
+                        <Button className="mt-2 h-8 px-3" onClick={onRetry} size="sm" type="button" variant="outline">
+                          <RefreshCw data-icon="inline-start" />
+                          重新加载
+                        </Button>
+                      </div>
+                    ) : analytics ? (
+                      <>
+                        <div className="mt-4 grid grid-cols-2 gap-2">
+                          <Metric
+                            label="平均掌握度"
+                            value={analytics.average_mastery === null ? "暂无" : `${Math.round(analytics.average_mastery)}%`}
+                          />
+                          <Metric label="薄弱学生" value={`${analytics.affected_students} 人`} />
+                        </div>
+                        <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                          <p className="flex items-center gap-2">
+                            <BookOpen className="size-3.5 text-primary" />
+                            <span className="truncate">{analytics.chapter_title || point.chapterTitle || "未归属章节"}</span>
+                          </p>
+                          <p className="flex items-center gap-2">
+                            <UsersRound className="size-3.5 text-primary" />
+                            <span>课程内已有 {analytics.students.length} 名学生的掌握度记录</span>
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-4 flex items-start gap-2 rounded-lg border border-white/45 bg-white/45 px-3 py-3 text-sm text-muted-foreground backdrop-blur-xl">
+                        <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                        该知识点还没有可展示的学情记录。
+                      </div>
+                    )}
+                  </>
+                )}
 
-          {embedMode ? (
-            onAskAi ? (
-              <button
-                className="mt-4 flex h-9 w-full items-center justify-between rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-                onClick={() => onAskAi(point)}
-                type="button"
-              >
-                向 AI 提问
-                <MessageCircle className="size-4" />
-              </button>
-            ) : null
-          ) : (
-            <Link
-              className="mt-4 flex h-9 items-center justify-between rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-              href={buildPointHref(point.id, {
-                courseId,
-                from: "graph",
-                resourceId: point.chapterDocumentId ?? undefined,
-                tab: "overview",
-              })}
-            >
-              查看详细学情
-              <ArrowUpRight className="size-4" />
-            </Link>
-          )}
+                {embedMode ? (
+                  onAskAi ? (
+                    <button
+                      className="mt-4 flex h-9 w-full items-center justify-between rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                      onClick={() => onAskAi(point)}
+                      type="button"
+                    >
+                      向 AI 提问
+                      <MessageCircle className="size-4" />
+                    </button>
+                  ) : null
+                ) : (
+                  <Link
+                    className="mt-4 flex h-9 items-center justify-between rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+                    href={buildPointHref(point.id, {
+                      courseId,
+                      from: "graph",
+                      resourceId: point.chapterDocumentId ?? undefined,
+                      tab: "overview",
+                    })}
+                  >
+                    查看详细学情
+                    <ArrowUpRight className="size-4" />
+                  </Link>
+                )}
               </motion.div>
             ) : null}
           </AnimatePresence>

@@ -356,10 +356,12 @@ export function KnowledgeGraphView({
       </div>
 
       <div className="absolute right-4 top-4 z-30 flex items-center gap-2 lg:right-[324px]">
-        <div className="flex rounded-xl border border-white/18 bg-[#0d1d33]/58 p-1 shadow-[0_12px_34px_rgba(2,8,23,0.24)] ring-1 ring-white/8 backdrop-blur-xl backdrop-saturate-150">
-          <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>全部</FilterButton>
-          <FilterButton active={filter === "high-risk"} onClick={() => setFilter("high-risk")}>高风险</FilterButton>
-        </div>
+        {!embedMode ? (
+          <div className="flex rounded-xl border border-white/18 bg-[#0d1d33]/58 p-1 shadow-[0_12px_34px_rgba(2,8,23,0.24)] ring-1 ring-white/8 backdrop-blur-xl backdrop-saturate-150">
+            <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>全部</FilterButton>
+            <FilterButton active={filter === "high-risk"} onClick={() => setFilter("high-risk")}>高风险</FilterButton>
+          </div>
+        ) : null}
         <ToolbarButton label="回到焦点" onClick={() => controllerRef.current?.resetView()}>
           <Crosshair />
         </ToolbarButton>
