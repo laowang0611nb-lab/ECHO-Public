@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { apiClient } from "@/lib/api";
 import { accountIdentifier } from "@/lib/account-identity";
 import { NotificationCenter } from "@/features/notifications/components/notification-center";
+import { TeacherAssistantTrigger } from "@/features/teacher-assistant/teacher-assistant-trigger";
 import { useDemoMode } from "@/features/demo/demo-provider";
 import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
@@ -82,6 +83,7 @@ export function Header() {
           </Tooltip>
         </TooltipProvider>
         {demo.active ? <span className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-[10px] font-semibold text-violet-700">DEMO · 演示数据</span> : null}
+        <TeacherAssistantTrigger />
         <NotificationCenter />
         <DropdownMenu>
           <DropdownMenuTrigger

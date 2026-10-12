@@ -9,6 +9,8 @@ import { GuidedDemoBar } from "@/features/demo/components/guided-demo-bar";
 import { PageMotion } from "@/components/layout/page-motion";
 import { Sidebar } from "@/components/layout/sidebar";
 import { setSidebarTransitioning } from "@/components/layout/sidebar-transition";
+import { TeacherAssistantPanel } from "@/features/teacher-assistant/teacher-assistant-panel";
+import { TeacherAssistantProvider } from "@/features/teacher-assistant/teacher-assistant-provider";
 
 const SIDEBAR_TRANSITION_MS = 260;
 
@@ -37,7 +39,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div
+    <TeacherAssistantProvider>
+      <div
       className="relative isolate min-h-screen bg-transparent"
       style={{ "--sidebar-width": sidebarCollapsed ? "5rem" : "258px" } as CSSProperties}
     >
@@ -52,6 +55,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           <GuidedDemoBar />
         </div>
       </div>
-    </div>
+      </div>
+      <TeacherAssistantPanel />
+    </TeacherAssistantProvider>
   );
 }
