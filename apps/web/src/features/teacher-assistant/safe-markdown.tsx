@@ -38,8 +38,19 @@ function paragraph(lines: string[], key: number) {
   );
 }
 
+function displayContent(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return content;
+  try {
+    const parsed = JSON.parse(trimmed) as { answer?: unknown };
+    return typeof parsed.answer === "string" && parsed.answer.trim() ? parsed.answer : content;
+  } catch {
+    return content;
+  }
+}
+
 export function SafeMarkdown({ content }: { content: string }) {
-  const blocks = content.replace(/\r\n/g, "\n").split(/\n{2,}/);
+  const blocks = displayContent(content).replace(/\r\n/g, "\n").split(/\n{2,}/);
   const rendered: ReactNode[] = [];
 
   blocks.forEach((rawBlock, blockIndex) => {
