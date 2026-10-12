@@ -388,8 +388,10 @@ async def prepare_teacher_assistant_answer(
     payload: TeacherAssistantMessageCreateRequest,
     context: ValidatedAssistantContext,
 ) -> PreparedAssistantAnswer:
-    query_text = _query_text(payload)
+    query_text = payload.content.strip()
     normalized = query_text.casefold()
+    student_query_text = _student_context_text(payload)
+    knowledge_query_text = _knowledge_context_text(payload)
     actions: list[TeacherAssistantSuggestedAction] = []
     facts: list[str] = []
     tool_results: list[ToolResult] = []
@@ -434,7 +436,8 @@ async def prepare_teacher_assistant_answer(
             matched_candidates = [
                 candidate
                 for candidate in student_candidates
-                if str(candidate.get("display_name", "")).casefold() in normalized
+                if str(candidate.get("display_name", "")).casefold()
+                in student_query_text.casefold()
             ]
             if len(matched_candidates) > 1:
                 names = "、".join(str(item["display_name"]) for item in matched_candidates)
@@ -454,7 +457,7 @@ async def prepare_teacher_assistant_answer(
 
     knowledge_point_id = context.knowledge_point_id
     knowledge_point_name: str | None = None
-    if knowledge_point_id is None and _wants_knowledge(normalized):
+    if knowledge_point_id is None:
         (
             knowledge_point_id,
             knowledge_point_name,
@@ -462,7 +465,7 @@ async def prepare_teacher_assistant_answer(
         ) = await find_active_knowledge_point(
             session,
             course_id,
-            query_text,
+            knowledge_query_text,
         )
         if knowledge_point_id is None and len(point_matches) > 1:
             names = "、".join(name for _, name in point_matches[:8])
@@ -478,13 +481,15 @@ async def prepare_teacher_assistant_answer(
         _, knowledge_point_name, _ = await find_active_knowledge_point(
             session,
             course_id,
-            query_text,
+            knowledge_query_text,
             explicit_id=knowledge_point_id,
         )
     if knowledge_point_id is not None:
         actions.append(_knowledge_point_action(course_id, knowledge_point_id, knowledge_point_name))
 
-    wants_course_overview = _wants_course_overview(normalized)
+    wants_course_overview = _wants_course_overview(normalized) or (
+        knowledge_point_id is None and _wants_global_knowledge_overview(normalized)
+    )
     wants_questions = _wants_question_summary(normalized)
     wants_review = _wants_review_summary(normalized)
     wants_strategy = _wants_strategy_effect(normalized)
@@ -737,9 +742,49 @@ async def _run_tool(
         )
 
 
-def _query_text(payload: TeacherAssistantMessageCreateRequest) -> str:
-    history = " ".join(message.content for message in payload.history[-8:])
-    return f"{history} {payload.content}".strip()
+STUDENT_FOLLOW_UP_MARKERS = (
+    "他",
+    "她",
+    "这名学生",
+    "该学生",
+    "这个学生",
+    "这位学生",
+    "上述学生",
+)
+KNOWLEDGE_FOLLOW_UP_MARKERS = (
+    "它",
+    "该知识点",
+    "这个知识点",
+    "刚才那个",
+    "上面的知识点",
+    "前述知识点",
+    "这个点",
+)
+
+
+def _last_user_history_text(
+    payload: TeacherAssistantMessageCreateRequest,
+) -> str | None:
+    for message in reversed(payload.history):
+        if message.role == "user":
+            return message.content.strip()
+    return None
+
+
+def _student_context_text(payload: TeacherAssistantMessageCreateRequest) -> str:
+    current = payload.content.strip()
+    if not any(marker in current for marker in STUDENT_FOLLOW_UP_MARKERS):
+        return current
+    previous = _last_user_history_text(payload)
+    return f"{previous} {current}".strip() if previous else current
+
+
+def _knowledge_context_text(payload: TeacherAssistantMessageCreateRequest) -> str:
+    current = payload.content.strip()
+    if not any(marker in current for marker in KNOWLEDGE_FOLLOW_UP_MARKERS):
+        return current
+    previous = _last_user_history_text(payload)
+    return f"{previous} {current}".strip() if previous else current
 
 
 def _time_range_days(payload: TeacherAssistantMessageCreateRequest) -> int:
@@ -808,9 +853,18 @@ def _looks_like_student_question(normalized: str) -> bool:
     )
 
 
-def _wants_knowledge(normalized: str) -> bool:
+def _wants_global_knowledge_overview(normalized: str) -> bool:
     return any(
-        marker in normalized for marker in ("知识点", "薄弱", "难点", "最差", "掌握", "章节")
+        marker in normalized
+        for marker in (
+            "最差",
+            "最弱",
+            "薄弱知识点",
+            "哪个知识点",
+            "哪些知识点",
+            "知识点排名",
+            "掌握最低",
+        )
     )
 
 

@@ -115,6 +115,69 @@ async def create_learning_fixture(
     return chapter_id, point_id
 
 
+async def create_ranked_learning_fixture(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    course_id: UUID,
+    teacher_id: UUID,
+    student_id: UUID,
+    point_scores: list[tuple[str, float]],
+) -> dict[str, UUID]:
+    document_id = uuid4()
+    chapter_id = uuid4()
+    point_ids = {name: uuid4() for name, _ in point_scores}
+    async with session_factory() as session:
+        session.add(
+            Document(
+                id=document_id,
+                course_id=course_id,
+                uploaded_by=teacher_id,
+                original_name="ranked-assistant.pdf",
+                storage_key=f"tests/{document_id}.pdf",
+                content_type="application/pdf",
+                size_bytes=100,
+                status=DocumentStatus.READY,
+            )
+        )
+        session.add(
+            Chapter(
+                id=chapter_id,
+                course_id=course_id,
+                document_id=document_id,
+                title="排名章节",
+                order_index=0,
+            )
+        )
+        session.add(
+            CourseMember(
+                course_id=course_id,
+                user_id=student_id,
+                role=UserRole.STUDENT,
+            )
+        )
+        for order_index, (name, score) in enumerate(point_scores):
+            point_id = point_ids[name]
+            session.add(
+                KnowledgePoint(
+                    id=point_id,
+                    course_id=course_id,
+                    chapter_id=chapter_id,
+                    name=name,
+                    order_index=order_index,
+                )
+            )
+            session.add(
+                StudentKnowledgeState(
+                    course_id=course_id,
+                    user_id=student_id,
+                    knowledge_point_id=point_id,
+                    score=score,
+                )
+            )
+        await session.commit()
+    return point_ids
+
+
 async def test_capabilities_are_course_teacher_only_and_client_session(
     client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -415,3 +478,89 @@ async def test_cross_course_page_context_is_rejected(
 
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "ASSISTANT_CONTEXT_INVALID"
+
+
+async def test_global_worst_knowledge_question_uses_overview_and_ignores_history_entities(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enable_assistant(monkeypatch)
+    teacher = await login(client, "assistant-worst@example.com", "teacher")
+    student = await login(client, "assistant-worst-student@example.com", "student")
+    course = await create_course(client, teacher, "Worst Knowledge Course")
+    await create_ranked_learning_fixture(
+        session_factory,
+        course_id=UUID(str(course["id"])),
+        teacher_id=UUID(str(teacher["id"])),
+        student_id=UUID(str(student["id"])),
+        point_scores=[
+            ("技术债务", 82.0),
+            ("条件覆盖", 58.0),
+            ("路径覆盖", 36.0),
+        ],
+    )
+    chat_provider.structured_answer = "当前最薄弱的是路径覆盖。"
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/assistant/messages",
+        headers=auth_headers(teacher),
+        json={
+            "client_message_id": str(uuid4()),
+            "content": "现在最最差的知识点是哪个？",
+            "history": [
+                {
+                    "role": "user",
+                    "content": "技术债务、条件覆盖、路径覆盖分别怎么样？",
+                },
+                {"role": "assistant", "content": "需要结合课程证据分析。"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert "匹配到多个知识点" not in response.json()["content"]
+    provider_messages = str(chat_provider.last_complete_messages)
+    assert "路径覆盖" in provider_messages
+    assert "36.00" in provider_messages
+
+
+async def test_greeting_does_not_inherit_knowledge_entities_from_history(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    enable_assistant(monkeypatch)
+    teacher = await login(client, "assistant-greeting@example.com", "teacher")
+    student = await login(client, "assistant-greeting-student@example.com", "student")
+    course = await create_course(client, teacher, "Greeting Course")
+    await create_ranked_learning_fixture(
+        session_factory,
+        course_id=UUID(str(course["id"])),
+        teacher_id=UUID(str(teacher["id"])),
+        student_id=UUID(str(student["id"])),
+        point_scores=[("技术债务", 82.0), ("条件覆盖", 58.0)],
+    )
+    chat_provider.structured_answer = "你好，我可以帮你查看课程学情。"
+
+    response = await client.post(
+        f"/api/v1/courses/{course['id']}/assistant/messages",
+        headers=auth_headers(teacher),
+        json={
+            "client_message_id": str(uuid4()),
+            "content": "hi",
+            "history": [
+                {
+                    "role": "user",
+                    "content": "技术债务、条件覆盖分别怎么样？",
+                },
+                {"role": "assistant", "content": "需要更多证据。"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert "匹配到多个知识点" not in response.json()["content"]
+    assert "路径覆盖" not in str(chat_provider.last_complete_messages)
