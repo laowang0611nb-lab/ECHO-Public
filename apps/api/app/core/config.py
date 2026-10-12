@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.232"
+    app_version: str = "0.0.233"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
@@ -114,6 +114,17 @@ class Settings(BaseSettings):
     chat_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     chat_model: str = "qwen3.8-flash"
     chat_timeout_seconds: float = 60.0
+    teacher_assistant_enabled: bool = True
+    teacher_assistant_max_message_chars: int = 4000
+    teacher_assistant_max_history_messages: int = 16
+    teacher_assistant_max_history_message_chars: int = 1500
+    teacher_assistant_max_context_days: int = 180
+    teacher_assistant_max_planning_rounds: int = 4
+    teacher_assistant_max_tool_calls: int = 8
+    teacher_assistant_max_students: int = 50
+    teacher_assistant_max_question_messages: int = 30
+    teacher_assistant_tool_timeout_seconds: float = 20.0
+    teacher_assistant_provider_timeout_seconds: float = 45.0
     teaching_flow_enabled: bool = True
     teaching_flow_llm_classifier_enabled: bool = True
     teaching_flow_max_hint_levels: int = 3
@@ -194,11 +205,29 @@ class Settings(BaseSettings):
         "chat_video_max_dimension",
         "chat_model_file_expiry_hours",
         "chat_attachment_cleanup_interval_seconds",
+        "teacher_assistant_max_message_chars",
+        "teacher_assistant_max_history_messages",
+        "teacher_assistant_max_history_message_chars",
+        "teacher_assistant_max_context_days",
+        "teacher_assistant_max_planning_rounds",
+        "teacher_assistant_max_tool_calls",
+        "teacher_assistant_max_students",
+        "teacher_assistant_max_question_messages",
     )
     @classmethod
     def require_positive_chat_attachment_limits(cls, value: int) -> int:
         if value <= 0:
             raise ValueError("chat attachment limits must be positive")
+        return value
+
+    @field_validator(
+        "teacher_assistant_tool_timeout_seconds",
+        "teacher_assistant_provider_timeout_seconds",
+    )
+    @classmethod
+    def require_positive_assistant_timeouts(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("teacher assistant timeouts must be positive")
         return value
 
     @field_validator("llm_context_window_tokens")

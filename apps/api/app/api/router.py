@@ -21,6 +21,7 @@ from app.api.routes import (
     search,
     student_resources,
     system,
+    teacher_assistant,
     teacher_resources,
     teaching_policy,
     users,
@@ -48,5 +49,6 @@ api_router.include_router(search.router)
 api_router.include_router(student_resources.router)
 api_router.include_router(teaching_policy.router)
 api_router.include_router(teacher_resources.router)
+api_router.include_router(teacher_assistant.router)
 api_router.include_router(users.router)
 api_router.include_router(health.router)

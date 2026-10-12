@@ -146,6 +146,10 @@ import type {
   TeachingPolicy,
   TeachingPolicyUpdateRequest,
   TeacherDashboardOverview,
+  TeacherAssistantCapabilities,
+  TeacherAssistantMessage,
+  TeacherAssistantMessageCreateRequest,
+  TeacherAssistantStreamEvent,
   User,
 } from "@echo/shared-types";
 
@@ -244,7 +248,9 @@ function parseSseBlock(block: string): ChatStreamEvent | null {
   } as ChatStreamEvent;
 }
 
-async function* parseSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatStreamEvent> {
+async function* parseSseEvents<T = ChatStreamEvent>(
+  body: ReadableStream<Uint8Array>,
+): AsyncGenerator<T> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -264,7 +270,7 @@ async function* parseSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator
         buffer = buffer.slice(boundary + 2);
         const event = parseSseBlock(block);
         if (event) {
-          yield event;
+          yield event as T;
         }
         boundary = buffer.indexOf("\n\n");
       }
@@ -274,7 +280,7 @@ async function* parseSseEvents(body: ReadableStream<Uint8Array>): AsyncGenerator
     buffer = buffer.replace(/\r\n/g, "\n");
     const finalEvent = parseSseBlock(buffer);
     if (finalEvent) {
-      yield finalEvent;
+      yield finalEvent as T;
     }
   } finally {
     reader.releaseLock();
@@ -1690,6 +1696,50 @@ export function createApiClient({
         undefined,
         userId,
       ),
+    getTeacherAssistantCapabilities: (userId: string, courseId: string) =>
+      request<TeacherAssistantCapabilities>(
+        `/api/v1/courses/${courseId}/assistant/capabilities`,
+        undefined,
+        userId,
+      ),
+    sendTeacherAssistantMessage: (
+      userId: string,
+      courseId: string,
+      payload: TeacherAssistantMessageCreateRequest,
+    ) =>
+      request<TeacherAssistantMessage>(
+        `/api/v1/courses/${courseId}/assistant/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+        userId,
+      ),
+    streamTeacherAssistantMessage: async function* (
+      userId: string,
+      courseId: string,
+      payload: TeacherAssistantMessageCreateRequest,
+      options?: { signal?: AbortSignal },
+    ): AsyncGenerator<TeacherAssistantStreamEvent> {
+      const response = await authorizedFetch(
+        `/api/v1/courses/${courseId}/assistant/messages/stream`,
+        {
+          method: "POST",
+          signal: options?.signal,
+          body: JSON.stringify(payload),
+        },
+        userId,
+      );
+
+      if (!response.ok) {
+        throw await readError(response);
+      }
+      if (!response.body) {
+        throw new Error("Streaming response body is unavailable");
+      }
+
+      yield* parseSseEvents<TeacherAssistantStreamEvent>(response.body);
+    },
     streamConversationMessage: async function* (
       userId: string,
       conversationId: string,

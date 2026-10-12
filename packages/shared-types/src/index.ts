@@ -2038,3 +2038,132 @@ export interface AnnouncementReadResponse {
   announcement_id: string;
   read_at: string;
 }
+
+export type TeacherAssistantPage =
+  | "dashboard"
+  | "ai_insights"
+  | "student_analytics"
+  | "student_detail"
+  | "student_conversation"
+  | "knowledge_base"
+  | "knowledge_point_detail"
+  | "ai_review"
+  | "teaching_strategy"
+  | "execution_plan"
+  | "courses"
+  | "unknown";
+
+export interface TeacherAssistantPageContext {
+  page: TeacherAssistantPage;
+  student_id?: string | null;
+  conversation_id?: string | null;
+  knowledge_point_id?: string | null;
+  review_flag_id?: string | null;
+  strategy_id?: string | null;
+  plan_id?: string | null;
+  time_range_days?: number | null;
+}
+
+export interface TeacherAssistantHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface TeacherAssistantMessageCreateRequest {
+  client_message_id: string;
+  content: string;
+  history?: TeacherAssistantHistoryMessage[];
+  page_context?: TeacherAssistantPageContext;
+  locale?: string;
+}
+
+export type TeacherAssistantNavigationType =
+  | "dashboard"
+  | "ai_insights"
+  | "students_list"
+  | "student_detail"
+  | "student_conversation"
+  | "knowledge_base"
+  | "knowledge_point_detail"
+  | "ai_review"
+  | "ai_review_pending"
+  | "review_flag"
+  | "teaching_strategies"
+  | "teaching_strategy"
+  | "execution_plans"
+  | "execution_plan"
+  | "courses"
+  | "course_detail";
+
+export interface TeacherAssistantNavigationTarget {
+  type: TeacherAssistantNavigationType;
+  course_id: string;
+  student_id?: string | null;
+  conversation_id?: string | null;
+  knowledge_point_id?: string | null;
+  review_flag_id?: string | null;
+  strategy_id?: string | null;
+  plan_id?: string | null;
+}
+
+export interface TeacherAssistantSuggestedAction {
+  id: string;
+  label: string;
+  reason?: string;
+  target: TeacherAssistantNavigationTarget;
+}
+
+export interface TeacherAssistantMessage {
+  id: string;
+  role: "assistant";
+  content: string;
+  status: "complete" | "failed" | "interrupted";
+  insufficient_evidence: boolean;
+  suggested_actions: TeacherAssistantSuggestedAction[];
+  created_at: string;
+}
+
+export interface TeacherAssistantCapabilities {
+  enabled: boolean;
+  read_only: true;
+  streaming: boolean;
+  memory_mode: "client_session";
+  max_message_chars: number;
+  max_context_days: number;
+  suggested_prompts: string[];
+  supported_pages: TeacherAssistantPage[];
+}
+
+export type TeacherAssistantStreamEvent =
+  | {
+      event: "message_start";
+      data: {
+        client_message_id: string;
+        assistant_message_id: string;
+      };
+    }
+  | {
+      event: "status";
+      data: { stage: string; label: string };
+    }
+  | {
+      event: "text_delta";
+      data: { delta: string };
+    }
+  | {
+      event: "suggested_actions";
+      data: { items: TeacherAssistantSuggestedAction[] };
+    }
+  | {
+      event: "done";
+      data: { assistant_message: TeacherAssistantMessage };
+    }
+  | {
+      event: "error";
+      data: {
+        code: string;
+        message: string;
+        retryable: boolean;
+        details?: Record<string, unknown>;
+      };
+    };

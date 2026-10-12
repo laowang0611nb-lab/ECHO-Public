@@ -181,6 +181,18 @@ Quick Check 由服务端校验答案并通过 `LearningEvent -> StudentKnowledge
 
 `v0.0.208` 起，普通课程聊天不再依据 RAG 命中结果自动推断知识点并生成 Hint/Quick Check。只有请求显式携带有效 `knowledge_point_id`、问题与知识点实质相关，且检索来源与知识点属于同一章节时，后端才继续知识点问答卡片；其他情况保持普通课程问答。
 
+### 4.1 教师端 AI 助手
+
+教师端 AI 助手为只读问答接口，完整契约见 [`教师端AI助手接口草案_v2.md`](./api/教师端AI助手接口草案_v2.md)。
+
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| GET | `/courses/{course_id}/assistant/capabilities` | 课程教师 | 助手开关、输入限制和引导问题 |
+| POST | `/courses/{course_id}/assistant/messages` | 课程教师 | 非流式只读数据问答 |
+| POST | `/courses/{course_id}/assistant/messages/stream` | 课程教师 | SSE 问答、证据总结和结构化页面跳转 |
+
+该助手不提供服务端会话历史、消息持久化或写入动作。客户端自行携带有限历史，所有事实必须重新从当前课程数据查证。
+
 ## 5. 教学规则与学习分析
 
 | 方法 | 路径 | 权限 | 说明 |
