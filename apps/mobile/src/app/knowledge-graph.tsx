@@ -158,7 +158,7 @@ export default function KnowledgeGraphScreen() {
 
   useEffect(() => {
     void ScreenOrientation.lockAsync(
-      ScreenOrientation.OrientationLock.LANDSCAPE,
+      ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT,
     ).catch(() => undefined);
 
     const subscription = BackHandler.addEventListener(
