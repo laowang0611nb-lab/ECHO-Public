@@ -137,7 +137,7 @@ POST /api/v1/courses/{course_id}/knowledge-points/merge
 | GET | `/courses/{course_id}/students/{student_id}/conversations` | 课程教师 | 查看指定学生会话列表 |
 | GET | `/courses/{course_id}/conversations/{conversation_id}/messages` | 课程教师 | 查看完整对话证据、知识点、引用和审核状态 |
 
-学生聊天请求中的 `knowledge_point_id` 是服务端唯一可信的知识点选择来源。后端会重新校验课程、软删除和教材状态，把知识点名称、描述和所属章节明确写入模型提示词，不用前端传入的名称覆盖事实。若本次显式知识点与会话教学状态不同，本次选择优先，教学状态、学习事件和 Quick Check 必须绑定最新知识点。
+学生聊天请求中的 `knowledge_point_id` 是服务端唯一可信的知识点选择来源。后端会重新校验课程、软删除和教材状态，把知识点名称、描述和所属章节作为不可信课程元数据写入模型提示词，不用前端传入的名称覆盖事实。若本次显式知识点与会话教学状态不同，本次选择优先，旧状态不能参与本轮意图分类；无显式 ID 的未完成追问沿用当前教学状态，学习和 Quick Check 绑定该状态的知识点。中断续写会从教学状态或 LearningEvent 恢复知识点、教材来源和教学规则。
 
 附件上传先写入 `chat_attachments`，成功响应返回 `attachment` 和 `expires_at`。发送消息时，`attachments` 只接受当前用户创建、尚未绑定且未过期的附件。消息提交后，附件绑定到用户消息；历史消息通过 `attachments` 返回元数据和文件 URL。
 

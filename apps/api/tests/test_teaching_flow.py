@@ -15,6 +15,7 @@ from app.services.teaching_flow import (
     build_topic_key,
     classify_teaching_turn_rules,
     plan_teaching_turn,
+    select_teaching_state_for_turn,
 )
 
 
@@ -113,6 +114,24 @@ def test_answer_leak_guard_catches_mcq_answer_but_not_guidance() -> None:
 
     assert answer_leak_detected("答案：A", plan) is True
     assert answer_leak_detected("先判断题干中的关键词，再比较两个选项。", plan) is False
+
+
+def test_active_follow_up_keeps_state_when_rag_resolves_another_point() -> None:
+    state = _state()
+    classification = TeachingTurnClassification(
+        TeachingIntent.ATTEMPT,
+        is_follow_up=True,
+    )
+
+    selected, topic = select_teaching_state_for_turn(
+        latest_state=state,
+        resolved_knowledge_point_id=uuid4(),
+        classification=classification,
+        question="我选 A",
+    )
+
+    assert selected is state
+    assert topic == state.topic_key
 
 
 def test_topic_keys_isolate_different_knowledge_points() -> None:

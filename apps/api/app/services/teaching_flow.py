@@ -496,11 +496,6 @@ def select_teaching_state_for_turn(
         classification.is_follow_up
         and latest_state is not None
         and latest_state.stage != TeachingStage.COMPLETED
-        and (
-            resolved_knowledge_point_id is None
-            or latest_state.knowledge_point_id is None
-            or latest_state.knowledge_point_id == resolved_knowledge_point_id
-        )
     ):
         return latest_state, latest_state.topic_key
     if (

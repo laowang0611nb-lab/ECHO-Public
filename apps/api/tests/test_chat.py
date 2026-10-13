@@ -11,6 +11,7 @@ from database.models.chat import (
     Message,
     MessageCitation,
     MessageRole,
+    MessageStatus,
     TeachingDialogEvent,
     TeachingStage,
 )
@@ -1330,6 +1331,84 @@ async def test_interrupted_assistant_message_can_continue(
     assert assistant["status"] == "complete"
 
 
+async def test_continuation_reloads_selected_knowledge_point_context(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "continue-point-teacher@example.com", "teacher")
+    student = await login(client, "continue-point-student@example.com", "student")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    course_id = UUID(course["id"])
+    point_id = UUID(course["knowledge_point_id"])
+    conversation_id = uuid4()
+    user_message_id = uuid4()
+    assistant_message_id = uuid4()
+    async with session_factory() as session:
+        session.add(
+            CourseMember(
+                course_id=course_id,
+                user_id=UUID(student["id"]),
+                role=UserRole.STUDENT,
+            )
+        )
+        session.add(
+            Conversation(
+                id=conversation_id,
+                course_id=course_id,
+                user_id=UUID(student["id"]),
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                Message(
+                    id=user_message_id,
+                    conversation_id=conversation_id,
+                    role=MessageRole.USER,
+                    content="请解释这个内容",
+                ),
+                Message(
+                    id=assistant_message_id,
+                    conversation_id=conversation_id,
+                    role=MessageRole.ASSISTANT,
+                    content="Partial ",
+                    status=MessageStatus.INTERRUPTED,
+                ),
+                LearningEvent(
+                    course_id=course_id,
+                    user_id=UUID(student["id"]),
+                    conversation_id=conversation_id,
+                    message_id=user_message_id,
+                    knowledge_point_id=point_id,
+                    event_type=LearningEventType.QUESTION_ASKED,
+                    evidence="请解释这个内容",
+                    metadata_json={},
+                ),
+            ]
+        )
+        await session.commit()
+
+    response = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/{assistant_message_id}/continue",
+        headers=auth_headers(student),
+        json={},
+    )
+
+    assert response.status_code == 200
+    prompt_text = str(chat_provider.last_stream_messages)
+    system_prompt = str(chat_provider.last_stream_messages[0])
+    assert "<selected_knowledge_point>" in prompt_text
+    assert "Name: Alpha" in prompt_text
+    assert "Description: Alpha learning material" in prompt_text
+    assert "Alpha learning material" not in system_prompt
+
+
 async def test_cancelled_stream_persists_interrupted_partial_answer(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -1639,6 +1718,10 @@ async def test_explicit_knowledge_point_is_included_in_model_prompt(
 
     assert stream.status_code == 200
     prompt_text = str(chat_provider.last_stream_messages)
+    system_prompt = str(chat_provider.last_stream_messages[0])
+    assert "Alpha" not in system_prompt
+    assert "Description: Alpha learning material" not in system_prompt
+    assert "<selected_knowledge_point>" in prompt_text
     assert "SELECTED KNOWLEDGE POINT" in prompt_text
     assert "Name: Alpha" in prompt_text
     assert "Chapter: Chat Chapter" in prompt_text
@@ -1759,8 +1842,36 @@ async def test_switching_knowledge_point_rebinds_state_events_and_quick_check(
     acknowledge = await client.post(
         f"/api/v1/conversations/{conversation_id}/messages/stream",
         headers=auth_headers(student),
-        json={"content": "我懂了", "knowledge_point_id": str(second_point_id)},
+        json={"content": "我懂了"},
     )
     assert acknowledge.status_code == 200
     assert str(second_question["id"]) in acknowledge.text
     assert str(first_question["id"]) not in acknowledge.text
+
+    messages_response = await client.get(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=auth_headers(student),
+    )
+    latest_user_message_id = UUID(
+        [message for message in messages_response.json() if message["role"] == "user"][-1]["id"]
+    )
+    async with session_factory() as session:
+        latest_state = await session.scalar(
+            select(ConversationTeachingState)
+            .where(ConversationTeachingState.conversation_id == UUID(conversation_id))
+            .order_by(
+                ConversationTeachingState.updated_at.desc(),
+                ConversationTeachingState.created_at.desc(),
+            )
+            .limit(1)
+        )
+        latest_event = await session.scalar(
+            select(LearningEvent).where(
+                LearningEvent.message_id == latest_user_message_id,
+                LearningEvent.event_type == LearningEventType.QUESTION_ASKED,
+            )
+        )
+        assert latest_state is not None
+        assert latest_state.knowledge_point_id == second_point_id
+        assert latest_event is not None
+        assert latest_event.knowledge_point_id == second_point_id
