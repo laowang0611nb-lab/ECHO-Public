@@ -14,6 +14,7 @@ from database.models.chat import (
     TeachingDialogEvent,
     TeachingStage,
 )
+from database.models.course import CourseMember
 from database.models.document import Document, DocumentPage, DocumentStatus
 from database.models.knowledge import Chapter, KnowledgeChunk, KnowledgePoint
 from database.models.learning import LearningEvent, LearningEventType
@@ -23,6 +24,7 @@ from database.models.review import (
     ReviewSeverity,
     ReviewStatus,
 )
+from database.models.user import UserRole
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -1606,3 +1608,159 @@ async def test_replayed_client_request_does_not_advance_teaching_state(
             )
         )
         assert len(events) == 1
+
+
+async def test_explicit_knowledge_point_is_included_in_model_prompt(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "chat-point-prompt@example.com", "teacher")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(teacher),
+        json={"title": "Knowledge point prompt"},
+    )
+
+    stream = await client.post(
+        f"/api/v1/conversations/{conversation.json()['id']}/messages/stream",
+        headers=auth_headers(teacher),
+        json={
+            "content": "请解释这个内容",
+            "knowledge_point_id": course["knowledge_point_id"],
+        },
+    )
+
+    assert stream.status_code == 200
+    prompt_text = str(chat_provider.last_stream_messages)
+    assert "SELECTED KNOWLEDGE POINT" in prompt_text
+    assert "Name: Alpha" in prompt_text
+    assert "Chapter: Chat Chapter" in prompt_text
+    assert "Description: Alpha learning material" in prompt_text
+
+
+async def test_switching_knowledge_point_rebinds_state_events_and_quick_check(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+) -> None:
+    teacher = await login(client, "chat-point-switch@example.com", "teacher")
+    student = await login(client, "chat-point-switch-student@example.com", "student")
+    course = await create_searchable_course(
+        client,
+        session_factory,
+        teacher,
+        include_knowledge_point=True,
+    )
+    first_point_id = UUID(course["knowledge_point_id"])
+    second_point_id = uuid4()
+    async with session_factory() as session:
+        chapter = await session.scalar(
+            select(Chapter).where(Chapter.course_id == UUID(course["id"]))
+        )
+        assert chapter is not None
+        session.add(
+            CourseMember(
+                course_id=UUID(course["id"]),
+                user_id=UUID(student["id"]),
+                role=UserRole.STUDENT,
+            )
+        )
+        session.add(
+            KnowledgePoint(
+                id=second_point_id,
+                course_id=UUID(course["id"]),
+                chapter_id=chapter.id,
+                name="Beta",
+                description="Beta learning material",
+                order_index=1,
+            )
+        )
+        await session.commit()
+    first_question = await create_question_item(
+        client,
+        teacher,
+        course,
+        knowledge_point_id=first_point_id,
+        title="Alpha switch question",
+    )
+    second_question = await create_question_item(
+        client,
+        teacher,
+        course,
+        knowledge_point_id=second_point_id,
+        title="Beta switch question",
+    )
+    conversation = await client.post(
+        f"/api/v1/courses/{course['id']}/conversations",
+        headers=auth_headers(student),
+        json={"title": "Switch knowledge point"},
+    )
+    conversation_id = conversation.json()["id"]
+
+    first = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(student),
+        json={
+            "content": "这道选择题应该选哪个？",
+            "knowledge_point_id": str(first_point_id),
+        },
+    )
+    second = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(student),
+        json={
+            "content": "这道选择题应该选哪个？",
+            "knowledge_point_id": str(second_point_id),
+        },
+    )
+    second_prompt = str(chat_provider.last_stream_messages)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert "Name: Beta" in second_prompt
+    assert "Description: Beta learning material" in second_prompt
+
+    messages_response = await client.get(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        headers=auth_headers(student),
+    )
+    latest_user_message_id = UUID(
+        [message for message in messages_response.json() if message["role"] == "user"][-1]["id"]
+    )
+    async with session_factory() as session:
+        latest_state = await session.scalar(
+            select(ConversationTeachingState)
+            .where(ConversationTeachingState.conversation_id == UUID(conversation_id))
+            .order_by(
+                ConversationTeachingState.updated_at.desc(),
+                ConversationTeachingState.created_at.desc(),
+            )
+            .limit(1)
+        )
+        second_event = await session.scalar(
+            select(LearningEvent).where(
+                LearningEvent.message_id == latest_user_message_id,
+                LearningEvent.event_type == LearningEventType.QUESTION_ASKED,
+            )
+        )
+        assert latest_state is not None
+        assert latest_state.knowledge_point_id == second_point_id
+        assert latest_state.topic_key == f"kp:{second_point_id}"
+        assert second_event is not None
+        assert second_event.knowledge_point_id == second_point_id
+
+    acknowledge = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages/stream",
+        headers=auth_headers(student),
+        json={"content": "我懂了", "knowledge_point_id": str(second_point_id)},
+    )
+    assert acknowledge.status_code == 200
+    assert str(second_question["id"]) in acknowledge.text
+    assert str(first_question["id"]) not in acknowledge.text
