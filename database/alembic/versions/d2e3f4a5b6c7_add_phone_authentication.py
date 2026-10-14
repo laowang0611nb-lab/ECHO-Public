@@ -9,7 +9,6 @@ Create Date: 2026-09-19 17:10:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-
 from alembic import op
 
 revision: str = "d2e3f4a5b6c7"
@@ -39,7 +38,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("jti"),
     )
-    op.create_index("ix_phone_verification_claims_phone", "phone_verification_claims", ["phone"])
+    op.create_index(
+        "ix_phone_verification_claims_phone", "phone_verification_claims", ["phone"]
+    )
     op.create_index(
         "ix_phone_verification_claims_purpose",
         "phone_verification_claims",

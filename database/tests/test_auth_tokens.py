@@ -3,6 +3,8 @@ from uuid import uuid4
 
 import jwt
 import pytest
+from pydantic import ValidationError
+
 from database.auth.password import hash_password, verify_password
 from database.auth.tokens import (
     create_access_token,
@@ -11,7 +13,6 @@ from database.auth.tokens import (
     hash_refresh_token,
 )
 from database.config import DEFAULT_AUTH_SECRET, DatabaseSettings
-from pydantic import ValidationError
 
 
 def test_access_token_contains_minimal_identity_claims() -> None:
