@@ -1,7 +1,7 @@
 import { router } from "expo-router";
-import { BlurView } from "expo-blur";
+import { BlurTargetView, BlurView } from "expo-blur";
 import { SymbolView, type AndroidSymbol } from "expo-symbols";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -44,6 +44,7 @@ export default function AISupportScreen() {
   const compact = width < 390;
   const [question, setQuestion] = useState("");
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const blurTargetRef = useRef<View | null>(null);
   const archived = selectedCourse?.status === "archived";
   const offline = isOfflineError(error);
 
@@ -151,7 +152,8 @@ export default function AISupportScreen() {
   return (
     <PageFade>
       <View style={styles.screen}>
-        <ScrollView
+        <BlurTargetView ref={blurTargetRef} style={styles.blurTarget}>
+          <ScrollView
           contentContainerStyle={[
             styles.content,
             {
@@ -314,7 +316,8 @@ export default function AISupportScreen() {
           <Text style={styles.footerStats}>
             {courses.length} 门课程 · {learning.chapters.length} 个章节
           </Text>
-        </ScrollView>
+          </ScrollView>
+        </BlurTargetView>
 
         <View
           pointerEvents="box-none"
@@ -332,6 +335,7 @@ export default function AISupportScreen() {
           >
             <AskEchoCard
               archived={archived}
+              blurTarget={blurTargetRef}
               compact={compact}
               onChangeQuestion={setQuestion}
               onOpenChat={() => router.push("/chat")}
@@ -642,6 +646,7 @@ function CourseLearningCard({
 
 function AskEchoCard({
   archived,
+  blurTarget,
   compact,
   question,
   onChangeQuestion,
@@ -649,6 +654,7 @@ function AskEchoCard({
   onSubmit,
 }: {
   archived: boolean;
+  blurTarget: RefObject<View | null>;
   compact: boolean;
   question: string;
   onChangeQuestion: (value: string) => void;
@@ -658,6 +664,7 @@ function AskEchoCard({
   const submitDisabled = archived || !question.trim();
   return (
     <BlurView
+      blurTarget={blurTarget}
       blurMethod="dimezisBlurViewSdk31Plus"
       intensity={62}
       tint="light"
@@ -767,6 +774,9 @@ function Shortcut({
 const styles = StyleSheet.create({
   screen: {
     backgroundColor: studentTheme.color.background,
+    flex: 1,
+  },
+  blurTarget: {
     flex: 1,
   },
   content: {
