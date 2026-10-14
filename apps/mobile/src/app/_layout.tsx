@@ -1,5 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { Stack, type ErrorBoundaryProps } from "expo-router";
+import { useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -14,6 +16,12 @@ import {
 } from "@/providers/student-session-provider";
 
 export default function RootLayout() {
+  useEffect(() => {
+    void ScreenOrientation.lockAsync(
+      ScreenOrientation.OrientationLock.PORTRAIT_UP,
+    ).catch(() => undefined);
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -51,6 +59,7 @@ function RootNavigator() {
       <Stack.Protected guard={Boolean(user)}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="chat" />
+        <Stack.Screen name="knowledge-graph" />
         <Stack.Screen name="change-password" />
         <Stack.Screen name="courses/[courseId]" />
         <Stack.Screen name="courses/[courseId]/chapters/[chapterId]" />

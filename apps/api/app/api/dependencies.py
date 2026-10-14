@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.util import find_spec
@@ -5,11 +6,16 @@ from typing import Annotated
 from uuid import UUID
 
 import jwt
-from database.auth.tokens import decode_access_token
+from database.auth.tokens import (
+    decode_access_token,
+    decode_knowledge_graph_embed_token,
+)
 from database.db.session import get_db_session
 from database.models.auth import AuthSession
-from database.models.user import User, UserStatus
+from database.models.course import CourseMember
+from database.models.user import User, UserRole, UserStatus
 from fastapi import Depends, Header, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.core.config import settings
@@ -225,6 +231,68 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 
+@dataclass(frozen=True)
+class KnowledgeGraphReadPrincipal:
+    user_id: UUID
+    course_id: UUID | None = None
+    is_embedded: bool = False
+
+
+async def get_knowledge_graph_read_principal(
+    session: DBSession,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    x_user_id: Annotated[str | None, Header(alias="X-User-Id")] = None,
+) -> KnowledgeGraphReadPrincipal:
+    if authorization is not None and authorization.strip():
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() == "bearer" and token.strip():
+            try:
+                claims = decode_knowledge_graph_embed_token(token.strip())
+                user_id = UUID(str(claims["sub"]))
+                course_id = UUID(str(claims["course_id"]))
+            except (KeyError, ValueError, jwt.InvalidTokenError):
+                pass
+            else:
+                user = await session.get(User, user_id)
+                if (
+                    user is None
+                    or user.status != UserStatus.ACTIVE
+                    or user.role != UserRole.STUDENT
+                ):
+                    raise _invalid_knowledge_graph_embed_token() from None
+                membership = await session.scalar(
+                    select(CourseMember.id).where(
+                        CourseMember.course_id == course_id,
+                        CourseMember.user_id == user_id,
+                        CourseMember.role == UserRole.STUDENT,
+                    )
+                )
+                if membership is None:
+                    raise _knowledge_graph_embed_forbidden() from None
+                return KnowledgeGraphReadPrincipal(
+                    user_id=user_id,
+                    course_id=course_id,
+                    is_embedded=True,
+                )
+
+    user = await get_current_user(session, authorization, x_user_id)
+    return KnowledgeGraphReadPrincipal(user_id=user.id)
+
+
+KnowledgeGraphReadPrincipalDep = Annotated[
+    KnowledgeGraphReadPrincipal,
+    Depends(get_knowledge_graph_read_principal),
+]
+
+
+def require_knowledge_graph_read_course(
+    principal: KnowledgeGraphReadPrincipal,
+    course_id: UUID,
+) -> None:
+    if principal.is_embedded and principal.course_id != course_id:
+        raise _knowledge_graph_embed_forbidden() from None
+
+
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
@@ -236,4 +304,19 @@ def _invalid_user_header() -> HTTPException:
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Missing or invalid X-User-Id",
         headers={"WWW-Authenticate": "X-User-Id"},
+    )
+
+
+def _invalid_knowledge_graph_embed_token() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid knowledge graph embed token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _knowledge_graph_embed_forbidden() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Knowledge graph access forbidden",
     )

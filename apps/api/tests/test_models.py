@@ -26,6 +26,7 @@ def test_core_tables_are_registered() -> None:
         "course_members",
         "courses",
         "knowledge_points",
+        "knowledge_graph_embed_sessions",
         "learning_events",
         "mastery_snapshots",
         "knowledge_chunks",

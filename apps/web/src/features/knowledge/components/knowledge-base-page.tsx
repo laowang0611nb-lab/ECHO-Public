@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KnowledgeGraphPreview } from "@/features/knowledge/components/knowledge-graph-preview";
+import { KnowledgeGraphEmbedContent } from "@/features/knowledge/graph-v2/knowledge-graph-embed";
 import { KnowledgeGraphView } from "@/features/knowledge/graph-v2/knowledge-graph-view";
 import { ExternalResourcesTab, QuestionItemsTab } from "@/features/knowledge/components/resource-management-tabs";
 import { ResourceKindIcon } from "@/features/knowledge/components/resource-kind-icon";
@@ -57,6 +58,24 @@ const tabs = [
 ] as const;
 
 export function KnowledgeBasePage({
+  initialCourseId,
+  initialTab,
+}: {
+  initialCourseId?: string;
+  initialTab: KnowledgeBaseTab;
+}) {
+  const searchParams = useSearchParams();
+  if (searchParams.get("embed") === "1") {
+    return initialCourseId ? (
+      <KnowledgeGraphEmbedContent courseId={initialCourseId} />
+    ) : (
+      <ErrorState description="缺少课程 ID，无法加载知识图谱。" title="知识图谱不可用" />
+    );
+  }
+  return <TeacherKnowledgeBasePage initialCourseId={initialCourseId} initialTab={initialTab} />;
+}
+
+function TeacherKnowledgeBasePage({
   initialCourseId,
   initialTab,
 }: {

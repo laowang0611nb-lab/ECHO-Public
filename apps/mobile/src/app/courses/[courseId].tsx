@@ -254,6 +254,37 @@ export default function CourseDetailScreen() {
                 {continueTarget ? "继续学习" : "暂无可用章节"}
               </Text>
             </Pressable>
+            <Pressable
+              accessibilityLabel="查看知识图谱"
+              accessibilityRole="button"
+              onPress={() =>
+                router.push({
+                  pathname: "/knowledge-graph",
+                  params: { courseId: course.id, courseName: course.name },
+                })
+              }
+              style={({ pressed }) => [
+                styles.graphButton,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.graphButtonIcon}>
+                <SymbolView
+                  name={{ android: "account_tree", web: "account_tree" }}
+                  size={18}
+                  tintColor={studentTheme.color.primary}
+                />
+              </View>
+              <View style={styles.graphButtonCopy}>
+                <Text style={styles.graphButtonTitle}>查看知识图谱</Text>
+                <Text style={styles.graphButtonText}>缩放、拖动并聚焦课程知识点关系</Text>
+              </View>
+              <SymbolView
+                name={{ android: "chevron_right", web: "chevron_right" }}
+                size={19}
+                tintColor={studentTheme.color.textSubtle}
+              />
+            </Pressable>
             {continueTarget ? (
               <Text style={styles.derivedHint}>
                 根据最近学习活动和章节顺序，为你推荐下一步。
@@ -717,6 +748,40 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 14,
     fontWeight: "800",
+  },
+  graphButton: {
+    alignItems: "center",
+    backgroundColor: studentTheme.color.primarySoft,
+    borderColor: studentTheme.color.primaryBorder,
+    borderRadius: studentTheme.radius.medium,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+    minHeight: 58,
+    paddingHorizontal: 12,
+  },
+  graphButtonIcon: {
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+    borderRadius: 11,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  graphButtonCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  graphButtonTitle: {
+    color: studentTheme.color.text,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  graphButtonText: {
+    color: studentTheme.color.textMuted,
+    fontSize: 10,
+    marginTop: 3,
   },
   derivedHint: {
     color: studentTheme.color.textSubtle,

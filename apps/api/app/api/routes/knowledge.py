@@ -3,7 +3,13 @@ from uuid import UUID
 from database.models.knowledge import Chapter
 from fastapi import APIRouter, HTTPException, status
 
-from app.api.dependencies import CurrentUser, DBSession, KnowledgeProviderDep
+from app.api.dependencies import (
+    CurrentUser,
+    DBSession,
+    KnowledgeGraphReadPrincipalDep,
+    KnowledgeProviderDep,
+    require_knowledge_graph_read_course,
+)
 from app.schemas.knowledge import (
     ChapterCreate,
     ChapterResponse,
@@ -176,11 +182,12 @@ async def generate_relations(
 @router.get("/courses/{course_id}/chapters", response_model=list[ChapterResponse])
 async def get_course_chapters(
     course_id: UUID,
-    current_user: CurrentUser,
+    read_principal: KnowledgeGraphReadPrincipalDep,
     session: DBSession,
 ) -> list[Chapter]:
     try:
-        return await list_course_chapters(session, course_id, current_user.id)
+        require_knowledge_graph_read_course(read_principal, course_id)
+        return await list_course_chapters(session, course_id, read_principal.user_id)
     except CourseNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

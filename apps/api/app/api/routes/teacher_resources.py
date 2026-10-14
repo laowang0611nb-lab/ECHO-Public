@@ -5,7 +5,13 @@ from database.models.resource import ExternalResourceStatus
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
-from app.api.dependencies import CurrentUser, DBSession, DocumentStorageDep
+from app.api.dependencies import (
+    CurrentUser,
+    DBSession,
+    DocumentStorageDep,
+    KnowledgeGraphReadPrincipalDep,
+    require_knowledge_graph_read_course,
+)
 from app.schemas.teacher_resources import (
     DocumentCitationPage,
     DocumentIndexStatusResponse,
@@ -492,16 +498,18 @@ async def permanently_delete_course_resource(
 )
 async def read_course_knowledge_graph(
     course_id: UUID,
-    current_user: CurrentUser,
+    read_principal: KnowledgeGraphReadPrincipalDep,
     session: DBSession,
     chapter_id: Annotated[UUID | None, Query(alias="chapterId")] = None,
     point_id: Annotated[UUID | None, Query(alias="pointId")] = None,
 ):
     try:
+        require_knowledge_graph_read_course(read_principal, course_id)
         return await get_knowledge_graph(
             session,
             course_id,
-            current_user.id,
+            read_principal.user_id,
+            allow_course_read=read_principal.is_embedded,
             chapter_id=chapter_id,
             point_id=point_id,
         )

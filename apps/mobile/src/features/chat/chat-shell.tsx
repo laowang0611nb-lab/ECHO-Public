@@ -531,7 +531,13 @@ export function NewContentButton({ onPress }: { onPress: () => void }) {
   );
 }
 
-export function ContextBanner({ label }: { label: string }) {
+export function ContextBanner({
+  label,
+  onRemove,
+}: {
+  label: string;
+  onRemove?: () => void;
+}) {
   return (
     <View style={styles.contextBanner}>
       <View style={styles.contextIcon}>
@@ -542,8 +548,26 @@ export function ContextBanner({ label }: { label: string }) {
         />
       </View>
       <Text numberOfLines={1} style={styles.contextText}>
-        正在学习：{label}
+        知识点：{label}
       </Text>
+      {onRemove ? (
+        <Pressable
+          accessibilityLabel="移除知识点上下文"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={onRemove}
+          style={({ pressed }) => [
+            styles.contextRemove,
+            pressed && styles.pressed,
+          ]}
+        >
+          <SymbolView
+            name={{ android: "close", web: "close" }}
+            size={15}
+            tintColor={studentTheme.color.primaryDark}
+          />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -1029,8 +1053,8 @@ const styles = StyleSheet.create({
   contextBanner: {
     alignItems: "center",
     backgroundColor: studentTheme.color.learningSoft,
-    borderBottomColor: studentTheme.color.learningBorder,
-    borderBottomWidth: 1,
+    borderTopColor: studentTheme.color.learningBorder,
+    borderTopWidth: 1,
     flexDirection: "row",
     gap: 7,
     minHeight: 36,
@@ -1049,6 +1073,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "700",
+  },
+  contextRemove: {
+    alignItems: "center",
+    borderRadius: 999,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
   },
   reconnectBanner: {
     alignItems: "center",

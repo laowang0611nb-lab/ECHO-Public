@@ -3,12 +3,13 @@
     "name": "ECHO",
     "slug": "echo-mobile",
     "version": "0.0.7",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "echo",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "requireFullScreen": true
     },
     "android": {
       "package": "com.echo.student",
@@ -62,6 +63,12 @@
           "photosPermission": "允许 ECHO 选择学习图片或视频。",
           "cameraPermission": "允许 ECHO 使用相机拍摄学习图片。",
           "microphonePermission": "允许 ECHO 使用麦克风录制学习语音。"
+        }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT_UP"
         }
       ]
     ],
