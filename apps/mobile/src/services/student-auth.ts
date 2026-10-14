@@ -22,6 +22,12 @@ export interface StudentLoginInput {
   password: string;
 }
 
+export interface StudentSmsLoginInput {
+  phone: string;
+  verificationToken: string;
+  deviceName?: string | null;
+}
+
 export interface StudentAuthResult {
   user: User;
   session: AuthSessionResponse | null;
@@ -38,6 +44,7 @@ export interface StudentRegisterInput {
 
 export interface StudentAuthService {
   login(input: StudentLoginInput): Promise<StudentAuthResult>;
+  loginWithSms(input: StudentSmsLoginInput): Promise<StudentAuthResult>;
   sendSmsCode(phone: string): Promise<SmsSendResponse>;
   verifySmsCode(
     phone: string,
@@ -92,6 +99,24 @@ function authIdentifier(account: string): { email: string } | { phone: string } 
   const phone = normalizePhone(normalized);
   if (isMainlandPhone(phone)) return { phone };
   throw new AuthInputError("请输入已注册的手机号或邮箱账号。");
+}
+
+async function loginStudentWithSms(
+  input: StudentSmsLoginInput,
+): Promise<StudentAuthResult> {
+  const phone = normalizePhone(input.phone);
+  if (!isMainlandPhone(phone)) {
+    throw new AuthInputError("请输入正确的 11 位手机号。");
+  }
+  if (!input.verificationToken.trim()) {
+    throw new AuthInputError("请先获取并验证短信验证码。");
+  }
+  const session = await apiClient.loginWithSms({
+    phone,
+    verification_token: input.verificationToken.trim(),
+    device_name: input.deviceName || "ECHO Android",
+  });
+  return { user: session.user, session };
 }
 
 function errorDetail(error: ApiClientError): {
@@ -195,6 +220,9 @@ const developmentAuthService: StudentAuthService = {
     };
     return { user: await apiClient.login(payload), session: null };
   },
+  async loginWithSms(input) {
+    return loginStudentWithSms(input);
+  },
   async sendSmsCode(phone) {
     return apiClient.sendSmsCode({ phone: normalizePhone(phone) });
   },
@@ -231,6 +259,9 @@ const formalAuthService: StudentAuthService = {
       device_name: "ECHO Android",
     });
     return { user: session.user, session };
+  },
+  async loginWithSms(input) {
+    return loginStudentWithSms(input);
   },
   async sendSmsCode(phone) {
     const normalized = normalizePhone(phone);

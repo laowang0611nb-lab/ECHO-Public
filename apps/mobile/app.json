@@ -66,6 +66,13 @@
         }
       ],
       [
+        "expo-camera",
+        {
+          "cameraPermission": "允许 ECHO 使用相机扫描课程二维码。",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-screen-orientation",
         {
           "initialOrientation": "PORTRAIT_UP"

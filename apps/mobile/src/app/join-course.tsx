@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from "expo-router";
+import { SymbolView } from "expo-symbols";
 import { useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { CourseQrScanner } from "@/features/courses/course-qr-scanner";
 import { studentReadableAuthError } from "@/services/student-auth";
 import {
   clearPendingCourseCode,
@@ -29,6 +31,7 @@ export default function JoinCourseScreen() {
   const initialCode = Array.isArray(params.code) ? params.code[0] : params.code;
   const [code, setCode] = useState(initialCode?.toUpperCase() ?? "");
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [scannerVisible, setScannerVisible] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +57,13 @@ export default function JoinCourseScreen() {
     } finally {
       setPending(false);
     }
+  }
+
+  function handleScannedCode(scannedCode: string) {
+    setCode(scannedCode);
+    setScannerVisible(false);
+    setError(null);
+    setConfirmVisible(true);
   }
 
   return (
@@ -82,7 +92,7 @@ export default function JoinCourseScreen() {
             <Text style={styles.eyebrow}>课程访问</Text>
             <Text style={styles.title}>加入你的课程</Text>
             <Text style={styles.description}>
-              输入教师提供的课程码，确认后进入课程学习空间。
+              输入教师提供的 8 位课程码，或扫描课程二维码，确认后进入课程学习空间。
             </Text>
           </View>
 
@@ -115,11 +125,23 @@ export default function JoinCourseScreen() {
               <Text style={styles.primaryButtonText}>下一步</Text>
             </Pressable>
 
-            <Pressable disabled style={[styles.scanButton, styles.disabled]}>
-              <Text style={styles.scanIcon}>▣</Text>
-              <View>
+            <Pressable
+              accessibilityLabel="扫码加入课程"
+              accessibilityRole="button"
+              onPress={() => {
+                setError(null);
+                setScannerVisible(true);
+              }}
+              style={({ pressed }) => [styles.scanButton, pressed && styles.pressed]}
+            >
+              <SymbolView
+                name={{ android: "qr_code_scanner", web: "qr_code_scanner" }}
+                size={25}
+                tintColor={studentTheme.color.primary}
+              />
+              <View style={styles.scanCopy}>
                 <Text style={styles.scanTitle}>扫码加入课程</Text>
-                <Text style={styles.scanDescription}>增强版开放</Text>
+                <Text style={styles.scanDescription}>扫描教师提供的课程二维码</Text>
               </View>
             </Pressable>
 
@@ -165,6 +187,13 @@ export default function JoinCourseScreen() {
           </View>
         </View>
       </Modal>
+
+      {scannerVisible ? (
+        <CourseQrScanner
+          onClose={() => setScannerVisible(false)}
+          onCodeScanned={handleScannedCode}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -288,9 +317,8 @@ const styles = StyleSheet.create({
     minHeight: 68,
     paddingHorizontal: 14,
   },
-  scanIcon: {
-    color: studentTheme.color.primary,
-    fontSize: 24,
+  scanCopy: {
+    flex: 1,
   },
   scanTitle: {
     color: studentTheme.color.text,
@@ -301,6 +329,9 @@ const styles = StyleSheet.create({
     color: studentTheme.color.textMuted,
     fontSize: 11,
     marginTop: 2,
+  },
+  pressed: {
+    opacity: 0.72,
   },
   errorBanner: {
     backgroundColor: "#fff5f4",
