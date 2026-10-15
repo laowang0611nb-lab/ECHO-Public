@@ -144,6 +144,20 @@ function plainDetailMessage(error: ApiClientError): string | null {
   return plainDetailMessages[detail] ?? null;
 }
 
+function validationField(error: ApiClientError): string | null {
+  const detail = error.detail;
+  if (!Array.isArray(detail) || detail.length === 0) return null;
+  const first = detail[0];
+  if (!first || typeof first !== "object") return null;
+  const loc = (first as { loc?: unknown }).loc;
+  if (!Array.isArray(loc)) return null;
+  for (let index = loc.length - 1; index >= 0; index -= 1) {
+    const entry = loc[index];
+    if (typeof entry === "string") return entry;
+  }
+  return null;
+}
+
 export function studentReadableAuthError(error: unknown): string {
   if (error instanceof AuthInputError) return error.message;
   if (error instanceof BackendCapabilityMissingError) return error.capability;
@@ -195,6 +209,10 @@ export function studentReadableAuthError(error: unknown): string {
       return detail?.message || "短信服务暂时不可用，请稍后重试。";
     }
     if (error.status === 400 || error.status === 422) {
+      const field = validationField(error);
+      if (field === "email") return "邮箱格式不正确，请检查后重试。";
+      if (field === "phone") return "手机号格式不正确，请检查后重试。";
+      if (field === "password") return "密码格式不正确，请检查后重试。";
       return detail?.message || "输入内容不正确，请检查后重试。";
     }
     if (error.status === 404) {
