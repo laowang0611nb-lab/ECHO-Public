@@ -136,6 +136,9 @@ const plainDetailMessages: Record<string, string> = {
   "Current password is invalid": "当前密码不正确，请重新输入。",
   "Password credentials are not configured for this account":
     "该账号尚未设置密码，请先通过忘记密码设置密码。",
+  "Course not found": "课程码不存在，请确认后重试。",
+  "Course is not published": "课程尚未发布，请联系教师发布后再加入。",
+  "Only students can join courses by code": "只有学生账号可以加入课程。",
 };
 
 function plainDetailMessage(error: ApiClientError): string | null {

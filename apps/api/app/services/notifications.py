@@ -13,6 +13,7 @@ from database.models.notification import (
     NotificationType,
 )
 from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -155,6 +156,19 @@ async def mark_all_notifications_read(
     return max(0, result.rowcount or 0)
 
 
+async def _find_notification_by_dedupe_key(
+    session: AsyncSession,
+    user_id: UUID,
+    dedupe_key: str,
+) -> Notification | None:
+    return await session.scalar(
+        select(Notification).where(
+            Notification.user_id == user_id,
+            Notification.dedupe_key == dedupe_key,
+        )
+    )
+
+
 async def create_notification(
     session: AsyncSession,
     *,
@@ -183,6 +197,21 @@ async def create_notification(
         dedupe_key=dedupe_key,
         created_at=created_at or datetime.now(UTC),
     )
-    session.add(notification)
-    await session.flush()
+    if dedupe_key is None:
+        session.add(notification)
+        await session.flush()
+        return notification
+
+    existing = await _find_notification_by_dedupe_key(session, user_id, dedupe_key)
+    if existing is not None:
+        return existing
+    try:
+        async with session.begin_nested():
+            session.add(notification)
+            await session.flush()
+    except IntegrityError:
+        existing = await _find_notification_by_dedupe_key(session, user_id, dedupe_key)
+        if existing is None:
+            raise
+        return existing
     return notification

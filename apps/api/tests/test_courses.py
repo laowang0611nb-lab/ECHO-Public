@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 from database.models.course import CourseMember
 from database.models.user import UserRole
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
@@ -196,6 +196,52 @@ async def test_student_joins_course_by_code_and_duplicate_is_idempotent(
     assert second.status_code == 200
     assert first.json()["id"] == created.json()["id"]
     assert [course["id"] for course in courses.json()] == [created.json()["id"]]
+
+
+async def test_student_rejoin_after_membership_removal_succeeds(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    teacher = await login(client, "rejoin-teacher@example.com", "teacher")
+    student = await login(client, "rejoin-student@example.com", "student")
+    created = await client.post(
+        "/api/v1/courses",
+        headers=auth_headers(teacher),
+        json={"name": "Rejoin Course"},
+    )
+    await client.post(
+        f"/api/v1/courses/{created.json()['id']}/publish",
+        headers=auth_headers(teacher),
+    )
+    code = created.json()["code"]
+
+    first = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": code},
+    )
+    assert first.status_code == 200
+
+    # Teacher removes the student before they join again; the original join
+    # notification stays behind, so the second join must not fail on the
+    # notification dedupe key.
+    async with session_factory() as session:
+        await session.execute(
+            delete(CourseMember).where(
+                CourseMember.course_id == UUID(created.json()["id"]),
+                CourseMember.user_id == UUID(student["id"]),
+            )
+        )
+        await session.commit()
+
+    second = await client.post(
+        "/api/v1/courses/join",
+        headers=auth_headers(student),
+        json={"code": code},
+    )
+
+    assert second.status_code == 200
+    assert second.json()["id"] == created.json()["id"]
 
 
 async def test_teacher_cannot_join_course_by_code(client: AsyncClient) -> None:
