@@ -43,7 +43,10 @@ export default function ForgotPasswordScreen() {
     setSending(true);
     setError(null);
     try {
-      const response = await studentAuthService.sendSmsCode(normalized);
+      const response = await studentAuthService.sendSmsCode(
+        normalized,
+        "password_reset",
+      );
       setCooldown(response.cooldown_seconds);
       setFieldError(null);
     } catch (requestError) {

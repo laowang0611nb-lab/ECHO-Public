@@ -13,6 +13,7 @@ import { mapAuthError } from "@/features/auth/auth-error";
 import { AuthPanel } from "@/features/auth/components/auth-panel";
 import { PhoneVerificationFields } from "@/features/auth/components/phone-verification-fields";
 import { useSmsCodeFlow } from "@/features/auth/use-sms-code-flow";
+import { publicRegistrationEnabled } from "@/lib/public-config";
 import { isValidMainlandPhone, normalizeMainlandPhone } from "@/features/auth/validation";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
@@ -155,7 +156,7 @@ export function LoginScreen() {
           </form>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
             <Link className="font-medium text-primary hover:underline" href="/forgot-password">忘记密码</Link>
-            <Link className="font-medium text-primary hover:underline" href="/register">注册教师账号</Link>
+            {publicRegistrationEnabled ? <Link className="font-medium text-primary hover:underline" href="/register">注册教师账号</Link> : <span className="text-xs text-muted-foreground">公开注册已关闭</span>}
           </div>
         </TabsContent>
 

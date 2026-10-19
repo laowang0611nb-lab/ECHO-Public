@@ -29,6 +29,10 @@ def enable_development_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "asr_remote_enabled", False)
     monkeypatch.setattr(settings, "chat_media_upload_enabled", False)
     monkeypatch.setattr(settings, "teaching_flow_llm_classifier_enabled", False)
+    monkeypatch.setattr(settings, "public_registration_enabled", True)
+    monkeypatch.setattr(settings, "sms_send_phone_limit_per_hour", 1000)
+    monkeypatch.setattr(settings, "sms_send_ip_limit_per_hour", 1000)
+    monkeypatch.setattr(settings, "chat_rate_limit_per_minute", 1000)
 
 
 @pytest_asyncio.fixture

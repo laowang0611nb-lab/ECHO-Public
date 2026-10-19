@@ -2,7 +2,7 @@
   "expo": {
     "name": "ECHO",
     "slug": "echo-mobile",
-    "version": "0.0.8",
+    "version": "0.0.9",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "echo",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.echo.student",
-      "versionCode": 3,
+      "versionCode": 4,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -46,7 +46,7 @@
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": false
           }
         }
       ],

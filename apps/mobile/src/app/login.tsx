@@ -26,6 +26,9 @@ import {
 import { loadPendingCourseCode } from "@/services/pending-course-storage";
 import { useStudentSession } from "@/providers/student-session-provider";
 
+const PUBLIC_REGISTRATION_ENABLED =
+  process.env.EXPO_PUBLIC_PUBLIC_REGISTRATION_ENABLED !== "false";
+
 type LoginMode = "password" | "sms";
 
 export default function LoginScreen() {
@@ -104,7 +107,10 @@ export default function LoginScreen() {
     setError(null);
     setPhoneError(null);
     try {
-      const response = await studentAuthService.sendSmsCode(normalizedPhone);
+      const response = await studentAuthService.sendSmsCode(
+        normalizedPhone,
+        "login",
+      );
       setPhone(normalizedPhone);
       setCooldown(Math.max(1, response.cooldown_seconds || 60));
       setCode("");
@@ -338,11 +344,13 @@ export default function LoginScreen() {
         onPress={() => router.push("/forgot-password")}
         prompt=""
       />
-      <AuthLink
-        action="注册账号"
-        onPress={() => router.push("/register")}
-        prompt="还没有账号？"
-      />
+      {PUBLIC_REGISTRATION_ENABLED ? (
+        <AuthLink
+          action="注册账号"
+          onPress={() => router.push("/register")}
+          prompt="还没有账号？"
+        />
+      ) : null}
       <AuthLink
         action="网络与连接"
         onPress={() => router.push("/network-settings" as never)}

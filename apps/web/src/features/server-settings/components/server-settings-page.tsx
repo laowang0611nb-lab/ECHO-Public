@@ -63,7 +63,7 @@ export function ServerSettingsPage({ initialTab }: { initialTab: ServerTab }) {
           </div>
         }
         breadcrumbs={[{ label: "我的", href: "/me" }, { label: "系统设置", href: "/me?tab=system" }, { label: "服务器设置" }]}
-        description="管理 ECHO 本地服务、数据库、AI 接口与局域网访问状态，确保演示环境稳定运行。"
+        description={system.deployment_mode === "public_demo" ? "管理 ECHO 公网演示服务、数据库、AI 接口与 HTTPS 访问状态。" : "管理 ECHO 本地服务、数据库、AI 接口与局域网访问状态，确保演示环境稳定运行。"}
         title="服务器设置"
       />
 
@@ -103,6 +103,7 @@ export function ServerSettingsPage({ initialTab }: { initialTab: ServerTab }) {
 }
 
 function ServicesTab({ system, healthLatency }: { system: SystemStatusResponse; healthLatency?: number }) {
+  const publicMode = system.deployment_mode === "public_demo";
   const services = [
     { icon: Server, name: "后端服务（FastAPI）", state: "healthy" as ServiceState, detail: `${apiBaseUrl} · 延迟 ${healthLatency ?? "-"} ms`, message: `运行版本 ${system.version}` },
     { icon: Globe2, name: "教师端 Web", state: "healthy" as ServiceState, detail: typeof window === "undefined" ? "本机浏览器" : window.location.origin, message: "当前页面已加载" },
@@ -137,7 +138,7 @@ function ServicesTab({ system, healthLatency }: { system: SystemStatusResponse; 
             <CheckLine label="pgvector" state={system.vector.status} />
             <CheckLine label="Qwen 配置" state={system.ai_provider.status} />
             <CheckLine label="文件服务" state={system.storage.status} />
-            <CheckLine label="局域网地址" state={system.lan.student_api_base_url ? "healthy" : "warning"} />
+            <CheckLine label={publicMode ? "公网 HTTPS 地址" : "局域网地址"} state={system.lan.student_api_base_url ? "healthy" : "warning"} />
           </CardContent>
         </Card>
         <Card className="gap-4 py-5">
@@ -151,7 +152,7 @@ function ServicesTab({ system, healthLatency }: { system: SystemStatusResponse; 
             <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">数据库延迟</span><span className="font-medium tabular-nums">{system.database.latency_ms} ms</span></div>
             <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">向量状态</span><StatusBadge tone={serviceStateTone(system.vector.status)}>{serviceStateLabel(system.vector.status)}</StatusBadge></div>
             <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">文件目录</span><span className="font-medium">{system.storage.writable ? "可写" : "需要检查"}</span></div>
-            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">局域网候选地址</span><span className="font-medium tabular-nums">{system.lan.candidate_lan_ips.length} 个</span></div>
+            <div className="flex items-center justify-between gap-3"><span className="text-muted-foreground">{publicMode ? "部署模式" : "局域网候选地址"}</span><span className="font-medium tabular-nums">{publicMode ? "公网 HTTPS" : `${system.lan.candidate_lan_ips.length} 个`}</span></div>
             <p className="rounded-lg border border-border bg-muted/25 px-3 py-2 text-xs leading-5">CPU、内存、磁盘容量和日志流仍需要独立监控 Contract；当前页面不提供旋钮或假图表。</p>
           </CardContent>
         </Card>
@@ -162,6 +163,7 @@ function ServicesTab({ system, healthLatency }: { system: SystemStatusResponse; 
 
 function NetworkTab({ system }: { system: SystemStatusResponse }) {
   const [copied, setCopied] = useState<string | null>(null);
+  const publicMode = system.deployment_mode === "public_demo";
   const studentUrl = system.lan.student_api_base_url;
   const localUrl = system.lan.api_base_url;
   const lanUrls = system.lan.candidate_lan_ips.map((ip) => `http://${ip}:${system.lan.api_port}`);
@@ -175,26 +177,26 @@ function NetworkTab({ system }: { system: SystemStatusResponse }) {
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-5">
         <Card className="gap-4 py-5">
-          <CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><Wifi className="size-4 text-primary" />局域网与本机地址</CardTitle></CardHeader>
+          <CardHeader className="px-5"><CardTitle className="flex items-center gap-2"><Wifi className="size-4 text-primary" />{publicMode ? "公网访问地址" : "局域网与本机地址"}</CardTitle></CardHeader>
           <CardContent className="space-y-3 px-5">
             <AddressRow label="API Base URL" value={apiBaseUrl} onCopy={copy} />
-            <AddressRow label="后端请求地址" value={localUrl} onCopy={copy} />
-            <AddressRow label="局域网候选地址" value={lanUrls.length ? lanUrls.join(" · ") : "未检测到"} onCopy={lanUrls[0] ? copy : undefined} />
+            <AddressRow label={publicMode ? "教师 Web 地址" : "后端请求地址"} value={publicMode ? system.teacher_web_base_url : localUrl} onCopy={copy} />
+            <AddressRow label={publicMode ? "公网 API" : "局域网候选地址"} value={publicMode ? system.public_base_url : lanUrls.length ? lanUrls.join(" · ") : "未检测到"} onCopy={publicMode || lanUrls[0] ? copy : undefined} />
             <AddressRow label="Android 学生端连接地址" value={studentUrl ?? "未检测到"} onCopy={studentUrl ? copy : undefined} />
             <p className="text-xs leading-5 text-muted-foreground">{system.lan.message}</p>
           </CardContent>
         </Card>
 
         <Card className="gap-4 py-5">
-          <CardHeader className="px-5"><CardTitle>学生端连接步骤</CardTitle></CardHeader>
+          <CardHeader className="px-5"><CardTitle>{publicMode ? "公网演示配置" : "学生端连接步骤"}</CardTitle></CardHeader>
           <CardContent className="grid gap-3 px-5 md:grid-cols-4">
-            {["教师电脑开启热点", "Android 连接热点", "填写或扫描 API 地址", "测试连接后进入 ECHO"].map((step, index) => <div className="rounded-lg border border-border px-3 py-3" key={step}><p className="text-xs font-semibold text-primary">0{index + 1}</p><p className="mt-2 text-sm">{step}</p></div>)}
+            {(publicMode ? ["客户端使用 HTTPS API", "学生账号密码登录", "扫描课程二维码加入", "通过公网域名访问 ECHO"] : ["教师电脑开启热点", "Android 连接热点", "填写或扫描 API 地址", "测试连接后进入 ECHO"]).map((step, index) => <div className="rounded-lg border border-border px-3 py-3" key={step}><p className="text-xs font-semibold text-primary">0{index + 1}</p><p className="mt-2 text-sm">{step}</p></div>)}
           </CardContent>
         </Card>
       </div>
 
       <Card className="gap-4 py-5">
-        <CardHeader className="px-5"><CardTitle>连接二维码</CardTitle><p className="text-xs text-muted-foreground">复用现有二维码能力，编码真实学生端 API 地址。</p></CardHeader>
+        <CardHeader className="px-5"><CardTitle>连接二维码</CardTitle><p className="text-xs text-muted-foreground">{publicMode ? "编码公网 HTTPS 学生端 API 地址。" : "复用现有二维码能力，编码真实学生端 API 地址。"}</p></CardHeader>
         <CardContent className="flex flex-col items-center gap-4 px-5">
           {studentUrl ? <div className="rounded-xl bg-white p-4 ring-1 ring-border"><QRCodeSVG size={220} value={studentUrl} /></div> : <div className="flex min-h-56 w-full items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground">未检测到可用局域网地址</div>}
           {studentUrl ? <Button onClick={() => void copy(studentUrl)} type="button"><Copy data-icon="inline-start" />复制学生端地址</Button> : null}

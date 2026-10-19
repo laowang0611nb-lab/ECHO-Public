@@ -22,6 +22,7 @@ from app.services.document import (
     update_document_metadata,
     upload_course_document,
 )
+from app.services.resource_limits import document_job_limiter
 from app.services.storage import DocumentTooLargeError, UnsupportedDocumentTypeError
 
 router = APIRouter(tags=["documents"])
@@ -131,7 +132,8 @@ async def parse_uploaded_document(
     storage: DocumentStorageDep,
 ) -> Document:
     try:
-        return await parse_document(session, storage, document_id, current_user.id)
+        async with document_job_limiter.slot():
+            return await parse_document(session, storage, document_id, current_user.id)
     except DocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

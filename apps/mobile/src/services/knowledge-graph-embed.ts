@@ -37,6 +37,9 @@ export function resolveTeacherWebBaseUrl(): string {
   if (configured) return normalizeTeacherWebBaseUrl(configured);
 
   const apiBaseUrl = new URL(getApiBaseUrlSync());
+  if (apiBaseUrl.protocol === "https:") {
+    return apiBaseUrl.origin;
+  }
   apiBaseUrl.port =
     process.env.EXPO_PUBLIC_TEACHER_WEB_PORT?.trim() ||
     DEFAULT_TEACHER_WEB_PORT;

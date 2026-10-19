@@ -49,6 +49,10 @@ from app.services.chat_attachments import (
 )
 from app.services.chat_media import video_media_available
 from app.services.course import CourseMembershipRequiredError, CourseNotFoundError
+from app.services.resource_limits import (
+    RateLimitExceededError,
+    enforce_chat_rate_limit,
+)
 
 router = APIRouter(tags=["chat"])
 
@@ -157,6 +161,15 @@ async def upload_chat_attachment_endpoint(
     session: DBSession,
     storage: ChatAttachmentStorageDep,
 ) -> ChatAttachmentUploadResponse:
+    if kind == ChatAttachmentKind.VIDEO and not settings.chat_video_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "CHAT_VIDEO_DISABLED",
+                "message": "本轮公网比赛演示不开放视频输入",
+                "kind": kind.value,
+            },
+        )
     try:
         attachment = await upload_chat_attachment(
             session,
@@ -375,6 +388,17 @@ async def stream_message(
     attachment_storage: ChatAttachmentStorageDep,
 ):
     try:
+        enforce_chat_rate_limit(str(current_user.id))
+    except RateLimitExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "CHAT_RATE_LIMITED",
+                "message": "聊天请求过于频繁，请稍后再试",
+            },
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+    try:
         await list_messages(session, conversation_id, current_user.id)
     except ConversationNotFoundError as exc:
         raise HTTPException(
@@ -423,6 +447,17 @@ async def continue_message(
     session: DBSession,
     chat_provider: ChatProviderDep,
 ):
+    try:
+        enforce_chat_rate_limit(str(current_user.id))
+    except RateLimitExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "CHAT_RATE_LIMITED",
+                "message": "聊天请求过于频繁，请稍后再试",
+            },
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     try:
         await list_messages(session, conversation_id, current_user.id)
     except ConversationNotFoundError as exc:
