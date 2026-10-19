@@ -12,6 +12,7 @@ from app.services.knowledge import (
     KnowledgeDocumentNotReadyError,
     KnowledgeGenerationForbiddenError,
 )
+from app.services.resource_limits import document_job_limiter
 from app.services.search import embed_document_chunks, search_course_chunks
 
 router = APIRouter(tags=["search"])
@@ -25,13 +26,14 @@ async def create_document_embeddings(
     provider: EmbeddingProviderDep,
 ) -> EmbeddingResponse:
     try:
-        count = await embed_document_chunks(
-            session,
-            provider,
-            document_id,
-            current_user.id,
-            batch_size=settings.embedding_batch_size,
-        )
+        async with document_job_limiter.slot():
+            count = await embed_document_chunks(
+                session,
+                provider,
+                document_id,
+                current_user.id,
+                batch_size=settings.embedding_batch_size,
+            )
         return EmbeddingResponse(document_id=document_id, embedded_chunks=count)
     except KnowledgeDocumentNotFoundError as exc:
         raise HTTPException(

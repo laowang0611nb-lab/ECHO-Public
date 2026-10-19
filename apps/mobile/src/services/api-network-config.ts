@@ -30,7 +30,7 @@ export function normalizeApiBaseUrl(value: string): string {
     throw new Error("服务器地址仅支持 HTTP 或 HTTPS。");
   }
   if (!ALLOW_INSECURE_API_OVERRIDE && parsed.protocol !== "https:") {
-    throw new Error("正式版只允许使用 HTTPS 服务器地址。");
+    throw new Error("正式比赛版只允许使用 HTTPS 服务器地址。");
   }
   if (!parsed.hostname || parsed.hostname === "0.0.0.0") {
     throw new Error("请输入电脑可被手机访问的地址。");

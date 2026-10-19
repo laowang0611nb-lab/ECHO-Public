@@ -14,19 +14,29 @@ class Settings(BaseSettings):
     app_name: str = "ECHO API"
     app_version: str = "0.0.264"
     environment: Literal["development", "test", "production"] = "development"
+    deployment_mode: Literal["local", "public_demo"] = "local"
+    public_base_url: str = "http://127.0.0.1:8000"
+    teacher_web_base_url: str = "http://127.0.0.1:3000"
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+asyncpg://echo:echo@localhost:5432/echo"
     document_storage_root: Path = PROJECT_ROOT / "tmp" / "uploads"
     chat_attachment_storage_root: Path = PROJECT_ROOT / "tmp" / "chat_attachments"
     avatar_storage_root: Path = PROJECT_ROOT / "tmp" / "avatars"
     development_auth_enabled: bool = False
+    public_registration_enabled: bool = True
     business_timezone: str = "Asia/Shanghai"
     retrieval_max_distance: float = 0.65
     max_upload_bytes: int = 20 * 1024 * 1024
     chat_image_max_upload_bytes: int = 10 * 1024 * 1024
     chat_audio_max_upload_bytes: int = 20 * 1024 * 1024
     chat_video_max_upload_bytes: int = 50 * 1024 * 1024
+    chat_video_enabled: bool = True
     chat_attachment_expiry_hours: int = 24
+    chat_rate_limit_per_minute: int = 30
+    sms_send_phone_limit_per_hour: int = 5
+    sms_send_ip_limit_per_hour: int = 20
+    document_processing_max_concurrency: int = 1
+    analysis_max_concurrency: int = 1
     asr_enabled: bool = False
     asr_model: str = "small"
     asr_device: str = "cpu"
@@ -141,6 +151,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
+        "https://example.com",
     ]
 
     model_config = SettingsConfigDict(
@@ -180,6 +191,14 @@ class Settings(BaseSettings):
             raise ValueError("aliyun_pnvs_timeout_seconds must be between 1 and 60")
         return value
 
+    @field_validator("public_base_url", "teacher_web_base_url")
+    @classmethod
+    def normalize_public_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("public URLs must start with http:// or https://")
+        return normalized
+
     @field_validator(
         "document_storage_root",
         "avatar_storage_root",
@@ -201,6 +220,11 @@ class Settings(BaseSettings):
         "chat_audio_max_upload_bytes",
         "chat_video_max_upload_bytes",
         "chat_attachment_expiry_hours",
+        "chat_rate_limit_per_minute",
+        "sms_send_phone_limit_per_hour",
+        "sms_send_ip_limit_per_hour",
+        "document_processing_max_concurrency",
+        "analysis_max_concurrency",
         "asr_beam_size",
         "analysis_progress_heartbeat_seconds",
         "chat_video_normalization_fps",

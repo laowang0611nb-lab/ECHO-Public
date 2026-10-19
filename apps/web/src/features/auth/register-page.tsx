@@ -12,6 +12,7 @@ import { AuthPanel } from "@/features/auth/components/auth-panel";
 import { PhoneVerificationFields } from "@/features/auth/components/phone-verification-fields";
 import { passwordValidationMessage } from "@/features/auth/validation";
 import { useSmsCodeFlow } from "@/features/auth/use-sms-code-flow";
+import { publicRegistrationEnabled } from "@/lib/public-config";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 export function RegisterPage() {
@@ -91,6 +92,22 @@ export function RegisterPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (!publicRegistrationEnabled) {
+    return (
+      <AuthPanel
+        description="比赛演示版只开放预建教师和学生账号，公开注册已在服务端关闭。"
+        title="公开注册已关闭"
+      >
+        <div className="space-y-4 text-sm leading-6 text-muted-foreground">
+          <p>请使用比赛提供的教师账号登录。若账号无法使用，请联系演示管理员。</p>
+          <Link className="font-medium text-primary hover:underline" href="/login">
+            返回登录
+          </Link>
+        </div>
+      </AuthPanel>
+    );
   }
 
   return (

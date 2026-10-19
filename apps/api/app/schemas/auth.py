@@ -123,6 +123,7 @@ class AvatarResponse(BaseModel):
 
 class SmsSendRequest(BaseModel):
     phone: str = Field(min_length=11, max_length=11, pattern=r"^1[3-9]\d{9}$")
+    purpose: PhoneVerificationPurpose = "login"
 
     @field_validator("phone", mode="before")
     @classmethod

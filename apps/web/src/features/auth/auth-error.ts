@@ -24,6 +24,9 @@ export function mapAuthError(error: unknown): string {
     if (code === "AUTH_ACCOUNT_LOCKED" || error.status === 423) {
       return "连续登录失败次数过多，账号已锁定 15 分钟。";
     }
+    if (code === "AUTH_REGISTRATION_DISABLED") {
+      return "公开注册已关闭，请使用预建演示账号登录。";
+    }
     if (code === "AUTH_ACCOUNT_DISABLED" || error.status === 403) {
       return "当前账号已停用，请联系管理员。";
     }

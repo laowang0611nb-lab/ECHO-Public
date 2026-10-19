@@ -24,6 +24,9 @@ export function mapSmsError(error: unknown): string {
     if (code === "SMS_TOO_FREQUENT" || error.status === 429) {
       return "操作过于频繁，请稍后再试。";
     }
+    if (code === "AUTH_REGISTRATION_DISABLED") {
+      return "公开注册已关闭，请使用预建演示账号登录。";
+    }
     if (code === "SMS_PROVIDER_NOT_CONFIGURED") {
       return "短信服务尚未配置，请联系管理员。";
     }

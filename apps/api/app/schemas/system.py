@@ -61,6 +61,10 @@ class SystemStatusResponse(BaseModel):
     service: str
     version: str
     environment: str
+    deployment_mode: Literal["local", "public_demo"]
+    public_base_url: str
+    teacher_web_base_url: str
+    public_registration_enabled: bool
     database: DatabaseStatus
     vector: VectorStatus
     ai_provider: AIProviderStatus
