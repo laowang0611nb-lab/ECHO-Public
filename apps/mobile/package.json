@@ -1,7 +1,7 @@
 {
   "name": "@echo/mobile",
   "main": "expo-router/entry",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "dependencies": {
     "@echo/api-client": "workspace:*",
     "@echo/design-tokens": "workspace:*",
@@ -54,6 +54,7 @@
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
+    "android:release:build": "node ./scripts/build-android-release.mjs",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
