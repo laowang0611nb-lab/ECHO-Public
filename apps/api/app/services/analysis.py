@@ -66,6 +66,7 @@ from app.services.chat_provider import (
     ChatProviderError,
 )
 from app.services.plan_resources import list_course_students, load_course_students
+from app.services.resource_limits import analysis_job_limiter
 from app.services.teacher_access import (
     TeacherContentNotFoundError,
     decode_cursor,
@@ -260,14 +261,15 @@ async def _create_initial_analysis_unlocked(
             raise AIAnalysisConflictError("Analysis scheduler is unavailable")
         await scheduler.start(analysis.id)
         return _analysis_response(analysis)
-    return await _execute_analysis(
-        session,
-        provider,
-        analysis,
-        point,
-        students,
-        requester_id,
-    )
+    async with analysis_job_limiter.slot():
+        return await _execute_analysis(
+            session,
+            provider,
+            analysis,
+            point,
+            students,
+            requester_id,
+        )
 
 
 async def reanalyze(
@@ -360,15 +362,16 @@ async def _reanalyze_unlocked(
             raise AIAnalysisConflictError("Analysis scheduler is unavailable")
         await scheduler.start(analysis.id)
         return _analysis_response(analysis)
-    return await _execute_analysis(
-        session,
-        provider,
-        analysis,
-        point,
-        students,
-        requester_id,
-        previous=previous,
-    )
+    async with analysis_job_limiter.slot():
+        return await _execute_analysis(
+            session,
+            provider,
+            analysis,
+            point,
+            students,
+            requester_id,
+            previous=previous,
+        )
 
 
 async def get_analysis(

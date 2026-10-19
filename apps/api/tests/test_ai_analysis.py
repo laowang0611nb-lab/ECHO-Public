@@ -1266,6 +1266,83 @@ async def test_analysis_excludes_chunks_from_soft_deleted_chapter(
     )
 
 
+async def test_analysis_scheduler_limits_concurrent_execution(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    chat_provider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import analysis_tasks as analysis_tasks_module
+    from app.services.resource_limits import EventLoopJobSlotLimiter
+
+    monkeypatch.setattr(
+        analysis_tasks_module,
+        "analysis_job_limiter",
+        getattr(analysis_tasks_module, "analysis_job_limiter", EventLoopJobSlotLimiter(1)),
+        raising=False,
+    )
+
+    teacher = await login(client, "concurrency-teacher@example.com", "teacher")
+    course = await create_course_with_students(client, teacher, [])
+    now = datetime.now(UTC)
+    analysis_ids = [uuid4(), uuid4()]
+    async with session_factory() as session:
+        for analysis_id in analysis_ids:
+            session.add(
+                AIAnalysis(
+                    id=analysis_id,
+                    course_id=UUID(course["id"]),
+                    analysis_type=AIAnalysisType.INITIAL,
+                    scope=AIAnalysisScope.WHOLE_CLASS,
+                    student_ids=[],
+                    time_range_days=28,
+                    status=AIAnalysisStatus.ANALYZING,
+                    stage=AIAnalysisStage.QUERYING_EVIDENCE,
+                    progress_percent=30,
+                    progress_message="查询关联学习证据",
+                    heartbeat_at=now,
+                    created_by=UUID(teacher["id"]),
+                    started_at=now,
+                )
+            )
+        await session.commit()
+
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    concurrent = 0
+    peak = 0
+
+    async def fake_execute_analysis_record(session, provider, analysis_id) -> None:
+        nonlocal concurrent, peak
+        concurrent += 1
+        peak = max(peak, concurrent)
+        entered.set()
+        await release.wait()
+        concurrent -= 1
+
+    monkeypatch.setattr(
+        analysis_tasks_module,
+        "execute_analysis_record",
+        fake_execute_analysis_record,
+    )
+
+    scheduler = DatabaseAnalysisTaskScheduler(session_factory, chat_provider)
+    for analysis_id in analysis_ids:
+        await scheduler.start(analysis_id)
+
+    await asyncio.wait_for(entered.wait(), timeout=3.0)
+    await asyncio.sleep(0.05)
+    assert peak == 1, "analysis jobs must not execute concurrently"
+
+    release.set()
+    for _ in range(100):
+        if all(task.done() for task in _ACTIVE_TASKS.values()):
+            break
+        await asyncio.sleep(0.01)
+    await scheduler.shutdown()
+    assert peak == 1
+
+
 async def test_analysis_scheduler_recovers_interrupted_record(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

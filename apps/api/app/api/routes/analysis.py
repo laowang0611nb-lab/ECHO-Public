@@ -35,7 +35,6 @@ from app.services.chat_provider import (
     ChatConfigurationError,
     ChatProviderError,
 )
-from app.services.resource_limits import analysis_job_limiter
 from app.services.teacher_access import (
     TeacherContentForbiddenError,
     TeacherContentNotFoundError,
@@ -91,15 +90,14 @@ async def create_analysis_endpoint(
     response: Response,
 ) -> AIAnalysisResponse:
     try:
-        async with analysis_job_limiter.slot():
-            analysis = await create_initial_analysis(
-                session,
-                provider,
-                course_id,
-                current_user.id,
-                payload,
-                scheduler=scheduler,
-            )
+        analysis = await create_initial_analysis(
+            session,
+            provider,
+            course_id,
+            current_user.id,
+            payload,
+            scheduler=scheduler,
+        )
         if not payload.run_async:
             response.status_code = status.HTTP_200_OK
         return analysis
@@ -234,16 +232,15 @@ async def reanalyze_endpoint(
 ) -> AIAnalysisResponse:
     request_payload = payload or AIAnalysisReanalyzeRequest()
     try:
-        async with analysis_job_limiter.slot():
-            analysis = await reanalyze(
-                session,
-                provider,
-                course_id,
-                analysis_id,
-                current_user.id,
-                request_payload,
-                scheduler=scheduler,
-            )
+        analysis = await reanalyze(
+            session,
+            provider,
+            course_id,
+            analysis_id,
+            current_user.id,
+            request_payload,
+            scheduler=scheduler,
+        )
         if not request_payload.run_async:
             response.status_code = status.HTTP_200_OK
         return analysis

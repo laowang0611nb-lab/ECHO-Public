@@ -14,6 +14,7 @@ from app.services.analysis import (
     reset_analysis_for_recovery,
 )
 from app.services.chat_provider import ChatProvider
+from app.services.resource_limits import analysis_job_limiter
 
 _ACTIVE_TASKS: dict[UUID, asyncio.Task[None]] = {}
 
@@ -70,11 +71,12 @@ class DatabaseAnalysisTaskScheduler:
     async def _run(self, analysis_id: UUID) -> None:
         heartbeat_task = asyncio.create_task(self._heartbeat(analysis_id))
         try:
-            async with self.session_factory() as session:
-                analysis = await session.get(AIAnalysis, analysis_id)
-                if analysis is None or analysis.status != AIAnalysisStatus.ANALYZING:
-                    return
-                await execute_analysis_record(session, self.provider, analysis_id)
+            async with analysis_job_limiter.slot():
+                async with self.session_factory() as session:
+                    analysis = await session.get(AIAnalysis, analysis_id)
+                    if analysis is None or analysis.status != AIAnalysisStatus.ANALYZING:
+                        return
+                    await execute_analysis_record(session, self.provider, analysis_id)
         except Exception as exc:
             async with self.session_factory() as session:
                 await mark_analysis_failed(session, analysis_id, exc)
