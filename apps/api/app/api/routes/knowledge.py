@@ -46,6 +46,7 @@ from app.services.llm import (
     LLMProviderError,
     LLMProviderTimeoutError,
 )
+from app.services.resource_limits import document_job_limiter
 
 router = APIRouter(tags=["knowledge"])
 
@@ -61,12 +62,13 @@ async def generate_structure(
     provider: KnowledgeProviderDep,
 ) -> list[Chapter]:
     try:
-        return await generate_document_structure(
-            session,
-            provider,
-            document_id,
-            current_user.id,
-        )
+        async with document_job_limiter.slot():
+            return await generate_document_structure(
+                session,
+                provider,
+                document_id,
+                current_user.id,
+            )
     except KnowledgeDocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -125,12 +127,13 @@ async def generate_relations(
     provider: KnowledgeProviderDep,
 ) -> KnowledgeRelationGenerationResponse:
     try:
-        result = await generate_document_relations(
-            session,
-            provider,
-            document_id,
-            current_user.id,
-        )
+        async with document_job_limiter.slot():
+            result = await generate_document_relations(
+                session,
+                provider,
+                document_id,
+                current_user.id,
+            )
     except KnowledgeDocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

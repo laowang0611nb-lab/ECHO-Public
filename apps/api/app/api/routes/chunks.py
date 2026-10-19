@@ -13,6 +13,7 @@ from app.services.knowledge import (
     KnowledgeDocumentNotReadyError,
     KnowledgeGenerationForbiddenError,
 )
+from app.services.resource_limits import document_job_limiter
 
 router = APIRouter(tags=["chunks"])
 
@@ -27,13 +28,14 @@ async def create_document_chunks(
     session: DBSession,
 ) -> list[KnowledgeChunk]:
     try:
-        return await chunk_document(
-            session,
-            document_id,
-            current_user.id,
-            chunk_size=settings.chunk_size_chars,
-            overlap=settings.chunk_overlap_chars,
-        )
+        async with document_job_limiter.slot():
+            return await chunk_document(
+                session,
+                document_id,
+                current_user.id,
+                chunk_size=settings.chunk_size_chars,
+                overlap=settings.chunk_overlap_chars,
+            )
     except KnowledgeDocumentNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

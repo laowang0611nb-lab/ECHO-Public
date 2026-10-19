@@ -301,19 +301,21 @@ export function ChatComposer({
     (value.trim().length > 0 || attachments.length > 0) && !disabled && !streaming;
 
   function addImageAsset(asset: ImagePicker.ImagePickerAsset) {
-    const isVideo = asset.type === "video";
+    if (asset.type === "video") {
+      setMediaError("本轮演示暂不开放视频输入，请选择图片。");
+      return;
+    }
     onAddAttachment({
       localId: createAttachmentDraftId(),
-      kind: isVideo ? "video" : "image",
+      kind: "image",
       uri: asset.uri,
-      mimeType: asset.mimeType || (isVideo ? "video/mp4" : "image/jpeg"),
+      mimeType: asset.mimeType || "image/jpeg",
       fileName:
         asset.fileName ||
-        `${isVideo ? "video" : "image"}-${Date.now()}.${isVideo ? "mp4" : "jpg"}`,
+        `image-${Date.now()}.jpg`,
       sizeBytes: asset.fileSize ?? null,
       width: asset.width ?? null,
       height: asset.height ?? null,
-      durationSeconds: asset.duration ?? null,
     });
   }
 
@@ -335,7 +337,7 @@ export function ChatComposer({
               quality: 0.85,
             })
           : await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ["images", "videos"],
+              mediaTypes: ["images"],
               quality: 0.85,
             });
       if (!result.canceled && result.assets[0]) addImageAsset(result.assets[0]);
@@ -345,7 +347,7 @@ export function ChatComposer({
   }
 
   function chooseImageSource() {
-    Alert.alert("添加图片或视频", "选择来源", [
+    Alert.alert("添加图片", "选择来源", [
       { text: "拍照", onPress: () => void pickImage("camera") },
       { text: "从相册选择", onPress: () => void pickImage("library") },
       { text: "取消", style: "cancel" },
@@ -436,7 +438,7 @@ export function ChatComposer({
       ) : null}
       <View style={styles.composerRow}>
         <Pressable
-          accessibilityLabel="添加图片或视频"
+          accessibilityLabel="添加图片"
           disabled={disabled || streaming}
           onPress={chooseImageSource}
           style={({ pressed }) => [

@@ -3,8 +3,12 @@ import { fetch as expoFetch } from "expo/fetch";
 import { studentStorage } from "@/services/student-storage";
 
 const API_BASE_URL_STORAGE_KEY = "echo.student.api-base-url.v1";
+const PUBLIC_API_BASE_URL = "https://example.com";
+const ALLOW_INSECURE_API_OVERRIDE =
+  __DEV__ || process.env.EXPO_PUBLIC_ALLOW_INSECURE_API_OVERRIDE === "true";
 const BUILD_TIME_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || "http://127.0.0.1:8000";
+  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() ||
+  (__DEV__ ? "http://127.0.0.1:8000" : PUBLIC_API_BASE_URL);
 
 let cachedApiBaseUrl = normalizeApiBaseUrl(BUILD_TIME_API_BASE_URL);
 
@@ -24,6 +28,9 @@ export function normalizeApiBaseUrl(value: string): string {
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error("服务器地址仅支持 HTTP 或 HTTPS。");
+  }
+  if (!ALLOW_INSECURE_API_OVERRIDE && parsed.protocol !== "https:") {
+    throw new Error("正式比赛版只允许使用 HTTPS 服务器地址。");
   }
   if (!parsed.hostname || parsed.hostname === "0.0.0.0") {
     throw new Error("请输入电脑可被手机访问的地址。");
@@ -117,7 +124,9 @@ export async function testApiBaseUrl(value: string): Promise<{
       version: null,
       message: timedOut
         ? "连接超时，请检查服务器是否可达。"
-        : "无法连接，请检查热点、监听地址和 Windows 防火墙。",
+        : ALLOW_INSECURE_API_OVERRIDE
+          ? "无法连接，请检查网络、监听地址和防火墙。"
+          : "无法连接，请检查网络和公网 HTTPS 服务状态。",
     };
   } finally {
     clearTimeout(timer);

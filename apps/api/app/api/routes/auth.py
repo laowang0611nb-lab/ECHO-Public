@@ -74,16 +74,31 @@ from app.services.phone_auth import (
     register_with_sms,
     reset_password_with_sms,
 )
+from app.services.resource_limits import (
+    RateLimitExceededError,
+    enforce_sms_rate_limit,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 PHONE_VERIFICATION_TOKEN_SECONDS = 300
 SMS_ERROR_RESPONSES = {
     400: {"model": SmsErrorResponse, "description": "Invalid or expired code"},
+    403: {"model": SmsErrorResponse, "description": "Registration disabled"},
     429: {"model": SmsErrorResponse, "description": "SMS send interval exceeded"},
     502: {"model": SmsErrorResponse, "description": "SMS provider send failure"},
     503: {"model": SmsErrorResponse, "description": "SMS provider unavailable"},
     504: {"model": SmsErrorResponse, "description": "SMS provider timeout"},
 }
+
+
+def _registration_disabled_exception() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": "AUTH_REGISTRATION_DISABLED",
+            "message": "公开注册已关闭，请使用预建演示账号登录",
+        },
+    )
 
 
 def _sms_http_exception(exc: AliyunPnvsError) -> HTTPException:
@@ -161,8 +176,22 @@ def _auth_http_exception(exc: AuthFlowError) -> HTTPException:
 )
 async def send_sms_verification_code(
     payload: SmsSendRequest,
+    request: Request,
     provider: AliyunPnvsProviderDep,
 ) -> SmsSendResponse:
+    if payload.purpose == "register" and not settings.public_registration_enabled:
+        raise _registration_disabled_exception()
+    try:
+        enforce_sms_rate_limit(phone=payload.phone, request=request)
+    except RateLimitExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "SMS_TOO_FREQUENT",
+                "message": "短信发送过于频繁，请稍后再试",
+            },
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
     try:
         await provider.send_verify_code(payload.phone)
     except AliyunPnvsError as exc:
@@ -183,6 +212,8 @@ async def verify_sms_code(
     provider: AliyunPnvsProviderDep,
     session: DBSession,
 ) -> SmsVerifyResponse:
+    if payload.purpose == "register" and not settings.public_registration_enabled:
+        raise _registration_disabled_exception()
     try:
         await provider.check_verify_code(payload.phone, payload.code)
     except AliyunPnvsError as exc:
@@ -213,6 +244,8 @@ async def register_sms_account(
     request: Request,
     session: DBSession,
 ) -> AuthSessionResponse:
+    if not settings.public_registration_enabled:
+        raise _registration_disabled_exception()
     try:
         return await register_with_sms(
             session,
@@ -428,3 +461,12 @@ async def change_current_password(
 @router.get("/me", response_model=UserResponse, summary="Get the current development user")
 async def me(current_user: CurrentUser) -> User:
     return current_user
+
+
+@router.get("/public-config", include_in_schema=False)
+async def public_auth_config() -> dict[str, object]:
+    return {
+        "deployment_mode": settings.deployment_mode,
+        "registration_enabled": settings.public_registration_enabled,
+        "sms_enabled": settings.aliyun_pnvs_configured,
+    }

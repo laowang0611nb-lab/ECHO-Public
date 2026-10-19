@@ -17,7 +17,10 @@ class ChatMediaError(Exception):
 
 def video_media_available() -> bool:
     return bool(
-        settings.chat_api_key and settings.chat_media_upload_enabled and find_spec("av") is not None
+        settings.chat_video_enabled
+        and settings.chat_api_key
+        and settings.chat_media_upload_enabled
+        and find_spec("av") is not None
     )
 
 
@@ -27,6 +30,8 @@ async def ensure_video_model_url(
     path: Path,
 ) -> str | None:
     if attachment.kind != ChatAttachmentKind.VIDEO:
+        return None
+    if not settings.chat_video_enabled:
         return None
     if not settings.chat_media_upload_enabled:
         return None

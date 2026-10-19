@@ -2,6 +2,7 @@ import os
 import socket
 import time
 from datetime import UTC, datetime
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request
 from sqlalchemy import text
@@ -47,6 +48,10 @@ async def system_status(
         service=settings.app_name,
         version=settings.app_version,
         environment=settings.environment,
+        deployment_mode=settings.deployment_mode,
+        public_base_url=settings.public_base_url,
+        teacher_web_base_url=settings.teacher_web_base_url,
+        public_registration_enabled=settings.public_registration_enabled,
         database=database,
         vector=vector,
         ai_provider=ai_provider,
@@ -198,6 +203,17 @@ def _storage_status() -> StorageStatus:
 
 
 def _lan_status(request: Request) -> LanStatus:
+    if settings.deployment_mode == "public_demo":
+        parsed = urlparse(settings.public_base_url)
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        return LanStatus(
+            api_base_url=settings.public_base_url,
+            api_port=port,
+            candidate_lan_ips=[],
+            student_api_base_url=settings.public_base_url,
+            message="公网 HTTPS 演示模式已启用，客户端统一使用公开域名。",
+        )
+
     port = request.url.port or 8000
     api_base_url = str(request.base_url).rstrip("/")
     candidates = _candidate_lan_ips()

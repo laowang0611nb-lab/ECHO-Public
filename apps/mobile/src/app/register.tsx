@@ -26,6 +26,9 @@ import {
 import { loadPendingCourseCode } from "@/services/pending-course-storage";
 import { useStudentSession } from "@/providers/student-session-provider";
 
+const PUBLIC_REGISTRATION_ENABLED =
+  process.env.EXPO_PUBLIC_PUBLIC_REGISTRATION_ENABLED !== "false";
+
 export default function RegisterScreen() {
   const { register } = useStudentSession();
   const [displayName, setDisplayName] = useState("");
@@ -45,6 +48,19 @@ export default function RegisterScreen() {
     const timer = setTimeout(() => setCooldown((value) => value - 1), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
+
+  if (!PUBLIC_REGISTRATION_ENABLED) {
+    return (
+      <AuthScreen
+        description="比赛演示版只开放预建学生账号，公开注册已在服务端关闭。"
+        eyebrow="学生登录"
+        title="公开注册已关闭"
+      >
+        <Text style={styles.closedText}>请使用比赛提供的学生账号登录。</Text>
+        <AuthButton label="返回登录" onPress={() => router.replace("/login")} />
+      </AuthScreen>
+    );
+  }
 
   function validate(): boolean {
     const errors: Record<string, string> = {};
@@ -81,7 +97,10 @@ export default function RegisterScreen() {
     setSendingCode(true);
     setError(null);
     try {
-      const response = await studentAuthService.sendSmsCode(normalizedPhone);
+      const response = await studentAuthService.sendSmsCode(
+        normalizedPhone,
+        "register",
+      );
       setCooldown(response.cooldown_seconds);
       setFieldErrors((current) => ({ ...current, phone: "" }));
     } catch (requestError) {
@@ -250,6 +269,12 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
+  closedText: {
+    color: studentTheme.color.textMuted,
+    fontSize: 14,
+    lineHeight: 22,
+    textAlign: "center",
+  },
   codeRow: {
     alignItems: "flex-start",
     flexDirection: "row",

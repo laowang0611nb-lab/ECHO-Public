@@ -79,6 +79,10 @@ export interface SystemStatusResponse {
   service: string;
   version: string;
   environment: string;
+  deployment_mode: "local" | "public_demo";
+  public_base_url: string;
+  teacher_web_base_url: string;
+  public_registration_enabled: boolean;
   database: SystemDatabaseStatus;
   vector: SystemVectorStatus;
   ai_provider: SystemAIProviderStatus;
@@ -170,6 +174,7 @@ export type PhoneVerificationPurpose = "register" | "password_reset" | "login";
 
 export interface SmsSendRequest {
   phone: string;
+  purpose?: PhoneVerificationPurpose;
 }
 
 export interface SmsSendResponse {

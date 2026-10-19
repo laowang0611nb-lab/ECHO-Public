@@ -45,7 +45,10 @@ export interface StudentRegisterInput {
 export interface StudentAuthService {
   login(input: StudentLoginInput): Promise<StudentAuthResult>;
   loginWithSms(input: StudentSmsLoginInput): Promise<StudentAuthResult>;
-  sendSmsCode(phone: string): Promise<SmsSendResponse>;
+  sendSmsCode(
+    phone: string,
+    purpose: PhoneVerificationPurpose,
+  ): Promise<SmsSendResponse>;
   verifySmsCode(
     phone: string,
     code: string,
@@ -190,6 +193,9 @@ export function studentReadableAuthError(error: unknown): string {
     if (code === "AUTH_ACCOUNT_DISABLED") {
       return "当前账号已停用，请联系教师或管理员。";
     }
+    if (code === "AUTH_REGISTRATION_DISABLED") {
+      return "公开注册已关闭，请使用预建演示账号登录。";
+    }
     if (code === "AUTH_PHONE_ALREADY_REGISTERED") {
       return "该手机号已经注册，请直接登录或使用忘记密码。";
     }
@@ -244,8 +250,11 @@ const developmentAuthService: StudentAuthService = {
   async loginWithSms(input) {
     return loginStudentWithSms(input);
   },
-  async sendSmsCode(phone) {
-    return apiClient.sendSmsCode({ phone: normalizePhone(phone) });
+  async sendSmsCode(phone, purpose) {
+    return apiClient.sendSmsCode({
+      phone: normalizePhone(phone),
+      purpose,
+    });
   },
   async verifySmsCode(phone, code, purpose) {
     return apiClient.verifySmsCode({
@@ -284,12 +293,12 @@ const formalAuthService: StudentAuthService = {
   async loginWithSms(input) {
     return loginStudentWithSms(input);
   },
-  async sendSmsCode(phone) {
+  async sendSmsCode(phone, purpose) {
     const normalized = normalizePhone(phone);
     if (!isMainlandPhone(normalized)) {
       throw new AuthInputError("请输入正确的 11 位手机号。");
     }
-    return apiClient.sendSmsCode({ phone: normalized });
+    return apiClient.sendSmsCode({ phone: normalized, purpose });
   },
   async verifySmsCode(phone, code, purpose) {
     return apiClient.verifySmsCode({

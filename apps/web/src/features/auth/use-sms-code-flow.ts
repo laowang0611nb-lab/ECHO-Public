@@ -51,7 +51,7 @@ export function useSmsCodeFlow(purpose: PhoneVerificationPurpose) {
     setError(null);
     setNotice(null);
     try {
-      const response = await apiClient.sendSmsCode({ phone });
+      const response = await apiClient.sendSmsCode({ phone, purpose });
       setCooldown(Math.max(1, response.cooldown_seconds || 60));
       setCodeSent(true);
       setCode("");
@@ -66,7 +66,7 @@ export function useSmsCodeFlow(purpose: PhoneVerificationPurpose) {
     } finally {
       setSending(false);
     }
-  }, [phone]);
+  }, [phone, purpose]);
 
   const verifyCode = useCallback(async () => {
     if (!isValidMainlandPhone(phone)) {
