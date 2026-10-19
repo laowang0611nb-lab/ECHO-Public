@@ -1,7 +1,7 @@
 {
   "name": "@echo/mobile",
   "main": "expo-router/entry",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "dependencies": {
     "@echo/api-client": "workspace:*",
     "@echo/design-tokens": "workspace:*",
