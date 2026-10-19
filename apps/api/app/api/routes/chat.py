@@ -13,6 +13,7 @@ from app.api.dependencies import (
     DBSession,
     EmbeddingProviderDep,
 )
+from app.api.routes.sse import stream_with_heartbeat
 from app.core.config import settings
 from app.schemas.chat import (
     ChatAttachmentUploadResponse,
@@ -412,7 +413,7 @@ async def stream_message(
         ) from exc
 
     async def event_stream():
-        async for event in stream_chat_response(
+        events = stream_chat_response(
             session,
             embedding_provider,
             chat_provider,
@@ -425,8 +426,9 @@ async def stream_message(
             [attachment.id for attachment in payload.attachments],
             attachment_storage,
             asr_provider,
-        ):
-            yield event.encode()
+        )
+        async for frame in stream_with_heartbeat(events):
+            yield frame
 
     return StreamingResponse(
         event_stream(),
@@ -472,14 +474,15 @@ async def continue_message(
         ) from exc
 
     async def event_stream():
-        async for event in continue_chat_response(
+        events = continue_chat_response(
             session,
             chat_provider,
             conversation_id,
             message_id,
             current_user.id,
-        ):
-            yield event.encode()
+        )
+        async for frame in stream_with_heartbeat(events):
+            yield frame
 
     return StreamingResponse(
         event_stream(),

@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import ChatProviderDep, CurrentUser, DBSession
+from app.api.routes.sse import stream_with_heartbeat
 from app.schemas.teacher_assistant import (
     TeacherAssistantCapabilities,
     TeacherAssistantMessage,
@@ -162,15 +163,16 @@ async def stream_teacher_assistant_message_endpoint(
         raise _translate_assistant_error(exc) from exc
 
     async def event_stream():
-        async for event in stream_teacher_assistant_message(
+        events = stream_teacher_assistant_message(
             session,
             provider,
             course_id,
             current_user.id,
             payload,
             context,
-        ):
-            yield event.encode()
+        )
+        async for frame in stream_with_heartbeat(events):
+            yield frame
 
     return StreamingResponse(
         event_stream(),
