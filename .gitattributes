@@ -1,0 +1,4 @@
+*.sh text eol=lf
+deploy/public-demo/systemd/*.service text eol=lf
+deploy/public-demo/nginx/*.conf text eol=lf
+scripts/public_demo/*.mjs text eol=lf

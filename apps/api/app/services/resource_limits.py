@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import math
 import threading
 import time
@@ -67,15 +68,23 @@ analysis_job_limiter = EventLoopJobSlotLimiter(settings.analysis_max_concurrency
 
 
 def request_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        first = forwarded.split(",", 1)[0].strip()
-        if first:
-            return first
-    real_ip = request.headers.get("x-real-ip", "").strip()
-    if real_ip:
-        return real_ip
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client and request.client.host else ""
+    if peer in {"127.0.0.1", "::1"}:
+        real_ip = request.headers.get("x-real-ip", "").strip()
+        if real_ip:
+            try:
+                return str(ipaddress.ip_address(real_ip))
+            except ValueError:
+                pass
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            candidate = forwarded.rsplit(",", 1)[-1].strip()
+            if candidate:
+                try:
+                    return str(ipaddress.ip_address(candidate))
+                except ValueError:
+                    pass
+    return peer or "unknown"
 
 
 def enforce_chat_rate_limit(user_id: str) -> None:
