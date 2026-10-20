@@ -53,7 +53,10 @@ export function AiKnowledgeGraphPreview({
   courseId: string;
   fallbackDifficulty: DashboardLearningDifficulty | null;
 }) {
-  const graphQuery = useKnowledgeGraph(courseId);
+  const graphQuery = useKnowledgeGraph(courseId, {
+    scope: "full",
+    maxNodes: 160,
+  });
   const dashboardQuery = useKnowledgeCourseDashboard(courseId);
   const reducedMotion = useReducedMotion() ?? false;
   const source = useMemo(
