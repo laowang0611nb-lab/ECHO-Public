@@ -45,8 +45,25 @@ export const knowledgeQueryKeys = {
     ["teacher", "knowledge", "external-resources", userId, courseId, pointId ?? "all", status ?? "all"] as const,
   resourceList: (userId: string, courseId: string, trashed: boolean) =>
     ["teacher", "knowledge", "resource-list", userId, courseId, trashed ? "trashed" : "active"] as const,
-  graph: (userId: string, courseId: string) =>
-    ["teacher", "knowledge", "graph", userId, courseId] as const,
+  graph: (
+    userId: string,
+    courseId: string,
+    scope: "overview" | "document" | "chapter" | "point" | "full" = "overview",
+    documentId?: string | null,
+    chapterId?: string | null,
+    pointId?: string | null,
+  ) =>
+    [
+      "teacher",
+      "knowledge",
+      "graph",
+      userId,
+      courseId,
+      scope,
+      documentId ?? "",
+      chapterId ?? "",
+      pointId ?? "",
+    ] as const,
   indexStatus: (userId: string, courseId: string, documentId: string) =>
     ["teacher", "knowledge", "index-status", userId, courseId, documentId] as const,
   citations: (userId: string, courseId: string, documentId: string) =>
@@ -364,13 +381,49 @@ export function useTrashedResources(courseId: string | null) {
   });
 }
 
-export function useKnowledgeGraph(courseId: string | null) {
+export function useKnowledgeGraph(
+  courseId: string | null,
+  options?: {
+    scope?: "overview" | "document" | "chapter" | "point" | "full";
+    documentId?: string | null;
+    chapterId?: string | null;
+    pointId?: string | null;
+    depth?: number;
+    maxNodes?: number;
+    enabled?: boolean;
+  },
+) {
   const { user } = useTeacherSession();
   const userId = user?.id;
+  const scope = options?.scope ?? "overview";
   return useQuery<KnowledgeGraph>({
-    queryKey: knowledgeQueryKeys.graph(userId ?? "anonymous", courseId ?? "none"),
-    queryFn: () => apiClient.getKnowledgeGraph(userId!, courseId!),
-    enabled: Boolean(userId && courseId),
+    queryKey: knowledgeQueryKeys.graph(
+      userId ?? "anonymous",
+      courseId ?? "none",
+      scope,
+      options?.documentId,
+      options?.chapterId,
+      options?.pointId,
+    ),
+    queryFn: () =>
+      apiClient.getKnowledgeGraph(userId!, courseId!, {
+        scope,
+        documentId: options?.documentId ?? undefined,
+        chapterId: options?.chapterId ?? undefined,
+        pointId: options?.pointId ?? undefined,
+        depth: options?.depth,
+        maxNodes: options?.maxNodes,
+      }),
+    enabled: Boolean(
+      (options?.enabled ?? true) &&
+        userId &&
+        courseId &&
+        (scope === "overview" ||
+          scope === "full" ||
+          (scope === "document" && options?.documentId) ||
+          (scope === "chapter" && options?.chapterId) ||
+          (scope === "point" && options?.pointId)),
+    ),
     staleTime: 30_000,
   });
 }

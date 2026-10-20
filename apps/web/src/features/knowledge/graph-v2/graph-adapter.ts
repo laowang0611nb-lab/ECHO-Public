@@ -439,7 +439,12 @@ export function buildGraphDisplay(source: GraphSourceModel, requestedFocusId?: s
   }
 
   const { children, nodeById } = buildChildren(source, focusId, fallbackRelations);
-  const detachedIds = [...source.pointById.keys()].filter((id) => !nodeById.has(id)).sort(stableCompare);
+  const detachedIds =
+    source.graph.scope === "chapter"
+      ? [...source.pointById.keys()]
+          .filter((id) => !nodeById.has(id))
+          .sort(stableCompare)
+      : [];
   for (const rootId of detachedIds) {
     const point = source.pointById.get(rootId);
     if (!point) {

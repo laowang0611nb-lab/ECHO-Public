@@ -175,6 +175,13 @@ export function KnowledgeGraphEmbedContent({
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [documentId, setDocumentId] = useState<string | null>(null);
+  const [chapterId, setChapterId] = useState<string | null>(null);
+  const graphScope = chapterId
+    ? "chapter"
+    : documentId
+      ? "document"
+      : "overview";
 
   const [hasWebViewBridge, setHasWebViewBridge] = useState(false);
 
@@ -265,9 +272,15 @@ export function KnowledgeGraphEmbedContent({
       };
 
       try {
+        const graphParams = new URLSearchParams({
+          scope: graphScope,
+          maxNodes: graphScope === "chapter" ? "80" : "40",
+        });
+        if (documentId) graphParams.set("documentId", documentId);
+        if (chapterId) graphParams.set("chapterId", chapterId);
         const [nextGraph, nextChapters] = await Promise.all([
           requestJson<KnowledgeGraph>(
-            `${apiBaseUrl}/api/v1/courses/${courseId}/knowledge-graph`,
+            `${apiBaseUrl}/api/v1/courses/${courseId}/knowledge-graph?${graphParams.toString()}`,
             { headers },
             signal,
             { authorizationContext: "resource" },
@@ -292,7 +305,7 @@ export function KnowledgeGraphEmbedContent({
         throw loadError;
       }
     },
-    [courseId],
+    [chapterId, courseId, documentId, graphScope],
   );
 
   useEffect(() => {
@@ -349,6 +362,18 @@ export function KnowledgeGraphEmbedContent({
         isError={false}
         isLoading={false}
         key={courseId}
+        onBack={() => {
+          if (chapterId) {
+            setChapterId(null);
+          } else if (documentId) {
+            setDocumentId(null);
+          }
+        }}
+        onOpenChapter={setChapterId}
+        onOpenDocument={(nextDocumentId) => {
+          setDocumentId(nextDocumentId);
+          setChapterId(null);
+        }}
         onAskAi={hasWebViewBridge ? askAi : undefined}
         onRetry={() => setAttempt((current) => current + 1)}
       />

@@ -69,7 +69,7 @@ export function CreateExecutionPlanPage({
   const router = useRouter();
   const { courses, selectedCourseId } = useCourseWorkspace();
   const courseId = initialCourseId && courses.some((course) => course.id === initialCourseId) ? initialCourseId : selectedCourseId;
-  const studentsQuery = useStudentAnalytics(courseId);
+  const studentsQuery = useStudentAnalytics(courseId, { includeDetails: false });
   const knowledgeQuery = useKnowledgeBaseData(courseId);
   const createMutation = useCreateExecutionPlan(courseId);
   const updateMutation = useUpdateExecutionPlan();

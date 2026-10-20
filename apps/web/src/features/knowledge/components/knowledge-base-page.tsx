@@ -103,7 +103,45 @@ function TeacherKnowledgeBasePage({
   const questionItemsQuery = useQuestionItems(courseId);
   const externalResourcesQuery = useExternalResources(courseId);
   const trashedResourcesQuery = useTrashedResources(courseId);
-  const graphQuery = useKnowledgeGraph(courseId);
+  const pointIdParam = searchParams.get("pointId");
+  const [graphPath, setGraphPath] = useState<{
+    courseId: string | null;
+    documentId: string | null;
+    chapterId: string | null;
+    pointId: string | null;
+  }>({
+    courseId,
+    documentId: null,
+    chapterId: null,
+    pointId: pointIdParam,
+  });
+  const graphDocumentId =
+    graphPath.courseId === courseId ? graphPath.documentId : null;
+  const graphChapterId =
+    graphPath.courseId === courseId ? graphPath.chapterId : null;
+  const graphPointId =
+    graphPath.courseId === courseId ? graphPath.pointId : pointIdParam;
+  const graphScope = graphPointId
+    ? "point"
+    : graphChapterId
+      ? "chapter"
+      : graphDocumentId
+        ? "document"
+        : "overview";
+  const graphQuery = useKnowledgeGraph(courseId, {
+    scope: graphScope,
+    documentId: graphDocumentId,
+    chapterId: graphChapterId,
+    pointId: graphPointId,
+    depth: 1,
+    maxNodes: graphScope === "chapter" ? 80 : graphScope === "point" ? 60 : 40,
+    enabled: activeTab === "graph",
+  });
+  const graphPreviewQuery = useKnowledgeGraph(courseId, {
+    scope: "full",
+    maxNodes: 160,
+    enabled: activeTab === "resources",
+  });
 
   useEffect(() => {
     if (courseId && selectedCourseId !== courseId) {
@@ -194,6 +232,30 @@ function TeacherKnowledgeBasePage({
                 isError={graphQuery.isError}
                 isLoading={graphQuery.isPending}
                 key={courseId}
+                onBack={() => {
+                  setGraphPath({
+                    courseId,
+                    documentId: graphChapterId ? graphDocumentId : null,
+                    chapterId: null,
+                    pointId: null,
+                  });
+                }}
+                onOpenChapter={(chapterId) => {
+                  setGraphPath({
+                    courseId,
+                    documentId: graphDocumentId,
+                    chapterId,
+                    pointId: null,
+                  });
+                }}
+                onOpenDocument={(documentId) => {
+                  setGraphPath({
+                    courseId,
+                    documentId,
+                    chapterId: null,
+                    pointId: null,
+                  });
+                }}
                 onRetry={() => void graphQuery.refetch()}
               />
             </div>
@@ -299,7 +361,7 @@ function TeacherKnowledgeBasePage({
                       <p className="text-xs text-muted-foreground">当前由真实章节和知识点生成。</p>
                     </CardHeader>
                     <CardContent className="px-5">
-                      <KnowledgeGraphPreview chapters={data.chapters} compact courseId={courseId} courseName={course?.name ?? "课程"} graph={graphQuery.data} />
+                      <KnowledgeGraphPreview chapters={data.chapters} compact courseId={courseId} courseName={course?.name ?? "课程"} graph={graphPreviewQuery.data} />
                     </CardContent>
                   </Card>
                   <RecentUploads courseId={courseId} resources={data.resources} />

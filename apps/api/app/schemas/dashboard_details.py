@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.schemas.course import CourseMemberResponse
 from app.schemas.learning import MasteryStateResponse
 
 
@@ -46,3 +47,37 @@ class StudentLearningDetailResponse(BaseModel):
     average_mastery: float | None
     mastery_states: list[MasteryStateResponse]
     recent_evidence: list[LearningEvidenceResponse]
+
+
+class StudentWeakKnowledgePointResponse(BaseModel):
+    knowledge_point_id: UUID
+    name: str
+    score: float
+
+
+class StudentAnalyticsItemResponse(BaseModel):
+    member: CourseMemberResponse
+    average_mastery: float | None
+    mastery_states: list[MasteryStateResponse]
+    recent_evidence: list[LearningEvidenceResponse]
+    weak_knowledge_points: list[StudentWeakKnowledgePointResponse]
+    learning_event_count: int
+    active_days_7: int
+    last_active_at: datetime | None
+    conversation_count: int
+
+
+class StudentAnalyticsSummaryResponse(BaseModel):
+    student_count: int
+    average_mastery: float | None
+    active_student_count: int
+    attention_student_count: int
+    students_with_evidence: int
+
+
+class CourseStudentAnalyticsResponse(BaseModel):
+    course_id: UUID
+    generated_at: datetime
+    items: list[StudentAnalyticsItemResponse]
+    summary: StudentAnalyticsSummaryResponse
+    chapter_analytics: list[ChapterAnalyticsResponse]

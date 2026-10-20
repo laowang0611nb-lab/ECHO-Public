@@ -1,4 +1,12 @@
-import type { Chapter, ChapterAnalytics, Conversation, LearningEvidence, MasteryState, ReviewFlag } from "@echo/shared-types";
+import type {
+  Chapter,
+  ChapterAnalytics,
+  Conversation,
+  LearningEvidence,
+  MasteryState,
+  ReviewFlag,
+  StudentAnalyticsSummary as SharedStudentAnalyticsSummary,
+} from "@echo/shared-types";
 
 import type {
   ChapterMasteryItem,
@@ -56,28 +64,51 @@ export function buildStudentAnalyticsItem({
   member,
   detail,
   chapters,
+  aggregate,
 }: {
   member: StudentAnalyticsItem["member"];
   detail: StudentAnalyticsItem["detail"];
   chapters: Chapter[];
+  aggregate?: {
+    weak_knowledge_points: Array<{
+      knowledge_point_id: string;
+      name: string;
+      score: number;
+    }>;
+    learning_event_count: number;
+    active_days_7: number;
+    latest_evidence: LearningEvidence | null;
+  };
 }): StudentAnalyticsItem {
   const mastery = detail?.average_mastery ?? null;
   const pointNames = new Map(chapters.flatMap((chapter) => chapter.knowledge_points.map((point) => [point.id, point.name])));
-  const weakKnowledgePoints = (detail?.mastery_states ?? [])
-    .filter((state) => state.score < 60)
-    .sort((a, b) => a.score - b.score)
-    .slice(0, 3)
-    .map((state) => ({
-      id: state.knowledge_point_id,
-      name: pointNames.get(state.knowledge_point_id) ?? "未命名知识点",
-      score: state.score,
-    }));
+  const weakKnowledgePoints = aggregate
+    ? aggregate.weak_knowledge_points.slice(0, 3).map((point) => ({
+        id: point.knowledge_point_id,
+        name: point.name,
+        score: point.score,
+      }))
+    : (detail?.mastery_states ?? [])
+        .filter((state) => state.score < 60)
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 3)
+        .map((state) => ({
+          id: state.knowledge_point_id,
+          name: pointNames.get(state.knowledge_point_id) ?? "未命名知识点",
+          score: state.score,
+        }));
   const evidence = detail?.recent_evidence ?? [];
-  const latestEvidence = evidence[0] ?? null;
+  const latestEvidence = aggregate?.latest_evidence ?? evidence[0] ?? null;
+  const activeRecently = aggregate
+    ? aggregate.active_days_7 > 0
+    : evidence.some((item) => isWithinDays(item.created_at, 7));
   const status = masteryStatus(mastery);
-  const activeRecently = evidence.some((item) => isWithinDays(item.created_at, 7));
   const riskReason =
-    status === "risk"
+    status === "no_data" && !activeRecently
+      ? aggregate && aggregate.learning_event_count > 0
+        ? "有学习事件但没有知识点掌握记录"
+        : "尚无学习证据"
+      : status === "risk"
       ? "有证据显示多个知识点掌握偏低"
       : status === "attention"
         ? weakKnowledgePoints[0]?.name
@@ -93,13 +124,23 @@ export function buildStudentAnalyticsItem({
     status,
     weakKnowledgePoints,
     latestEvidence,
-    evidenceCount: evidence.length,
+    evidenceCount: aggregate?.learning_event_count ?? evidence.length,
+    activeDays7: aggregate?.active_days_7 ?? (
+      new Set(
+        evidence
+          .filter((item) => isWithinDays(item.created_at, 7))
+          .map((item) => item.created_at.slice(0, 10)),
+      ).size
+    ),
     activeRecently,
     riskReason,
   };
 }
 
-export function summarizeStudents(items: StudentAnalyticsItem[]): StudentAnalyticsSummary {
+export function summarizeStudents(
+  items: StudentAnalyticsItem[],
+  sharedSummary?: SharedStudentAnalyticsSummary,
+): StudentAnalyticsSummary {
   const masteryValues = items
     .map((item) => item.mastery)
     .filter((value): value is number => value !== null);
@@ -116,12 +157,21 @@ export function summarizeStudents(items: StudentAnalyticsItem[]): StudentAnalyti
     tone: bucket.tone,
   }));
   return {
-    studentCount: items.length,
-    averageMastery: masteryValues.length
-      ? masteryValues.reduce((sum, value) => sum + value, 0) / masteryValues.length
-      : null,
-    activeCount: items.filter((item) => item.activeRecently).length,
-    attentionCount: items.filter((item) => item.status === "attention" || item.status === "risk").length,
+    studentCount: sharedSummary?.student_count ?? items.length,
+    averageMastery:
+      sharedSummary?.average_mastery ??
+      (masteryValues.length
+        ? masteryValues.reduce((sum, value) => sum + value, 0) /
+          masteryValues.length
+        : null),
+    activeCount:
+      sharedSummary?.active_student_count ??
+      items.filter((item) => item.activeRecently).length,
+    attentionCount:
+      sharedSummary?.attention_student_count ??
+      items.filter(
+        (item) => item.status === "attention" || item.status === "risk",
+      ).length,
     masteryDistribution: distribution,
   };
 }

@@ -114,7 +114,7 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
 
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "b1c2d3e4f5a6 (head)" in current.stdout
+    assert "f1a2b3c4d5e6 (head)" in current.stdout
     connection = sqlite3.connect(tmp_path / "echo.db")
     course_columns = {
         row[1] for row in connection.execute("PRAGMA table_info(courses)").fetchall()
@@ -204,4 +204,4 @@ def test_migration_head_can_downgrade_and_upgrade(tmp_path: Path) -> None:
     _run_alembic(database_url, "downgrade", "d9e0f1a2b3c4")
     _run_alembic(database_url, "upgrade", "head")
     current = _run_alembic(database_url, "current")
-    assert "b1c2d3e4f5a6 (head)" in current.stdout
+    assert "f1a2b3c4d5e6 (head)" in current.stdout

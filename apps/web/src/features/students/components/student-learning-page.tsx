@@ -75,6 +75,7 @@ export function StudentLearningPage({
         || (activityFilter === "recent" ? item.activeRecently : !item.activeRecently);
       const needsAttention = item.status === "attention" || item.status === "risk" || Boolean(item.riskReason);
       const matchesKnowledgePoint = !knowledgePointId
+        || item.weakKnowledgePoints.some((point) => point.id === knowledgePointId)
         || Boolean(item.detail?.mastery_states.some((state) => state.knowledge_point_id === knowledgePointId));
       const matchesRisk = riskFilter === "all"
         || (riskFilter === "needs_attention" && needsAttention)
@@ -637,7 +638,16 @@ function StudentList({ courseId, items }: { courseId: string; items: ReturnType<
 
 function BehaviorPanel({ items, compact = false }: { items: ReturnType<typeof useStudentAnalytics>["items"]; compact?: boolean }) {
   const counts = items.reduce<Record<string, number>>((result, item) => {
-    for (const event of item.detail?.recent_evidence ?? []) result[event.event_type] = (result[event.event_type] ?? 0) + 1;
+    const events = item.detail?.recent_evidence ?? [];
+    if (events.length) {
+      for (const event of events) {
+        result[event.event_type] = (result[event.event_type] ?? 0) + 1;
+      }
+      return result;
+    }
+    if (item.evidenceCount > 0) {
+      result.question_asked = (result.question_asked ?? 0) + item.evidenceCount;
+    }
     return result;
   }, {});
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
