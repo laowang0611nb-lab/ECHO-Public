@@ -1536,11 +1536,22 @@ export function createApiClient({
     getKnowledgeGraph: (
       userId: string,
       courseId: string,
-      options?: { chapterId?: string; pointId?: string },
+      options?: {
+        scope?: "overview" | "document" | "chapter" | "point" | "full";
+        documentId?: string;
+        chapterId?: string;
+        pointId?: string;
+        depth?: number;
+        maxNodes?: number;
+      },
     ) => {
       const params = new URLSearchParams();
+      if (options?.scope) params.set("scope", options.scope);
+      if (options?.documentId) params.set("documentId", options.documentId);
       if (options?.chapterId) params.set("chapterId", options.chapterId);
       if (options?.pointId) params.set("pointId", options.pointId);
+      if (options?.depth) params.set("depth", String(options.depth));
+      if (options?.maxNodes) params.set("maxNodes", String(options.maxNodes));
       const query = params.toString();
       return request<KnowledgeGraph>(
         `/api/v1/courses/${courseId}/knowledge-graph${query ? `?${query}` : ""}`,

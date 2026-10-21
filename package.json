@@ -1,6 +1,6 @@
 {
   "name": "echo",
-  "version": "0.0.286",
+  "version": "0.0.287",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {

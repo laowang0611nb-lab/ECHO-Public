@@ -1150,6 +1150,12 @@ export interface KnowledgeGraphEdge {
 export interface KnowledgeGraph {
   nodes: KnowledgeGraphNode[];
   edges: KnowledgeGraphEdge[];
+  scope?: "overview" | "document" | "chapter" | "point" | "full";
+  focus_id?: string | null;
+  total_nodes?: number;
+  returned_nodes?: number;
+  has_more?: boolean;
+  truncated?: boolean;
 }
 
 export interface DocumentIndexStatus {

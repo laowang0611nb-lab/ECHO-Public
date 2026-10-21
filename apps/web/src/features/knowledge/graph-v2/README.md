@@ -30,6 +30,12 @@ Display-tree edges are layout-only and do not carry source/target direction. Onl
 
 This prevents the default canvas from becoming edge soup while preserving the real data graph.
 
+## Truncated API Completion
+
+Newer APIs can cap a full graph response by total node count and return `truncated`, `total_nodes`, and `returned_nodes`. The teacher workspace compares each selected PDF's complete chapter directory against the returned knowledge-point IDs. If the server markes the graph as truncated and the selected PDF is missing points, it conditionally requests only those missing points through the existing point scope and merges nodes and original edges by stable ID after all completion requests settle.
+
+The full-course view remains an explicit truncated overview: it reports the real returned/expected point count and does not launch an unbounded course-wide point fan-out. PDF completion is capped at 64 missing points per view. No synthetic directory node or relationship is created.
+
 ## LOD And Motion
 
 Labels are rendered by G6 in the graph layer. There is no per-frame DOM label overlay.

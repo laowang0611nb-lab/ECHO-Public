@@ -6,6 +6,7 @@ import {
   File02Icon,
   Layers01Icon,
 } from "@hugeicons/core-free-icons";
+import { useQueries } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ChevronRight,
@@ -31,7 +32,14 @@ import {
   pointMatchesCourseGraphFilter,
   resolveCourseGraphFilter,
 } from "@/features/knowledge/graph-v2/graph-document-filter";
+import {
+  graphPointCoverage,
+  MAX_GRAPH_POINT_COMPLETION_REQUESTS,
+  mergeKnowledgeGraphs,
+} from "@/features/knowledge/graph-v2/graph-query-completion";
+import { apiClient } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 import { BranchedMenu } from "../browser/branched-menu";
 import type { BranchedMenuSection } from "../browser/types";
@@ -84,6 +92,7 @@ export function KnowledgeGraphWorkspace({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useTeacherSession();
   const [directoryOpen, setDirectoryOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredQuery = useDeferredValue(searchQuery.trim().toLowerCase());
@@ -153,18 +162,106 @@ export function KnowledgeGraphWorkspace({
     (rawScope ?? null) !==
       (resolvedFilter.resourceId || resolvedFilter.chapterId ? null : "all");
 
+  const graphIsTruncated = graph?.truncated === true;
+  const baseCoverage = useMemo(
+    () => graphPointCoverage(graph, chapters, resolvedFilter.resourceId),
+    [chapters, graph, resolvedFilter.resourceId],
+  );
+  const completionPointIds = useMemo(
+    () =>
+      graphIsTruncated && resolvedFilter.resourceId
+        ? baseCoverage.missingPointIds.slice(
+            0,
+            MAX_GRAPH_POINT_COMPLETION_REQUESTS,
+          )
+        : [],
+    [
+      baseCoverage.missingPointIds,
+      graphIsTruncated,
+      resolvedFilter.resourceId,
+    ],
+  );
+  const completionQueries = useQueries({
+    queries: completionPointIds.map((pointId) => ({
+      queryKey: [
+        "teacher",
+        "knowledge",
+        "graph-point-completion",
+        user?.id ?? "anonymous",
+        courseId,
+        pointId,
+      ] as const,
+      queryFn: () =>
+        apiClient.getKnowledgeGraph(user!.id, courseId, {
+          scope: "point",
+          pointId,
+          depth: 1,
+          maxNodes: 500,
+        }),
+      enabled: Boolean(user?.id && graphIsTruncated),
+      staleTime: 30_000,
+    })),
+    combine: (results) => {
+      const settled = results.every(
+        (result) => result.isSuccess || result.isError,
+      );
+      return {
+        pending: results.some((result) => result.isPending),
+        errors: results.filter((result) => result.isError).length,
+        retry: () => {
+          for (const result of results) {
+            if (result.isError) void result.refetch();
+          }
+        },
+        graphs:
+          results.length > 0 && settled
+            ? results.flatMap((result) =>
+                result.data ? [result.data] : [],
+              )
+            : [],
+      };
+    },
+  });
+  const completedGraph = useMemo(
+    () =>
+      graph && completionQueries.graphs.length
+        ? mergeKnowledgeGraphs(graph, completionQueries.graphs)
+        : graph,
+    [completionQueries.graphs, graph],
+  );
+  const completedCoverage = useMemo(
+    () =>
+      graphPointCoverage(
+        completedGraph,
+        chapters,
+        resolvedFilter.resourceId,
+      ),
+    [chapters, completedGraph, resolvedFilter.resourceId],
+  );
   const filtered = useMemo(
     () =>
-      graph
-        ? filterCourseKnowledgeGraph(graph, chapters, {
+      completedGraph
+        ? filterCourseKnowledgeGraph(completedGraph, chapters, {
             resourceId: resolvedFilter.resourceId,
             chapterId: resolvedFilter.chapterId,
           })
         : null,
-    [chapters, graph, resolvedFilter.chapterId, resolvedFilter.resourceId],
+    [
+      chapters,
+      completedGraph,
+      resolvedFilter.chapterId,
+      resolvedFilter.resourceId,
+    ],
   );
 
-  const defaultOpenKeys = useMemo(() => new Set<string>(), []);
+  const defaultOpenKeys = useMemo(() => {
+    const activeChapter = rawChapterId
+      ? chapters.find((chapter) => chapter.id === rawChapterId)
+      : pointChapter;
+    return activeChapter
+      ? new Set([`resource:${activeChapter.document_id}`])
+      : new Set<string>();
+  }, [chapters, pointChapter, rawChapterId]);
   const effectiveOpenKeys = openKeys ?? defaultOpenKeys;
   const pointSearchMatches = useMemo(() => {
     if (!deferredQuery) {
@@ -289,6 +386,10 @@ export function KnowledgeGraphWorkspace({
     }
   }
 
+  function handleOpenChange(next: ReadonlySet<string>) {
+    setOpenKeys(next);
+  }
+
   function selectMenuValue(value: string) {
     if (value === "scope:all") {
       if (!resolvedFilter.resourceId && !resolvedFilter.chapterId) {
@@ -391,6 +492,13 @@ export function KnowledgeGraphWorkspace({
                       className="flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left text-[#c7dcf4] transition-colors hover:bg-white/7 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#65b6ff]"
                       key={point.id}
                       onClick={() => {
+                        setOpenKeys((current) => {
+                          const next = current ?? defaultOpenKeys;
+                          return new Set([
+                            ...next,
+                            `resource:${chapter.document_id}`,
+                          ]);
+                        });
                         setSearchQuery("");
                         navigateScope(
                           chapter.document_id,
@@ -432,7 +540,7 @@ export function KnowledgeGraphWorkspace({
               emptyLabel="没有匹配的图谱范围"
               items={menuSections}
               lineColor="rgba(124, 196, 255, 0.28)"
-              onOpenChange={(next) => setOpenKeys(next)}
+              onOpenChange={handleOpenChange}
               onSelect={(value) => selectMenuValue(value)}
               openValues={filteredOpenKeys}
               rowHeight={38}
@@ -471,6 +579,41 @@ export function KnowledgeGraphWorkspace({
                     )?.document.original_name
                   : courseName}
             </span>
+          </div>
+        ) : null}
+        {graphIsTruncated &&
+        (completionQueries.pending ||
+          completedCoverage.missing > 0 ||
+          completionQueries.errors > 0) ? (
+          <div
+            className={cn(
+              "absolute left-1/2 top-20 z-30 flex max-w-[min(92%,34rem)] -translate-x-1/2 items-start gap-2 rounded-xl border px-3 py-2 text-[11px] leading-5 shadow-[0_12px_32px_rgba(2,8,23,0.28)] backdrop-blur-xl",
+              completionQueries.errors > 0
+                ? "border-amber-300/25 bg-[#2b2112]/90 text-amber-100"
+                : "border-[#65b6ff]/20 bg-[#0b1d32]/88 text-[#c8dcf4]",
+            )}
+          >
+            {completionQueries.pending ? (
+              <span className="mt-1 size-3 shrink-0 animate-spin rounded-full border-2 border-[#68b7ff]/30 border-t-[#68b7ff]" />
+            ) : (
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            )}
+            <span>
+              {completionQueries.pending
+                ? `正在补齐当前 PDF 的 ${completedCoverage.missing} 个知识点…`
+                : resolvedFilter.resourceId
+                  ? `服务端节点上限导致当前 PDF 仍有 ${completedCoverage.missing} 个知识点未返回。`
+                  : `课程全图受服务端节点上限限制，当前显示 ${completedCoverage.returned}/${completedCoverage.expected} 个知识点。选择具体 PDF 会按需补齐该 PDF 的缺失节点。`}
+            </span>
+            {completionQueries.errors > 0 ? (
+              <button
+                className="shrink-0 rounded-md border border-amber-200/20 px-2 py-0.5 font-medium text-amber-100 transition-colors hover:bg-amber-200/10"
+                onClick={completionQueries.retry}
+                type="button"
+              >
+                重试
+              </button>
+            ) : null}
           </div>
         ) : null}
         <KnowledgeGraphView
