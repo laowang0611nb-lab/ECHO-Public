@@ -298,6 +298,40 @@
   text-align: center;
 }
 
+.knowledge-scope-scrollbar {
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(124, 196, 255, 0.28) transparent;
+  scrollbar-width: thin;
+}
+
+.knowledge-scope-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.knowledge-scope-scrollbar::-webkit-scrollbar-track,
+.knowledge-scope-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.knowledge-scope-scrollbar::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.knowledge-scope-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(124, 196, 255, 0.24);
+  background-clip: content-box;
+  border: 1px solid transparent;
+  border-radius: 999px;
+}
+
+.knowledge-scope-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(124, 196, 255, 0.42);
+  background-clip: content-box;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .branched-menu__marker {
     transition: opacity 150ms ease;

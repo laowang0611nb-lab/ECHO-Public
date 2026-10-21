@@ -380,7 +380,7 @@ export function KnowledgeGraphWorkspace({
               链接中的图谱范围已失效，已安全回到全部课程图谱。
             </div>
           ) : null}
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          <div className="knowledge-scope-scrollbar min-h-0 flex-1 overflow-y-auto px-3 pb-4">
             <BranchedMenu
               accentColor="#7cc4ff"
               activeValue={activeValue}

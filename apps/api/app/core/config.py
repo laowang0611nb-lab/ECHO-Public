@@ -12,7 +12,7 @@ PROJECT_ROOT = API_ROOT.parents[1]
 
 class Settings(BaseSettings):
     app_name: str = "ECHO API"
-    app_version: str = "0.0.283"
+    app_version: str = "0.0.284"
     environment: Literal["development", "test", "production"] = "development"
     deployment_mode: Literal["local", "public_demo"] = "local"
     public_base_url: str = "http://127.0.0.1:8000"
