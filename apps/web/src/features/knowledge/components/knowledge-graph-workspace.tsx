@@ -84,7 +84,7 @@ export function KnowledgeGraphWorkspace({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [directoryOpen, setDirectoryOpen] = useState(true);
+  const [directoryOpen, setDirectoryOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredQuery = useDeferredValue(searchQuery.trim().toLowerCase());
   const [openKeys, setOpenKeys] = useState<ReadonlySet<string> | null>(null);
@@ -164,13 +164,7 @@ export function KnowledgeGraphWorkspace({
     [chapters, graph, resolvedFilter.chapterId, resolvedFilter.resourceId],
   );
 
-  const defaultOpenKeys = useMemo(
-    () =>
-      new Set(
-        orderedResources.map((resource) => `resource:${resource.document.id}`),
-      ),
-    [orderedResources],
-  );
+  const defaultOpenKeys = useMemo(() => new Set<string>(), []);
   const effectiveOpenKeys = openKeys ?? defaultOpenKeys;
   const pointSearchMatches = useMemo(() => {
     if (!deferredQuery) {
@@ -198,7 +192,7 @@ export function KnowledgeGraphWorkspace({
       )} 点`,
       icon: Layers01Icon,
       children: [],
-      emptyLabel: "全课程范围不需要展开",
+      emptyLabel: null,
     };
     const resourceSections = orderedResources
       .map((resource) => {
@@ -338,14 +332,22 @@ export function KnowledgeGraphWorkspace({
   return (
     <div
       className={cn(
-        "grid h-full min-h-0 overflow-hidden rounded-xl border border-[#213c62] bg-[#081527]",
+        "grid h-full min-h-0 overflow-hidden rounded-xl border border-[#213c62] bg-[#081527] transition-[grid-template-rows,grid-template-columns] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:grid-rows-1",
         directoryOpen
-          ? "grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[284px_minmax(0,1fr)] lg:grid-rows-1"
-          : "grid-rows-1",
+          ? "grid-rows-[minmax(0,42dvh)_minmax(0,1fr)] lg:grid-cols-[284px_minmax(0,1fr)]"
+          : "grid-rows-[0px_minmax(0,1fr)] lg:grid-cols-[0px_minmax(0,1fr)]",
       )}
     >
-      {directoryOpen ? (
-        <aside className="flex min-h-0 max-h-[42dvh] flex-col border-b border-[#21405f] bg-[#071423] lg:max-h-none lg:border-b-0 lg:border-r">
+      <aside
+        aria-hidden={!directoryOpen}
+        className={cn(
+          "flex min-h-0 max-h-[42dvh] min-w-0 flex-col overflow-hidden border-[#21405f] bg-[#071423] transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none lg:max-h-none",
+          directoryOpen
+            ? "translate-y-0 border-b opacity-100 lg:border-b-0 lg:border-r"
+            : "pointer-events-none -translate-y-2 border-transparent opacity-0",
+        )}
+        inert={!directoryOpen}
+      >
           <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-4">
             <div className="min-w-0">
               <p className="text-[11px] font-medium tracking-[0.12em] text-[#6482a3]">
@@ -426,12 +428,7 @@ export function KnowledgeGraphWorkspace({
               activeValue={activeValue}
               className="mx-auto"
               color="#dce9fa"
-              defaultOpenValues={[
-                "scope:all",
-                ...orderedResources.map(
-                  (resource) => `resource:${resource.document.id}`,
-                ),
-              ]}
+              defaultOpenValues={["scope:all"]}
               emptyLabel="没有匹配的图谱范围"
               items={menuSections}
               lineColor="rgba(124, 196, 255, 0.28)"
@@ -442,8 +439,7 @@ export function KnowledgeGraphWorkspace({
               width={260}
             />
           </div>
-        </aside>
-      ) : null}
+      </aside>
 
       <section className="relative min-h-[420px] min-w-0">
         {!directoryOpen ? (

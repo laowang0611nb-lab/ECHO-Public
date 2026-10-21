@@ -15,7 +15,7 @@ export interface BranchedMenuSection {
   label: string;
   meta?: string;
   icon?: BranchedMenuIcon;
-  emptyLabel?: string;
+  emptyLabel?: ReactNode;
   children: BranchedMenuLeaf[];
 }
 

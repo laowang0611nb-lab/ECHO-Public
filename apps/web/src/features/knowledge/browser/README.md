@@ -24,6 +24,6 @@ The existing `KnowledgeGraphView`, graph query, node/edge styling, camera focus,
   - `@hugeicons/react@1.1.10` (MIT)
   - `@hugeicons/core-free-icons@4.3.5` (MIT)
 
-The official branch geometry, fold/reach/marker transitions and reduced-motion behavior are preserved. The local adaptation adds controlled stable-ID state, separate resource selection and collapse controls, empty groups, long-label handling, keyboard focus styles, resize-safe marker placement and a slim low-contrast scope scrollbar.
+The official branch geometry, fold/reach/marker transitions and reduced-motion behavior are preserved. The local adaptation adds controlled stable-ID state, separate resource selection and collapse controls, empty groups, long-label handling, keyboard focus styles, resize-safe marker placement and a slim low-contrast scope scrollbar. Resource sections start collapsed, and the surrounding graph-scope panel animates between its collapsed and expanded layouts without remounting the graph.
 
 The full React Bits license notice is stored in `THIRD_PARTY_NOTICES.md`.

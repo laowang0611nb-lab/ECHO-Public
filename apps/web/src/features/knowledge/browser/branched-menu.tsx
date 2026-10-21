@@ -211,8 +211,11 @@ export function BranchedMenu({
           const sectionActive =
             section.value === activeValue ||
             section.children.some((child) => child.value === activeValue);
-          const bodyHeight =
-            PAD * 2 + Math.max(section.children.length, 1) * rowHeight;
+          const hasBody =
+            section.children.length > 0 || section.emptyLabel !== null;
+          const bodyHeight = hasBody
+            ? PAD * 2 + Math.max(section.children.length, 1) * rowHeight
+            : 0;
           const bodyId = `${baseId}-${section.value.replace(/[^a-z0-9_-]/gi, "-")}`;
           return (
             <section
@@ -348,11 +351,11 @@ export function BranchedMenu({
                           </button>
                         ))}
                       </>
-                    ) : (
+                    ) : section.emptyLabel !== null ? (
                       <p className="branched-menu__empty">
                         {section.emptyLabel ?? "当前资源还没有章节"}
                       </p>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
