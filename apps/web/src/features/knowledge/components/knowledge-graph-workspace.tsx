@@ -54,6 +54,7 @@ function graphScopeUrl({
   const params = new URLSearchParams();
   params.set("courseId", courseId);
   params.set("tab", "graph");
+  if (!resourceId && !chapterId) params.set("scope", "all");
   if (resourceId) params.set("resourceId", resourceId);
   if (chapterId) params.set("chapterId", chapterId);
   if (pointId) params.set("pointId", pointId);
@@ -66,6 +67,7 @@ export function KnowledgeGraphWorkspace({
   resources,
   chapters,
   graph,
+  isDirectoryLoading,
   isLoading,
   isError,
   onRetry,
@@ -75,6 +77,7 @@ export function KnowledgeGraphWorkspace({
   resources: KnowledgeResourceView[];
   chapters: Chapter[];
   graph: KnowledgeGraph | undefined;
+  isDirectoryLoading: boolean;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
@@ -89,18 +92,52 @@ export function KnowledgeGraphWorkspace({
   const rawResourceId = searchParams.get("resourceId");
   const rawChapterId = searchParams.get("chapterId");
   const rawPointId = searchParams.get("pointId");
-  const availableResourceIds = useMemo(
+  const rawScope = searchParams.get("scope");
+  const allScopeRequested = rawScope === "all";
+  const orderedResources = useMemo(
     () =>
-      new Set(resources.map((resource) => resource.document.id)),
+      [...resources].sort((left, right) => {
+        const createdOrder = left.document.created_at.localeCompare(
+          right.document.created_at,
+        );
+        return createdOrder || left.document.id.localeCompare(right.document.id);
+      }),
     [resources],
   );
+  const availableResourceIds = useMemo(
+    () =>
+      new Set(orderedResources.map((resource) => resource.document.id)),
+    [orderedResources],
+  );
+  const pointChapter = useMemo(
+    () =>
+      rawPointId
+        ? chapters.find((chapter) =>
+            chapter.knowledge_points.some((point) => point.id === rawPointId),
+          )
+        : null,
+    [chapters, rawPointId],
+  );
+  const defaultResourceId =
+    pointChapter?.document_id ?? orderedResources[0]?.document.id ?? null;
+  const requestedResourceId = allScopeRequested
+    ? null
+    : rawResourceId ?? (rawChapterId ? null : defaultResourceId);
+  const requestedChapterId = allScopeRequested
+    ? null
+    : rawChapterId ?? (rawResourceId || !pointChapter ? null : pointChapter.id);
   const resolvedFilter = useMemo(
     () =>
       resolveCourseGraphFilter(chapters, {
-        resourceId: rawResourceId,
-        chapterId: rawChapterId,
+        resourceId: requestedResourceId,
+        chapterId: requestedChapterId,
       }, availableResourceIds),
-    [availableResourceIds, chapters, rawChapterId, rawResourceId],
+    [
+      availableResourceIds,
+      chapters,
+      requestedChapterId,
+      requestedResourceId,
+    ],
   );
   const validPointId = pointMatchesCourseGraphFilter(
     rawPointId,
@@ -112,7 +149,9 @@ export function KnowledgeGraphWorkspace({
   const shouldNormalize =
     (rawResourceId ?? null) !== resolvedFilter.resourceId ||
     (rawChapterId ?? null) !== resolvedFilter.chapterId ||
-    (rawPointId ?? null) !== validPointId;
+    (rawPointId ?? null) !== validPointId ||
+    (rawScope ?? null) !==
+      (resolvedFilter.resourceId || resolvedFilter.chapterId ? null : "all");
 
   const filtered = useMemo(
     () =>
@@ -128,9 +167,9 @@ export function KnowledgeGraphWorkspace({
   const defaultOpenKeys = useMemo(
     () =>
       new Set(
-        resources.map((resource) => `resource:${resource.document.id}`),
+        orderedResources.map((resource) => `resource:${resource.document.id}`),
       ),
-    [resources],
+    [orderedResources],
   );
   const effectiveOpenKeys = openKeys ?? defaultOpenKeys;
   const pointSearchMatches = useMemo(() => {
@@ -161,7 +200,7 @@ export function KnowledgeGraphWorkspace({
       children: [],
       emptyLabel: "全课程范围不需要展开",
     };
-    const resourceSections = resources
+    const resourceSections = orderedResources
       .map((resource) => {
         const resourceMatches =
           !deferredQuery ||
@@ -202,7 +241,7 @@ export function KnowledgeGraphWorkspace({
       .filter((item) => item.matches)
       .map((item) => item.section);
     return [allSection, ...resourceSections];
-  }, [chapters, deferredQuery, resources]);
+  }, [chapters, deferredQuery, orderedResources]);
 
   const filteredOpenKeys = deferredQuery
     ? new Set(menuSections.map((section) => section.value))
@@ -216,7 +255,7 @@ export function KnowledgeGraphWorkspace({
       : "scope:all";
 
   useEffect(() => {
-    if (!chapters.length || !shouldNormalize) {
+    if (isDirectoryLoading || !shouldNormalize) {
       return;
     }
     const nextUrl = graphScopeUrl({
@@ -231,6 +270,7 @@ export function KnowledgeGraphWorkspace({
   }, [
     chapters.length,
     courseId,
+    isDirectoryLoading,
     resolvedFilter.chapterId,
     resolvedFilter.resourceId,
     router,
@@ -388,7 +428,7 @@ export function KnowledgeGraphWorkspace({
               color="#dce9fa"
               defaultOpenValues={[
                 "scope:all",
-                ...resources.map(
+                ...orderedResources.map(
                   (resource) => `resource:${resource.document.id}`,
                 ),
               ]}
@@ -409,7 +449,7 @@ export function KnowledgeGraphWorkspace({
         {!directoryOpen ? (
           <Button
             aria-label="打开图谱范围"
-            className="absolute left-3 top-3 z-40 border-white/15 bg-[#0d1d33]/80 text-[#dce9fa] backdrop-blur-xl hover:bg-[#173152] hover:text-white"
+            className="absolute left-3 top-16 z-40 border-white/15 bg-[#0d1d33]/80 text-[#dce9fa] backdrop-blur-xl hover:bg-[#173152] hover:text-white"
             onClick={() => setDirectoryOpen(true)}
             size="icon-sm"
             title="打开图谱范围"
@@ -420,7 +460,7 @@ export function KnowledgeGraphWorkspace({
           </Button>
         ) : null}
         {!directoryOpen ? (
-          <div className="absolute left-14 top-3 z-30 hidden items-center gap-1 rounded-full border border-white/10 bg-[#0d1d33]/62 px-2.5 py-1 text-[10px] text-[#9fb5d0] backdrop-blur-xl md:flex">
+          <div className="absolute left-14 top-16 z-30 hidden items-center gap-1 rounded-full border border-white/10 bg-[#0d1d33]/62 px-2.5 py-1 text-[10px] text-[#9fb5d0] backdrop-blur-xl md:flex">
             <span>{activeValue === "scope:all" ? "全部 PDF" : "当前范围"}</span>
             <ChevronRight className="size-3" />
             <span className="max-w-40 truncate">

@@ -193,6 +193,7 @@ function TeacherKnowledgeBasePage({
                 courseId={courseId}
                 courseName={course?.name ?? "课程"}
                 graph={graphQuery.data}
+                isDirectoryLoading={data.isLoading}
                 isError={graphQuery.isError}
                 isLoading={graphQuery.isPending}
                 key={courseId}
