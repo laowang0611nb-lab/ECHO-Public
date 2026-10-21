@@ -1,6 +1,14 @@
 # BranchedMenu Course Browser
 
-This teacher-only module replaces the primary graph tab with a resource/chapter browser.
+This teacher-only module provides the BranchedMenu used as a scope selector for the original G6 knowledge graph. It does not replace the graph canvas or redesign the graph engine.
+
+The menu selects:
+
+- all course PDFs;
+- one real PDF's chapters and knowledge points;
+- one chapter inside that PDF.
+
+The existing `KnowledgeGraphView`, graph query, node/edge styling, camera focus, orbit, free view, fullscreen and analytics remain the main graph experience. PDF preview is not mounted in the graph workspace.
 
 ## Third-party source
 

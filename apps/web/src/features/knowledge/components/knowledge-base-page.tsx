@@ -28,9 +28,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { KnowledgeGraphWorkspace } from "@/features/knowledge/components/knowledge-graph-workspace";
 import { KnowledgeGraphPreview } from "@/features/knowledge/components/knowledge-graph-preview";
 import { KnowledgeGraphEmbedContent } from "@/features/knowledge/graph-v2/knowledge-graph-embed";
-import { KnowledgeGraphView } from "@/features/knowledge/graph-v2/knowledge-graph-view";
 import { ExternalResourcesTab, QuestionItemsTab } from "@/features/knowledge/components/resource-management-tabs";
 import { ResourceKindIcon } from "@/features/knowledge/components/resource-kind-icon";
 import { knowledgeQueryKeys, useExternalResources, useKnowledgeBaseData, useKnowledgeGraph, useQuestionItems, useTrashedResources } from "@/features/knowledge/queries";
@@ -103,7 +103,9 @@ function TeacherKnowledgeBasePage({
   const questionItemsQuery = useQuestionItems(courseId);
   const externalResourcesQuery = useExternalResources(courseId);
   const trashedResourcesQuery = useTrashedResources(courseId);
-  const graphQuery = useKnowledgeGraph(courseId);
+  const graphQuery = useKnowledgeGraph(
+    activeTab === "graph" || activeTab === "resources" ? courseId : null,
+  );
 
   useEffect(() => {
     if (courseId && selectedCourseId !== courseId) {
@@ -186,7 +188,7 @@ function TeacherKnowledgeBasePage({
         <TabsContent className="min-h-0 flex-1 overflow-hidden pt-4" value={activeTab}>
           {activeTab === "graph" ? (
             <div className="h-full min-h-0">
-              <KnowledgeGraphView
+              <KnowledgeGraphWorkspace
                 chapters={data.chapters}
                 courseId={courseId}
                 courseName={course?.name ?? "课程"}
@@ -195,6 +197,7 @@ function TeacherKnowledgeBasePage({
                 isLoading={graphQuery.isPending}
                 key={courseId}
                 onRetry={() => void graphQuery.refetch()}
+                resources={data.resources}
               />
             </div>
           ) : null}

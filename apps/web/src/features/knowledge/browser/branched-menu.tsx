@@ -44,7 +44,7 @@ function renderIcon(icon: BranchedMenuIcon, size = 16) {
 export interface BranchedMenuProps {
   items: BranchedMenuSection[];
   activeValue?: string;
-  openValues?: readonly string[];
+  openValues?: ReadonlySet<string>;
   defaultOpenValues?: readonly string[];
   onSelect?: (value: string, item: BranchedMenuLeaf | BranchedMenuSection) => void;
   onOpenChange?: (openValues: ReadonlySet<string>) => void;
