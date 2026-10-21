@@ -1,0 +1,310 @@
+.branched-menu {
+  --bm-w: 280px;
+  --bm-ink: #dce9fa;
+  --bm-accent: #7cc4ff;
+  --bm-line: rgba(124, 196, 255, 0.3);
+  --bm-font: 13px;
+  --bm-row: 38px;
+  --bm-indent: 42px;
+  --bm-line-w: 1.5;
+  --bm-draw: 400ms;
+  --bm-fold: 300ms;
+  --bm-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --bm-muted: color-mix(in srgb, var(--bm-ink) 58%, transparent);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: min(var(--bm-w), 100%);
+  min-width: 0;
+  padding-left: 14px;
+  color: var(--bm-ink);
+  font-family: inherit;
+  font-size: var(--bm-font);
+  line-height: 1.2;
+}
+
+.branched-menu::before {
+  position: absolute;
+  top: 8px;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  content: "";
+  background: linear-gradient(
+    to bottom,
+    var(--bm-line) 0%,
+    var(--bm-line) 72%,
+    transparent 100%
+  );
+  border-radius: 999px;
+}
+
+.branched-menu__marker {
+  position: absolute;
+  top: -1px;
+  left: 0;
+  z-index: 2;
+  width: 2px;
+  height: 16px;
+  pointer-events: none;
+  background: var(--bm-accent);
+  border-radius: 999px;
+  opacity: 0;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--bm-accent) 65%, transparent);
+  transition:
+    top 220ms var(--bm-ease-out),
+    opacity 150ms ease;
+}
+
+.branched-menu__marker[data-on] {
+  opacity: 1;
+}
+
+.branched-menu__section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.branched-menu__head-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border-radius: 8px;
+  transition: background-color 180ms ease;
+}
+
+.branched-menu__head-row:hover,
+.branched-menu__head-row:focus-within {
+  background: rgba(124, 196, 255, 0.065);
+}
+
+.branched-menu__head {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 4px 8px 0;
+  overflow: hidden;
+  color: var(--bm-muted);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  outline: none;
+  transition: color 180ms ease;
+}
+
+.branched-menu__head-row[data-active] .branched-menu__head,
+.branched-menu__section[data-open] .branched-menu__head,
+.branched-menu__head:hover {
+  color: var(--bm-ink);
+}
+
+.branched-menu__head-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  color: var(--bm-accent);
+  background: rgba(124, 196, 255, 0.08);
+  border: 1px solid rgba(124, 196, 255, 0.12);
+  border-radius: 7px;
+}
+
+.branched-menu__head-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.branched-menu__head-label,
+.branched-menu__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branched-menu__head-label {
+  font-size: calc(var(--bm-font) + 1px);
+  font-weight: 590;
+}
+
+.branched-menu__head-meta,
+.branched-menu__item-meta {
+  overflow: hidden;
+  color: var(--bm-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branched-menu__toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--bm-muted);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  outline: none;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease;
+}
+
+.branched-menu__toggle:hover:not(:disabled) {
+  color: var(--bm-ink);
+  background: rgba(124, 196, 255, 0.08);
+}
+
+.branched-menu__toggle:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.branched-menu__head:focus-visible,
+.branched-menu__toggle:focus-visible,
+.branched-menu__item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--bm-accent) 78%, white 10%);
+  outline-offset: 1px;
+}
+
+.branched-menu__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--bm-fold) var(--bm-ease-out);
+}
+
+.branched-menu__section[data-open] .branched-menu__body {
+  grid-template-rows: 1fr;
+}
+
+.branched-menu__fold {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.branched-menu__tree {
+  position: relative;
+  box-sizing: border-box;
+  padding: 6px 0;
+}
+
+.branched-menu__lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.branched-menu__section[data-open] .branched-menu__lines {
+  opacity: 1;
+  transition: opacity 250ms ease 100ms;
+}
+
+.branched-menu__base,
+.branched-menu__reach {
+  fill: none;
+  stroke-width: var(--bm-line-w);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.branched-menu__base {
+  stroke: var(--bm-line);
+}
+
+.branched-menu__reach {
+  stroke: var(--bm-accent);
+  transition: stroke-dashoffset var(--bm-draw) var(--bm-ease-out);
+}
+
+.branched-menu__item {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  width: 100%;
+  height: var(--bm-row);
+  gap: 8px;
+  margin: 0;
+  padding: 0 4px 0 var(--bm-indent);
+  overflow: hidden;
+  color: var(--bm-muted);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 0 7px 7px 0;
+  outline: none;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease;
+}
+
+.branched-menu__item:hover {
+  color: var(--bm-ink);
+  background: rgba(124, 196, 255, 0.05);
+}
+
+.branched-menu__item[data-active] {
+  color: var(--bm-accent);
+  font-weight: 560;
+  background: rgba(124, 196, 255, 0.075);
+}
+
+.branched-menu__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.branched-menu__label {
+  min-width: 0;
+  flex: 1;
+}
+
+.branched-menu__item-meta {
+  flex: none;
+}
+
+.branched-menu__empty {
+  display: flex;
+  align-items: center;
+  min-height: calc(var(--bm-row) - 4px);
+  padding-left: var(--bm-indent);
+  color: var(--bm-muted);
+  font-size: 11px;
+}
+
+.branched-menu__empty--root {
+  min-height: 120px;
+  justify-content: center;
+  padding: 16px;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .branched-menu__marker {
+    transition: opacity 150ms ease;
+  }
+
+  .branched-menu__body,
+  .branched-menu__reach {
+    transition: none;
+  }
+}
