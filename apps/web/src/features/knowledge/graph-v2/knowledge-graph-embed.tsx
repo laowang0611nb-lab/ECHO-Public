@@ -207,13 +207,7 @@ function buildScopeResources(
   chapters: Chapter[],
 ): EmbedScopeResource[] {
   const labels = new Map<string, string>();
-  const firstChapterIndex = new Map<string, number>();
-
-  for (const [index, chapter] of chapters.entries()) {
-    if (!firstChapterIndex.has(chapter.document_id)) {
-      firstChapterIndex.set(chapter.document_id, index);
-    }
-  }
+  const resourceOrder = new Map<string, number>();
 
   for (const node of graph?.nodes ?? []) {
     if (node.type !== "resource") continue;
@@ -225,6 +219,9 @@ function buildScopeResources(
       resourceType === "external_resource"
     ) {
       continue;
+    }
+    if (!resourceOrder.has(documentId)) {
+      resourceOrder.set(documentId, resourceOrder.size);
     }
     labels.set(documentId, node.label);
   }
@@ -247,9 +244,9 @@ function buildScopeResources(
       ),
     }))
     .sort((left, right) => {
-      const leftIndex = firstChapterIndex.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+      const leftIndex = resourceOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER;
       const rightIndex =
-        firstChapterIndex.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+        resourceOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER;
       return leftIndex - rightIndex || left.title.localeCompare(right.title);
     });
 }
