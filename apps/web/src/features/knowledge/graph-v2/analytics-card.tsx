@@ -43,7 +43,10 @@ export function KnowledgeGraphAnalyticsCard({
         <motion.aside
           animate={{ opacity: 1, x: 0 }}
           className={cn(
-            "pointer-events-auto absolute right-4 top-20 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/45 bg-[#f8fbff]/72 text-foreground shadow-[0_24px_70px_rgba(2,8,23,0.34)] ring-1 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition-[padding,box-shadow] duration-200 lg:top-4",
+            "pointer-events-auto absolute right-4 z-20 w-[292px] max-w-[calc(100%-2rem)] rounded-xl border border-white/45 bg-[#f8fbff]/72 text-foreground shadow-[0_24px_70px_rgba(2,8,23,0.34)] ring-1 ring-white/25 backdrop-blur-2xl backdrop-saturate-150 transition-[padding,box-shadow] duration-200",
+            embedMode
+              ? "top-16 max-h-[calc(100%-4.5rem)] overflow-y-auto"
+              : "top-20 lg:top-4",
             collapsed ? "px-3 py-1.5" : "p-4",
           )}
           exit={{ opacity: 0, x: 12 }}

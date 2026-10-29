@@ -405,7 +405,7 @@ function EmbedGraphScopeWorkspace({
         )}
         inert={!directoryOpen}
       >
-        <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-4">
+        <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-14">
           <div className="min-w-0">
             <p className="text-[11px] font-medium tracking-[0.12em] text-[#6482a3]">
               图谱范围
@@ -693,7 +693,7 @@ export function KnowledgeGraphEmbedContent({
   }
 
   return (
-    <div className="h-[100dvh] w-screen overflow-hidden bg-[#06101f] pt-14">
+    <div className="h-[100dvh] w-screen overflow-hidden bg-[#06101f]">
       <EmbedGraphScopeWorkspace
         chapters={chapters}
         courseId={courseId}

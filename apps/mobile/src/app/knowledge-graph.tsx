@@ -77,10 +77,8 @@ export function parseAskAiMessage(
 export default function KnowledgeGraphScreen() {
   const params = useLocalSearchParams<{
     courseId?: string | string[];
-    courseName?: string | string[];
   }>();
   const courseId = firstParam(params.courseId);
-  const courseName = firstParam(params.courseName) ?? "课程知识图谱";
   const [attempt, setAttempt] = useState(0);
   const [session, setSession] = useState<KnowledgeGraphEmbedSession | null>(null);
   const [preparing, setPreparing] = useState(true);
@@ -329,11 +327,7 @@ export default function KnowledgeGraphScreen() {
         </View>
       ) : null}
 
-      <SafeAreaView
-        edges={["top", "left", "right"]}
-        pointerEvents="box-none"
-        style={styles.topOverlay}
-      >
+      <SafeAreaView edges={["top", "left"]} pointerEvents="box-none" style={styles.floatingBack}>
         <Pressable
           accessibilityLabel="退出知识图谱"
           accessibilityRole="button"
@@ -346,10 +340,6 @@ export default function KnowledgeGraphScreen() {
             tintColor="#ffffff"
           />
         </Pressable>
-        <Text numberOfLines={1} style={styles.title}>
-          {courseName}
-        </Text>
-        <View style={styles.titleSpacer} />
       </SafeAreaView>
     </View>
   );
@@ -441,20 +431,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     position: "absolute",
-    top: 72,
+    top: 18,
   },
   loadingPillText: {
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "800",
   },
-  topOverlay: {
-    alignItems: "center",
-    flexDirection: "row",
+  floatingBack: {
+    alignItems: "flex-start",
     left: 0,
-    paddingHorizontal: 14,
+    padding: 14,
     position: "absolute",
-    right: 0,
     top: 0,
   },
   exitButton: {
@@ -463,17 +451,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
-    width: 36,
-  },
-  title: {
-    color: "#ffffff",
-    flex: 1,
-    fontSize: 15,
-    fontWeight: "900",
-    paddingHorizontal: 12,
-    textAlign: "center",
-  },
-  titleSpacer: {
     width: 36,
   },
 });
