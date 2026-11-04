@@ -801,6 +801,7 @@ async def test_knowledge_graph_normalizes_relation_types_and_point_filter(
         headers=auth_headers(teacher),
     )
     assert response.status_code == 200
+    assert response.json()["scope"] == "full"
     semantic_edges = {
         (edge["type"], UUID(edge["source"]), UUID(edge["target"]))
         for edge in response.json()["edges"]
@@ -820,6 +821,7 @@ async def test_knowledge_graph_normalizes_relation_types_and_point_filter(
         headers=auth_headers(teacher),
     )
     assert filtered.status_code == 200
+    assert filtered.json()["scope"] == "point"
     filtered_node_ids = {UUID(node["id"]) for node in filtered.json()["nodes"]}
     filtered_edges = {
         (edge["type"], UUID(edge["source"]), UUID(edge["target"]))
@@ -832,6 +834,52 @@ async def test_knowledge_graph_normalizes_relation_types_and_point_filter(
     assert ("related", point_ids[3], point_ids[1]) in filtered_edges
     assert point_ids[4] not in filtered_node_ids
     assert point_ids[5] not in filtered_node_ids
+
+    chapter_scope = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-graph"
+        f"?scope=chapter&chapterId={chapter_id}&maxNodes=80",
+        headers=auth_headers(teacher),
+    )
+    assert chapter_scope.status_code == 200
+    chapter_payload = chapter_scope.json()
+    assert chapter_payload["scope"] == "chapter"
+    assert set(point_ids) <= {UUID(node["id"]) for node in chapter_payload["nodes"]}
+    assert chapter_payload["truncated"] is False
+
+    document_scope = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-graph?scope=document&documentId={document['id']}",
+        headers=auth_headers(teacher),
+    )
+    assert document_scope.status_code == 200
+    document_payload = document_scope.json()
+    assert document_payload["scope"] == "document"
+    assert any(node["id"] == str(chapter_id) for node in document_payload["nodes"])
+    assert all(node["type"] != "knowledge_point" for node in document_payload["nodes"])
+
+    limited = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-graph"
+        f"?scope=chapter&chapterId={chapter_id}&maxNodes=5",
+        headers=auth_headers(teacher),
+    )
+    assert limited.status_code == 200
+    limited_payload = limited.json()
+    assert limited_payload["returned_nodes"] == 5
+    assert limited_payload["truncated"] is True
+    limited_node_ids = {node["id"] for node in limited_payload["nodes"]}
+    assert all(
+        edge["source"] in limited_node_ids and edge["target"] in limited_node_ids
+        for edge in limited_payload["edges"]
+    )
+
+    overview = await client.get(
+        f"/api/v1/courses/{course_id}/knowledge-graph?scope=overview",
+        headers=auth_headers(teacher),
+    )
+    assert overview.status_code == 200
+    overview_payload = overview.json()
+    assert overview_payload["scope"] == "overview"
+    assert any(node["id"] == document["id"] for node in overview_payload["nodes"])
+    assert all(node["type"] in {"course", "resource"} for node in overview_payload["nodes"])
 
 
 @pytest.mark.parametrize(

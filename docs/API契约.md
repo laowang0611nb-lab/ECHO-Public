@@ -234,6 +234,7 @@ Quick Check 由服务端校验答案并通过 `LearningEvent -> StudentKnowledge
 | GET | `/courses/{course_id}/chapters/analytics` | 课程教师 | 章节掌握分析 |
 | GET | `/courses/{course_id}/knowledge-points/{knowledge_point_id}/analytics` | 课程教师 | 知识点分布 |
 | GET | `/courses/{course_id}/students/{student_id}/learning` | 课程教师 | 学生学习证据 |
+| GET | `/courses/{course_id}/students/analytics` | 课程教师 | 一次返回课程内全部学生学情摘要、章节分析和可选详情 |
 
 Dashboard 响应新增字段：
 
@@ -547,10 +548,23 @@ GET /api/v1/courses/{course_id}/resources?trashed=true
 POST /api/v1/courses/{course_id}/resources/{resource_id}/trash
 POST /api/v1/courses/{course_id}/resources/{resource_id}/restore
 DELETE /api/v1/courses/{course_id}/resources/{resource_id}?permanent=true
-GET /api/v1/courses/{course_id}/knowledge-graph?chapterId=&pointId=
+GET /api/v1/courses/{course_id}/knowledge-graph?scope=&documentId=&chapterId=&pointId=&depth=&maxNodes=
 POST /api/v1/courses/{course_id}/knowledge-graph/embed-session
 POST /api/v1/knowledge-graph/embed-sessions/exchange
 ```
+
+知识图谱支持分层读取：
+
+| scope | 必填参数 | 返回内容 |
+|---|---|---|
+| `overview` | 无 | 课程 + 教材聚合节点 |
+| `document` | `documentId` | 教材 + 章节结构 |
+| `chapter` | `chapterId` | 章节结构 + 局部知识点关系 |
+| `point` | `pointId` | 知识点 1–2 跳真实语义邻域 |
+| `full` | 无 | 兼容旧调用，受 `maxNodes` 限制 |
+
+`depth` 范围为 `1–2`，`maxNodes` 范围为 `1–500`。响应包含
+`total_nodes`、`returned_nodes`、`has_more` 和 `truncated`；裁剪后不会返回指向缺失节点的边。
 
 回收站覆盖普通资源、章节、知识点、习题和外部资源。永久删除必须显式传 `permanent=true`，并返回受影响引用数量。图谱节点和边全部来自数据库，不使用前端模拟关系。知识关系按兼容白名单映射：`prerequisite_of`/`prerequisite` 输出 `prerequisite`，`related_to`/`related`/`applied_in` 和未知值确定性输出 `related`。
 

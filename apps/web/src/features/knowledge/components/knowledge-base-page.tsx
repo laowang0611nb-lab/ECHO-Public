@@ -105,6 +105,11 @@ function TeacherKnowledgeBasePage({
   const trashedResourcesQuery = useTrashedResources(courseId);
   const graphQuery = useKnowledgeGraph(
     activeTab === "graph" || activeTab === "resources" ? courseId : null,
+    {
+      scope: "full",
+      maxNodes: 500,
+      enabled: activeTab === "graph" || activeTab === "resources",
+    },
   );
 
   useEffect(() => {

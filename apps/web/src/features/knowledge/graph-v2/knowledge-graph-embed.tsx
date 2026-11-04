@@ -589,9 +589,13 @@ export function KnowledgeGraphEmbedContent({
       };
 
       try {
+        const graphParams = new URLSearchParams({
+          scope: "full",
+          maxNodes: "500",
+        });
         const [nextGraph, nextChapters] = await Promise.all([
           requestJson<KnowledgeGraph>(
-            `${apiBaseUrl}/api/v1/courses/${courseId}/knowledge-graph`,
+            `${apiBaseUrl}/api/v1/courses/${courseId}/knowledge-graph?${graphParams.toString()}`,
             { headers },
             signal,
             { authorizationContext: "resource" },

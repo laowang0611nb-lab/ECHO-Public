@@ -237,6 +237,18 @@ class KnowledgeGraphEdge(BaseModel):
 class KnowledgeGraphResponse(BaseModel):
     nodes: list[KnowledgeGraphNode]
     edges: list[KnowledgeGraphEdge]
+    scope: Literal[
+        "overview",
+        "document",
+        "chapter",
+        "point",
+        "full",
+    ] = "full"
+    focus_id: UUID | None = None
+    total_nodes: int = 0
+    returned_nodes: int = 0
+    has_more: bool = False
+    truncated: bool = False
 
 
 class DocumentIndexStatusResponse(BaseModel):

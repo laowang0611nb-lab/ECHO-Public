@@ -16,6 +16,8 @@ import { useCourseWorkspace } from "@/providers/course-workspace-provider";
 import { useTeacherSession } from "@/providers/teacher-session-provider";
 
 export const studentQueryKeys = {
+  analytics: (userId: string, courseId: string, includeDetails: boolean) =>
+    ["teacher", "students", "analytics", userId, courseId, includeDetails] as const,
   members: (userId: string, courseId: string) => ["teacher", "students", "members", userId, courseId] as const,
   detail: (userId: string, courseId: string, studentId: string) =>
     ["teacher", "students", "detail", userId, courseId, studentId] as const,
@@ -44,72 +46,54 @@ export function useStudentAnalytics(
   const userId = user?.id;
   const enabled = Boolean(userId && courseId);
 
-  const membersQuery = useQuery({
-    queryKey: studentQueryKeys.members(userId ?? "anonymous", courseId ?? "none"),
-    queryFn: () => apiClient.listCourseMembers(userId!, courseId!),
-    enabled,
-    staleTime: 30_000,
-  });
-  const chaptersQuery = useQuery({
-    queryKey: studentQueryKeys.chapters(userId ?? "anonymous", courseId ?? "none"),
-    queryFn: () => apiClient.listChapters(userId!, courseId!),
-    enabled,
-    staleTime: 30_000,
-  });
   const analyticsQuery = useQuery({
-    queryKey: studentQueryKeys.chapterAnalytics(userId ?? "anonymous", courseId ?? "none"),
-    queryFn: () => apiClient.getChapterAnalytics(userId!, courseId!),
-    enabled,
-    staleTime: 30_000,
-  });
-  const reviewFlagsQuery = useQuery({
-    queryKey: studentQueryKeys.reviewFlags(userId ?? "anonymous", courseId ?? "none"),
-    queryFn: () => apiClient.listReviewFlags(userId!, courseId!, { limit: 100 }),
+    queryKey: studentQueryKeys.analytics(
+      userId ?? "anonymous",
+      courseId ?? "none",
+      includeDetails,
+    ),
+    queryFn: () =>
+      apiClient.getCourseStudentAnalytics(userId!, courseId!, {
+        includeDetails,
+      }),
     enabled,
     staleTime: 30_000,
   });
 
-  const students = (membersQuery.data ?? []).filter((member) => member.role === "student");
-  const detailQueries = useQueries({
-    queries: includeDetails ? students.map((student) => ({
-      queryKey: studentQueryKeys.detail(userId ?? "anonymous", courseId ?? "none", student.user_id),
-      queryFn: () => apiClient.getStudentLearningDetail(userId!, courseId!, student.user_id),
-      enabled,
-      staleTime: 30_000,
-    })) : [],
+  const aggregateItems = analyticsQuery.data?.items ?? [];
+  const students = aggregateItems.map((item) => item.member);
+  const items = aggregateItems.map((item) => {
+    const detail: StudentLearningDetail = {
+      student_id: item.member.user_id,
+      display_name: item.member.display_name,
+      average_mastery: item.average_mastery,
+      mastery_states: item.mastery_states,
+      recent_evidence: item.recent_evidence,
+    };
+    return buildStudentAnalyticsItem({
+      member: item.member,
+      detail,
+      chapters: [],
+      aggregate: {
+        weak_knowledge_points: item.weak_knowledge_points,
+        learning_event_count: item.learning_event_count,
+        active_days_7: item.active_days_7,
+        latest_evidence: item.recent_evidence[0] ?? null,
+      },
+    });
   });
-
-  const items = students.map((student, index) =>
-    buildStudentAnalyticsItem({
-      member: student,
-      detail: includeDetails ? detailQueries[index]?.data ?? null : null,
-      chapters: chaptersQuery.data ?? [],
-    }),
-  );
 
   return {
     items,
     students,
-    chapters: chaptersQuery.data ?? [],
-    chapterAnalytics: analyticsQuery.data ?? [],
-    reviewFlags: reviewFlagsQuery.data ?? [],
-    summary: summarizeStudents(items),
-    isLoading:
-      membersQuery.isPending ||
-      chaptersQuery.isPending ||
-      analyticsQuery.isPending ||
-      (includeDetails && detailQueries.some((query) => query.isPending)),
-    isError:
-      membersQuery.isError ||
-      chaptersQuery.isError ||
-      analyticsQuery.isError ||
-      (includeDetails && detailQueries.some((query) => query.isError)),
+    chapters: [],
+    chapterAnalytics: analyticsQuery.data?.chapter_analytics ?? [],
+    reviewFlags: [],
+    summary: summarizeStudents(items, analyticsQuery.data?.summary),
+    isLoading: analyticsQuery.isPending,
+    isError: analyticsQuery.isError,
     refetch: () => {
-      void membersQuery.refetch();
-      void chaptersQuery.refetch();
       void analyticsQuery.refetch();
-      void reviewFlagsQuery.refetch();
-      detailQueries.forEach((query) => void query.refetch());
     },
   };
 }

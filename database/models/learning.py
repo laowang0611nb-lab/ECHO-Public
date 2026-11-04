@@ -11,6 +11,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -43,6 +44,12 @@ class LearningEventType(StrEnum):
 class LearningEvent(Base):
     __tablename__ = "learning_events"
     __table_args__ = (
+        Index(
+            "ix_learning_events_course_user_created_at",
+            "course_id",
+            "user_id",
+            "created_at",
+        ),
         CheckConstraint(
             "week_number IS NULL OR week_number >= 1",
             name="ck_learning_events_week_number_positive",

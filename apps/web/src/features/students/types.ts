@@ -57,6 +57,7 @@ export interface StudentAnalyticsItem {
   weakKnowledgePoints: Array<{ id: string; name: string; score: number }>;
   latestEvidence: LearningEvidence | null;
   evidenceCount: number;
+  activeDays7: number;
   activeRecently: boolean;
   riskReason: string | null;
 }

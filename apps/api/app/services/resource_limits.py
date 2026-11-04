@@ -5,8 +5,8 @@ import ipaddress
 import math
 import threading
 import time
-from collections.abc import AsyncIterator
 from collections import defaultdict, deque
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from weakref import WeakKeyDictionary
 

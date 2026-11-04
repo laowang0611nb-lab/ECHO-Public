@@ -1158,6 +1158,40 @@ export interface KnowledgeGraph {
   truncated?: boolean;
 }
 
+export interface StudentWeakKnowledgePoint {
+  knowledge_point_id: string;
+  name: string;
+  score: number;
+}
+
+export interface StudentAnalyticsItem {
+  member: CourseMember;
+  average_mastery: number | null;
+  mastery_states: MasteryState[];
+  recent_evidence: LearningEvidence[];
+  weak_knowledge_points: StudentWeakKnowledgePoint[];
+  learning_event_count: number;
+  active_days_7: number;
+  last_active_at: string | null;
+  conversation_count: number;
+}
+
+export interface StudentAnalyticsSummary {
+  student_count: number;
+  average_mastery: number | null;
+  active_student_count: number;
+  attention_student_count: number;
+  students_with_evidence: number;
+}
+
+export interface CourseStudentAnalytics {
+  course_id: string;
+  generated_at: string;
+  items: StudentAnalyticsItem[];
+  summary: StudentAnalyticsSummary;
+  chapter_analytics: ChapterAnalytics[];
+}
+
 export interface DocumentIndexStatus {
   document_id: string;
   status: string;

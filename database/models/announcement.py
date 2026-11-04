@@ -15,7 +15,9 @@ if TYPE_CHECKING:
 class CourseAnnouncement(Base):
     __tablename__ = "course_announcements"
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     course_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
@@ -24,7 +26,9 @@ class CourseAnnouncement(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
     created_by: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),

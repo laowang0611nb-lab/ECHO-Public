@@ -37,7 +37,10 @@ export function AiStageGraph({ analysis, chapters, courseId, fallbackDifficulty,
   fallbackDifficulty: DashboardLearningDifficulty | null;
   activeEvidenceId?: string | null;
 }) {
-  const graphQuery = useKnowledgeGraph(courseId);
+  const graphQuery = useKnowledgeGraph(courseId, {
+    scope: "full",
+    maxNodes: 160,
+  });
   const dashboardQuery = useKnowledgeCourseDashboard(courseId);
   const source = useMemo(() => graphQuery.data ? buildGraphSource(graphQuery.data, chapters) : null, [graphQuery.data, chapters]);
   const riskMap = useMemo(() => riskMapFromDashboard(source?.points ?? [], dashboardQuery.data), [source, dashboardQuery.data]);

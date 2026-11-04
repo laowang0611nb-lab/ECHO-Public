@@ -83,7 +83,9 @@ class AIAnalysis(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     course_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
@@ -175,7 +177,9 @@ class AIAnalysis(Base):
 
     course: Mapped["Course"] = relationship()
     knowledge_point: Mapped["KnowledgePoint | None"] = relationship()
-    previous_analysis: Mapped["AIAnalysis | None"] = relationship(remote_side="AIAnalysis.id")
+    previous_analysis: Mapped["AIAnalysis | None"] = relationship(
+        remote_side="AIAnalysis.id"
+    )
     creator: Mapped["User"] = relationship()
     evidence: Mapped[list["AIAnalysisEvidence"]] = relationship(
         back_populates="analysis",
@@ -197,7 +201,9 @@ class AIAnalysis(Base):
 class AIAnalysisEvidence(Base):
     __tablename__ = "ai_analysis_evidence"
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     analysis_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("ai_analyses.id", ondelete="CASCADE"),
@@ -229,7 +235,9 @@ class AIAnalysisEvidence(Base):
     )
     label: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    snapshot_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    snapshot_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -251,7 +259,9 @@ class AIAnalysisStageEvent(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     analysis_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("ai_analyses.id", ondelete="CASCADE"),
@@ -290,17 +300,25 @@ class AIAnalysisResult(Base):
     conclusion: Mapped[str] = mapped_column(Text, nullable=False)
     root_cause: Mapped[str] = mapped_column(Text, nullable=False)
     recommendation: Mapped[str] = mapped_column(Text, nullable=False)
-    affected_student_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
-    facts: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list, nullable=False)
+    affected_student_ids: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
+    facts: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     evidence_summary: Mapped[list[dict[str, object]]] = mapped_column(
         JSON, default=list, nullable=False
     )
     recommendation_payload: Mapped[dict[str, object]] = mapped_column(
         JSON, default=dict, nullable=False
     )
-    insufficient_evidence: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    insufficient_evidence: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     insufficient_reason: Mapped[str | None] = mapped_column(Text)
-    insufficient_categories: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    insufficient_categories: Mapped[list[str]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     model_name: Mapped[str | None] = mapped_column(String(120))
     strategy_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),

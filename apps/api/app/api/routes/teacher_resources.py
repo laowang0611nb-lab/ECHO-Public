@@ -49,7 +49,7 @@ from app.services.knowledge_analytics import (
     get_student_error_patterns,
     get_student_mastery_trend,
 )
-from app.services.knowledge_graph import get_knowledge_graph
+from app.services.knowledge_graph import GraphScope, get_knowledge_graph
 from app.services.question_items import (
     create_question_item,
     delete_question_item,
@@ -500,8 +500,12 @@ async def read_course_knowledge_graph(
     course_id: UUID,
     read_principal: KnowledgeGraphReadPrincipalDep,
     session: DBSession,
+    scope: Annotated[GraphScope, Query()] = "full",
+    document_id: Annotated[UUID | None, Query(alias="documentId")] = None,
     chapter_id: Annotated[UUID | None, Query(alias="chapterId")] = None,
     point_id: Annotated[UUID | None, Query(alias="pointId")] = None,
+    depth: Annotated[int, Query(ge=1, le=2)] = 1,
+    max_nodes: Annotated[int, Query(alias="maxNodes", ge=1, le=500)] = 500,
 ):
     try:
         require_knowledge_graph_read_course(read_principal, course_id)
@@ -510,8 +514,12 @@ async def read_course_knowledge_graph(
             course_id,
             read_principal.user_id,
             allow_course_read=read_principal.is_embedded,
+            scope=scope,
+            document_id=document_id,
             chapter_id=chapter_id,
             point_id=point_id,
+            depth=depth,
+            max_nodes=max_nodes,
         )
     except (TeacherContentNotFoundError, TeacherContentForbiddenError) as exc:
         raise _translate_error(exc) from exc

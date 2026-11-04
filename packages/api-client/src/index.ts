@@ -38,6 +38,7 @@ import type {
   ChunkSearchResult,
   Conversation,
   Course,
+  CourseStudentAnalytics,
   CourseCreateRequest,
   CourseDashboard,
   CourseUpdateRequest,
@@ -1219,6 +1220,20 @@ export function createApiClient({
         undefined,
         userId,
       ),
+    getCourseStudentAnalytics: (
+      userId: string,
+      courseId: string,
+      options?: { includeDetails?: boolean },
+    ) => {
+      const params = new URLSearchParams({
+        includeDetails: String(options?.includeDetails ?? true),
+      });
+      return request<CourseStudentAnalytics>(
+        `/api/v1/courses/${courseId}/students/analytics?${params.toString()}`,
+        undefined,
+        userId,
+      );
+    },
     createLearningEvent: (
       userId: string,
       courseId: string,

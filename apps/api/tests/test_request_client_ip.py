@@ -17,8 +17,7 @@ def make_request(
             "raw_path": b"/",
             "query_string": b"",
             "headers": [
-                (name.lower().encode(), value.encode())
-                for name, value in (headers or {}).items()
+                (name.lower().encode(), value.encode()) for name, value in (headers or {}).items()
             ],
             "client": peer,
             "server": ("testserver", 80),

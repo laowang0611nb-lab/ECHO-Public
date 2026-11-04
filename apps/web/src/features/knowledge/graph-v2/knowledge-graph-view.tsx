@@ -1,7 +1,24 @@
 "use client";
 
-import type { Chapter, KnowledgeGraph } from "@echo/shared-types";
-import { Crosshair, Maximize2, Minimize2, Network, RotateCcw, ScanSearch, Sparkles, ZoomIn } from "lucide-react";
+import type {
+  Chapter,
+  KnowledgeGraph,
+  KnowledgeGraphNode,
+} from "@echo/shared-types";
+import {
+  ArrowLeft,
+  BookOpen,
+  ChevronRight,
+  Crosshair,
+  FileText,
+  Maximize2,
+  Minimize2,
+  Network,
+  RotateCcw,
+  ScanSearch,
+  Sparkles,
+  ZoomIn,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
@@ -34,6 +51,9 @@ export function KnowledgeGraphView({
   isLoading,
   isError,
   onRetry,
+  onBack,
+  onOpenChapter,
+  onOpenDocument,
   embedMode = false,
   onAskAi,
 }: {
@@ -44,12 +64,17 @@ export function KnowledgeGraphView({
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
+  onBack?: () => void;
+  onOpenChapter?: (chapterId: string) => void;
+  onOpenDocument?: (documentId: string) => void;
   embedMode?: boolean;
   onAskAi?: (point: GraphPointRecord) => void;
 }) {
   const router = useRouter();
   const sidebarTransitioning = useSidebarTransitioning();
   const source = useMemo(() => (graph ? buildGraphSource(graph, chapters) : null), [chapters, graph]);
+  const graphScope = graph?.scope ?? "full";
+  const hierarchyMode = graphScope === "overview" || graphScope === "document";
   const dashboardQuery = useKnowledgeCourseDashboard(courseId);
   const searchParams = useSearchParams();
   const pointIdParam = searchParams.get("pointId");
@@ -304,6 +329,18 @@ export function KnowledgeGraphView({
     );
   }
 
+  if (hierarchyMode && graph) {
+    return (
+      <KnowledgeGraphHierarchyView
+        courseName={courseName}
+        graph={graph}
+        onBack={onBack}
+        onOpenChapter={onOpenChapter}
+        onOpenDocument={onOpenDocument}
+      />
+    );
+  }
+
   if (!source.points.length) {
     return (
       <GraphPanelShell title="知识图谱" description="当前课程还没有可展示的知识点">
@@ -351,11 +388,17 @@ export function KnowledgeGraphView({
           </span>
         </div>
         <p className="mt-1 max-w-md text-xs leading-5 text-[#8299b8]">
-          {courseName} · 当前只显示知识点，点击节点切换分析中心
+          {courseName} · {graphScope === "point" ? "知识点邻域" : "当前章节"}
+          ，点击节点切换分析中心
         </p>
       </div>
 
       <div className="absolute right-4 top-4 z-30 flex items-center gap-2 lg:right-[324px]">
+        {onBack && graphScope !== "full" ? (
+          <ToolbarButton label="返回上一级" onClick={onBack}>
+            <ArrowLeft />
+          </ToolbarButton>
+        ) : null}
         {!embedMode ? (
           <div className="flex rounded-xl border border-white/18 bg-[#0d1d33]/58 p-1 shadow-[0_12px_34px_rgba(2,8,23,0.24)] ring-1 ring-white/8 backdrop-blur-xl backdrop-saturate-150">
             <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>全部</FilterButton>
@@ -443,6 +486,144 @@ export function KnowledgeGraphView({
       </div>
     </div>
   );
+}
+
+function KnowledgeGraphHierarchyView({
+  courseName,
+  graph,
+  onBack,
+  onOpenChapter,
+  onOpenDocument,
+}: {
+  courseName: string;
+  graph: KnowledgeGraph;
+  onBack?: () => void;
+  onOpenChapter?: (chapterId: string) => void;
+  onOpenDocument?: (documentId: string) => void;
+}) {
+  const courseNode = graph.nodes.find((node) => node.type === "course");
+  const resources = graph.nodes
+    .filter(
+      (node): node is KnowledgeGraphNode & { type: "resource" } =>
+        node.type === "resource" &&
+        node.metadata.resource_type === "textbook",
+    )
+    .sort((left, right) =>
+      stableGraphLabel(left.label, right.label),
+    );
+  const chapters = graph.nodes
+    .filter(
+      (node): node is KnowledgeGraphNode & { type: "chapter" } =>
+        node.type === "chapter",
+    )
+    .sort(
+      (left, right) =>
+        Number(left.metadata.order_index ?? 0) -
+          Number(right.metadata.order_index ?? 0) ||
+        stableGraphLabel(left.label, right.label),
+    );
+  const isOverview = graph.scope === "overview";
+  const items = isOverview ? resources : chapters;
+  return (
+    <div className="relative h-full min-h-[420px] overflow-auto rounded-xl border border-[#213c62] bg-[#081527] p-5 text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(84,128,185,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(84,128,185,0.06)_1px,transparent_1px)] bg-[size:32px_32px]" />
+      <div className="relative">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[#8fa5c2]">
+              {!isOverview && onBack ? (
+                <button
+                  className="inline-flex items-center gap-1 rounded-md border border-white/12 px-2 py-1 text-[#c7d8f0] transition-colors hover:bg-white/8"
+                  onClick={onBack}
+                  type="button"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  返回
+                </button>
+              ) : null}
+              <span>{courseName}</span>
+              {!isOverview ? (
+                <>
+                  <ChevronRight className="size-3.5" />
+                  <span>{resources[0]?.label ?? "教材"}</span>
+                </>
+              ) : null}
+            </div>
+            <h3 className="mt-3 text-lg font-semibold">
+              {isOverview ? "课程知识结构" : resources[0]?.label ?? "教材章节"}
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[#8fa5c2]">
+              {isOverview
+                ? "先选择一份教材，再查看章节和真实知识关系。目录结构与知识点语义关系分开呈现。"
+                : "选择章节进入局部知识网络；没有可靠语义关系的知识点不会连接到其他教材。"}
+            </p>
+          </div>
+          <div className="rounded-full border border-white/12 bg-white/6 px-3 py-1.5 text-xs text-[#b9cce5]">
+            {isOverview
+              ? `${resources.length} 份教材`
+              : `${chapters.length} 个章节`}
+            {graph.truncated
+              ? ` · 已显示 ${graph.returned_nodes}/${graph.total_nodes}`
+              : ""}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {items.map((node) => {
+            const chapterCount = Number(node.metadata.chapter_count ?? 0);
+            const pointCount = Number(node.metadata.knowledge_point_count ?? 0);
+            const pageCount = Number(node.metadata.page_count ?? 0);
+            const Icon = isOverview ? BookOpen : FileText;
+            return (
+              <button
+                className="group flex min-h-28 items-start gap-3 rounded-lg border border-[#29486e] bg-[#0c1d33]/82 p-4 text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5 hover:border-[#4b9cff]/70 hover:bg-[#102744] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4b9cff]"
+                key={node.id}
+                onClick={() =>
+                  isOverview
+                    ? onOpenDocument?.(node.id)
+                    : onOpenChapter?.(node.id)
+                }
+                type="button"
+              >
+                <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#315b8f] bg-[#102a48] text-[#74b4ff]">
+                  <Icon className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold leading-5 text-[#e9f2ff]">
+                    {node.label}
+                  </span>
+                  <span className="mt-2 block text-xs leading-5 text-[#8fa5c2]">
+                    {isOverview
+                      ? `${chapterCount} 章 · ${pointCount} 个知识点${pageCount ? ` · ${pageCount} 页` : ""}`
+                      : `${pointCount} 个知识点 · 第 ${Number(node.metadata.order_index ?? 0) + 1} 个章节`}
+                  </span>
+                </span>
+                <ChevronRight className="mt-2 size-4 shrink-0 text-[#6f89a9] transition-transform group-hover:translate-x-0.5 group-hover:text-[#9dc8ff]" />
+              </button>
+            );
+          })}
+        </div>
+
+        {!items.length ? (
+          <div className="mt-5 rounded-lg border border-dashed border-white/14 px-4 py-10 text-center text-sm text-[#8fa5c2]">
+            当前范围还没有可展示的教材或章节。
+          </div>
+        ) : null}
+        {courseNode ? null : (
+          <p className="mt-4 text-xs text-orange-200">
+            当前接口没有返回课程节点，请检查图谱数据。
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function stableGraphLabel(left: string, right: string) {
+  return left.localeCompare(right, "zh-CN", {
+    numeric: true,
+    sensitivity: "base",
+  });
 }
 
 function GraphPanelShell({

@@ -12,6 +12,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -74,7 +75,9 @@ class TeachingStage(StrEnum):
 class TeachingPolicy(Base):
     __tablename__ = "teaching_policies"
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     course_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
@@ -105,8 +108,17 @@ class TeachingPolicy(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        Index(
+            "ix_conversations_course_user",
+            "course_id",
+            "user_id",
+        ),
+    )
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     course_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("courses.id", ondelete="CASCADE"),
@@ -154,7 +166,9 @@ class Message(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     conversation_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
@@ -187,7 +201,9 @@ class Message(Base):
         nullable=False,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    blocks: Mapped[list[dict[str, object]]] = mapped_column(JSON, default=list, nullable=False)
+    blocks: Mapped[list[dict[str, object]]] = mapped_column(
+        JSON, default=list, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -232,7 +248,9 @@ class ConversationTeachingState(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     conversation_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("conversations.id", ondelete="CASCADE"),
@@ -272,8 +290,12 @@ class ConversationTeachingState(Base):
     )
     hint_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    consecutive_incorrect_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    answer_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    consecutive_incorrect_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    answer_requested: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     pending_question: Mapped[str | None] = mapped_column(Text)
     last_user_message_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
@@ -314,7 +336,9 @@ class ConversationTeachingState(Base):
 class TeachingDialogEvent(Base):
     __tablename__ = "teaching_dialog_events"
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     state_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("conversation_teaching_states.id", ondelete="CASCADE"),
@@ -350,7 +374,9 @@ class TeachingDialogEvent(Base):
     )
     action: Mapped[str] = mapped_column(String(32), nullable=False)
     reason: Mapped[str | None] = mapped_column(String(255))
-    metadata_json: Mapped[dict[str, object]] = mapped_column(JSON, default=dict, nullable=False)
+    metadata_json: Mapped[dict[str, object]] = mapped_column(
+        JSON, default=dict, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -379,7 +405,9 @@ class ChatAttachment(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -409,7 +437,9 @@ class ChatAttachment(Base):
     )
     mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
     file_name: Mapped[str | None] = mapped_column(String(255))
-    storage_key: Mapped[str] = mapped_column(String(512), unique=True, index=True, nullable=False)
+    storage_key: Mapped[str] = mapped_column(
+        String(512), unique=True, index=True, nullable=False
+    )
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     width: Mapped[int | None] = mapped_column(Integer)
     height: Mapped[int | None] = mapped_column(Integer)
@@ -417,7 +447,9 @@ class ChatAttachment(Base):
     transcript: Mapped[str | None] = mapped_column(Text)
     model_file_url: Mapped[str | None] = mapped_column(Text)
     model_file_model: Mapped[str | None] = mapped_column(String(120))
-    model_file_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    model_file_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     attached_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
@@ -442,7 +474,9 @@ class MessageCitation(Base):
         ),
     )
 
-    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid4
+    )
     message_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("messages.id", ondelete="CASCADE"),

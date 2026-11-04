@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.api.dependencies import CurrentUser, DBSession
 from app.schemas.dashboard_details import (
     ChapterAnalyticsResponse,
+    CourseStudentAnalyticsResponse,
     KnowledgePointAnalyticsResponse,
     StudentLearningDetailResponse,
 )
@@ -12,6 +13,7 @@ from app.services.course import CourseMembershipRequiredError, CourseNotFoundErr
 from app.services.dashboard_details import (
     KnowledgePointNotFoundError,
     StudentNotFoundError,
+    get_course_student_analytics,
     get_knowledge_point_analytics,
     get_student_learning_detail,
     list_chapter_analytics,
@@ -77,6 +79,31 @@ async def read_knowledge_point_analytics(
         CourseMembershipRequiredError,
         LearningEventForbiddenError,
         KnowledgePointNotFoundError,
+    ) as exc:
+        raise _translate_error(exc) from exc
+
+
+@router.get(
+    "/courses/{course_id}/students/analytics",
+    response_model=CourseStudentAnalyticsResponse,
+)
+async def read_course_student_analytics(
+    course_id: UUID,
+    current_user: CurrentUser,
+    session: DBSession,
+    include_details: bool = Query(default=True, alias="includeDetails"),
+):
+    try:
+        return await get_course_student_analytics(
+            session,
+            course_id,
+            current_user.id,
+            include_details=include_details,
+        )
+    except (
+        CourseNotFoundError,
+        CourseMembershipRequiredError,
+        LearningEventForbiddenError,
     ) as exc:
         raise _translate_error(exc) from exc
 
