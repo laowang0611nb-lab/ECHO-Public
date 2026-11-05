@@ -47,7 +47,7 @@ apps\api\.venv\Scripts\python.exe -m ruff format --check database
 Run migrations against an isolated SQLite database:
 
 ```powershell
-$env:ECHO_DATABASE_URL = "sqlite+aiosqlite:///C:/absolute/path/echo-db-test.db"
+$env:ECHO_DATABASE_URL = "sqlite+aiosqlite:///./echo-db-test.db"
 apps\api\.venv\Scripts\python.exe -m alembic -c database\alembic.ini upgrade head
 apps\api\.venv\Scripts\python.exe -m alembic -c database\alembic.ini downgrade d9e0f1a2b3c4
 apps\api\.venv\Scripts\python.exe -m alembic -c database\alembic.ini upgrade head
@@ -58,29 +58,13 @@ been validated with native PostgreSQL 17.6 and pgvector 0.8.0, including the
 `vector(1024)` column, HNSW cosine index, full data import, and API health
 endpoint checks.
 
-## Windows Runtime Deployment
+## Runtime Data
 
-The local Windows-native database is centralized as follows:
-
-```text
-PostgreSQL software: <postgres>\pgsql
-PostgreSQL downloads: <postgres>\downloads
-Project data:        database/runtime/postgresql/data
-Project logs:        database/runtime/postgresql/logs
-Project backups:     database/runtime/postgresql/backups
-Credentials:         database/runtime/postgresql/config/credentials.json
-```
-
-A user logon task named `ECHO PostgreSQL` starts the server. Manual operations
-are documented in `scripts/database/README.md`.
-
-The start action launches `postgres.exe` as a detached hidden process instead
-of keeping PostgreSQL attached to the launcher console. This prevents the
-desktop startup window from sending `Ctrl+C` or console-close signals to the
-database after the services are reported ready.
-
-Server logs use the logging collector:
-`database/runtime/postgresql/logs/postgresql-server-YYYY-MM-DD.log`.
+Local database data, logs, backups and credentials belong under
+`database/runtime/`, which is ignored by Git. Configure the PostgreSQL
+connection through `ECHO_DATABASE_URL`; never commit runtime data, credentials
+or private keys. Database maintenance scripts are documented in
+`scripts/database/README.md`.
 
 ## Integration Status
 
