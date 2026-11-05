@@ -711,7 +711,7 @@ AI 二次分析使用 `ai_analyses`、`ai_analysis_evidence` 和 `ai_analysis_re
 - 已登记的方法、路径和枚举值视为稳定契约。
 - 新功能只能新增可选字段、新枚举值或新路径。
 - 不得无迁移地改名或删除现有字段。
-- 破坏性变更必须提升版本并同步本文档与 `INDEX.md`。
+- 破坏性变更必须提升版本并同步本文档与 `CODE_INDEX.md`。
 - 前端不得依赖未登记字段。 
 | POST | `/courses/{course_id}/knowledge-graph/embed-session` | 课程学生 | 创建 5 分钟一次性只读图谱嵌入票据 |
 | POST | `/knowledge-graph/embed-sessions/exchange` | 一次性票据 | 交换绑定课程与 `knowledge_graph:read` 的 5 分钟 token |

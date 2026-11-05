@@ -63,8 +63,8 @@ endpoint checks.
 Local database data, logs, backups and credentials belong under
 `database/runtime/`, which is ignored by Git. Configure the PostgreSQL
 connection through `ECHO_DATABASE_URL`; never commit runtime data, credentials
-or private keys. Database maintenance scripts are documented in
-`scripts/database/README.md`.
+or private keys. Local Windows maintenance tooling is not included in the
+public release.
 
 ## Integration Status
 

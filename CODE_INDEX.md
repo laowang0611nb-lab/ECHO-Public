@@ -90,8 +90,7 @@ apps/api/.venv/Scripts/python.exe -m pytest -c database/pytest.ini database/test
 
 ## 6. 脚本
 
-- `scripts/database/`：PostgreSQL 启停和维护
-- `scripts/demo_data/`：演示数据生成
+- `scripts/README.md`：脚本说明
 - `scripts/use-mobile-network.ps1`：移动端局域网地址切换
 - `scripts/adb-reverse.ps1`：ADB 端口反向映射
 
