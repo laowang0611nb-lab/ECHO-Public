@@ -8,11 +8,15 @@ import { WorkspacePlasmaBackground } from "@/components/backgrounds/workspace-pl
 import { GuidedDemoBar } from "@/features/demo/components/guided-demo-bar";
 import { PageMotion } from "@/components/layout/page-motion";
 import { Sidebar } from "@/components/layout/sidebar";
-import { setSidebarTransitioning } from "@/components/layout/sidebar-transition";
+import {
+  SIDEBAR_COMPACT_WIDTH,
+  SIDEBAR_EXPANDED_WIDTH,
+  SIDEBAR_TRANSITION_EASING,
+  SIDEBAR_TRANSITION_MS,
+  setSidebarTransitioning,
+} from "@/components/layout/sidebar-transition";
 import { TeacherAssistantPanel } from "@/features/teacher-assistant/teacher-assistant-panel";
 import { TeacherAssistantProvider } from "@/features/teacher-assistant/teacher-assistant-provider";
-
-const SIDEBAR_TRANSITION_MS = 260;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -40,21 +44,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <TeacherAssistantProvider>
-      <div
-      className="relative isolate min-h-screen bg-transparent"
-      style={{ "--sidebar-width": sidebarCollapsed ? "5rem" : "258px" } as CSSProperties}
-    >
-      <WorkspacePlasmaBackground />
-      <div className="relative z-10 min-h-screen">
-        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-        <div className={sidebarCollapsed ? "min-h-screen transition-[padding] duration-200 lg:pl-20" : "min-h-screen transition-[padding] duration-200 lg:pl-[258px]"}>
-          <Header />
-          <main className="mx-auto w-full max-w-[1680px] px-4 py-6 lg:px-6">
-            {pathname === "/dashboard" ? children : <PageMotion key={pathname}>{children}</PageMotion>}
-          </main>
-          <GuidedDemoBar />
+      <div className="relative isolate min-h-screen overflow-x-clip bg-transparent">
+        <WorkspacePlasmaBackground />
+        <div
+          className="relative z-10 min-h-screen overflow-x-clip lg:grid lg:transition-[grid-template-columns]"
+          style={{
+            gridTemplateColumns: `${sidebarCollapsed ? SIDEBAR_COMPACT_WIDTH : SIDEBAR_EXPANDED_WIDTH}px minmax(0, 1fr)`,
+            transitionDuration: `${SIDEBAR_TRANSITION_MS}ms`,
+            transitionTimingFunction: SIDEBAR_TRANSITION_EASING,
+          } as CSSProperties}
+        >
+          <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+          <div className="min-w-0">
+            <Header />
+            <main className="mx-auto w-full max-w-[1680px] px-4 py-6 lg:px-6">
+              {pathname === "/dashboard" ? children : <PageMotion key={pathname}>{children}</PageMotion>}
+            </main>
+            <GuidedDemoBar />
+          </div>
         </div>
-      </div>
       </div>
       <TeacherAssistantPanel />
     </TeacherAssistantProvider>

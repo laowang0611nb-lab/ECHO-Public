@@ -1,3 +1,9 @@
+"""Quota-balanced evidence collection and persisted AI analysis workflow.
+
+Every model conclusion must reference persisted evidence. Candidates are
+deduplicated, selected under per-source quotas, and validated before storage.
+"""
+
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass

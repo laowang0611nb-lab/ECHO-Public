@@ -54,6 +54,8 @@ export function mergeKnowledgeGraphs(
   base: KnowledgeGraph,
   supplements: Array<KnowledgeGraph | undefined>,
 ): KnowledgeGraph {
+  // Merge by stable IDs so paginated point scopes repair missing data without
+  // duplicating real backend nodes or semantic edges.
   const nodes = new Map<string, KnowledgeGraphNode>();
   const edges = new Map<string, KnowledgeGraphEdge>();
 

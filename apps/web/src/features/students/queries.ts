@@ -46,6 +46,8 @@ export function useStudentAnalytics(
   const userId = user?.id;
   const enabled = Boolean(userId && courseId);
 
+  // The backend returns the complete course summary in one request. Do not
+  // reintroduce per-student detail fan-out here; drill-downs load on demand.
   const analyticsQuery = useQuery({
     queryKey: studentQueryKeys.analytics(
       userId ?? "anonymous",

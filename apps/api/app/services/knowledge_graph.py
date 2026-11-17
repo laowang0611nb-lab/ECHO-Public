@@ -1,3 +1,10 @@
+"""Build bounded knowledge graphs without inventing hierarchy or relations.
+
+Each scope returns real nodes and edges plus coverage metadata. The ``full``
+scope prioritizes textbooks, chapters, and knowledge points before auxiliary
+resources so truncation remains deterministic and explainable.
+"""
+
 from collections import defaultdict, deque
 from typing import Literal
 from uuid import UUID

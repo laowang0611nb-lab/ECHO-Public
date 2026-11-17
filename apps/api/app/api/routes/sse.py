@@ -1,3 +1,5 @@
+"""SSE transport helpers shared by chat and teacher-assistant streams."""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +13,7 @@ async def stream_with_heartbeat(
     events: AsyncIterator[str],
     heartbeat_seconds: float = SSE_HEARTBEAT_SECONDS,
 ) -> AsyncIterator[bytes]:
+    """Yield events while emitting comment frames during provider idle gaps."""
     iterator = events.__aiter__()
     try:
         while True:

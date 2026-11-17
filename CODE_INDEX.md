@@ -2,6 +2,11 @@
 
 本文件是公开比赛版本的代码入口，按“应用、数据、共享包、文档、脚本”组织。
 
+> 公开镜像代码基线：`0.0.297`
+> 比赛分支：`0.0.x-274`，其中 `x` 是固定字母
+> 索引复核日期：2026-11-17
+> 覆盖面：教师 Web 25 个 `page.tsx` / 14 个 Feature、学生端 20 个路由文件、FastAPI 25 个 Router 模块与 `sse.py` 心跳助手、51 个 Service 模块。
+
 ## 1. 快速入口
 
 | 目标 | 入口 |
@@ -16,13 +21,15 @@
 | 设计 Token | `packages/design-tokens/` |
 | 系统架构 | `docs/architecture/` |
 | API 契约 | `docs/api/` |
+| 环境变量说明 | `docs/环境变量说明.md` |
+| 全量代码索引 | `CODE_INDEX.md` |
 | 环境变量模板 | `.env.example`、各应用 `.env.example` |
 
 ## 2. 应用
 
 ### `apps/web/`
 
-Next.js 教师端，包含课程、知识库、学生、AI 审核、教学洞察、策略和执行计划页面。
+Next.js 教师端，包含课程、知识库、学生学情、AI 审核、教学洞察、策略和执行计划页面。当前学生学情列表使用课程级聚合接口，知识图谱支持教材/章节范围与学生 WebView 嵌入。
 
 常用命令：
 
@@ -35,7 +42,7 @@ pnpm --filter @echo/web typecheck
 
 ### `apps/mobile/`
 
-Expo + React Native 学生端，包含课程、AI 对话、学习记录和知识图谱。
+Expo + React Native 学生端，包含课程、AI 对话、附件、Quick Check、学习记录、错题和知识图谱 WebView。
 
 常用命令：
 
@@ -48,7 +55,7 @@ pnpm --filter @echo/mobile typecheck
 
 ### `apps/api/`
 
-FastAPI 后端，统一前缀 `/api/v1`，提供鉴权、课程、教材、学习事件、AI 审核、策略和健康检查接口。
+FastAPI 后端，统一前缀 `/api/v1`，提供鉴权、课程、教材、学习事件、AI 审核、AI 分析、教学策略、执行计划、教师 AI 助手和健康检查接口。
 
 常用命令：
 
@@ -85,8 +92,10 @@ apps/api/.venv/Scripts/python.exe -m pytest -c database/pytest.ini database/test
 - `docs/architecture/`：系统边界、运行逻辑、项目切片和流程图
 - `docs/api/`：接口、数据结构和 SSE 协议
 - `docs/database/`：数据库架构和迁移说明
+- `docs/环境变量说明.md`：API、数据库、模型、短信、教师 Web 和学生端环境变量
 - `docs/knowledge-graph/`：知识图谱设计
 - `docs/mobile/`：移动端实现说明
+- `docs/api/接口索引.md`：当前共享 API Client 与后端 REST/SSE 路径映射
 
 ## 6. 脚本
 
@@ -97,3 +106,10 @@ apps/api/.venv/Scripts/python.exe -m pytest -c database/pytest.ini database/test
 ## 7. 提交与历史
 
 公开版本保留 ECHO `main` 的主要开发历史。仅涉及内部资料、部署记录、提示词、消息记录、演示数据包和设计截图的提交已从公开历史移除，原私有仓库不受影响。
+
+当前公开索引共同基线：
+
+- 根项目 `package.json`：`0.0.297`
+- 教师 Web：`0.0.297`
+- API：`0.0.297`
+- 数据库迁移 head：`f1a2b3c4d5e6`

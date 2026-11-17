@@ -1,3 +1,9 @@
+"""Course-level learning analytics used by teacher dashboards and drill-downs.
+
+List views use aggregate queries to avoid one request per student; detailed
+student evidence is loaded only after the teacher opens a specific student.
+"""
+
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from uuid import UUID

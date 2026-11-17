@@ -1,3 +1,9 @@
+"""In-process scheduler for asynchronous AI analysis jobs.
+
+The current deployment intentionally runs one Uvicorn worker. Startup recovery
+and duplicate-task suppression both rely on this process-local task registry.
+"""
+
 import asyncio
 from datetime import UTC, datetime
 from uuid import UUID

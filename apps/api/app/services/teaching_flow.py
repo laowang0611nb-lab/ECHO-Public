@@ -1,3 +1,9 @@
+"""Deterministic planner for hint levels, attempts, and answer-leak guards.
+
+The LLM may classify ambiguous turns, but state transitions remain code-driven
+so a normal chat turn cannot accidentally skip the guided-learning sequence.
+"""
+
 import hashlib
 import json
 import re
