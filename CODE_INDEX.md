@@ -2,7 +2,7 @@
 
 本文件是公开比赛版本的代码入口，按“应用、数据、共享包、文档、脚本”组织。
 
-> 公开镜像代码基线：`0.0.297`
+> 公开镜像展示版本：`v0.0.x-274`
 > 比赛分支：`0.0.x-274`，其中 `x` 是固定字母
 > 索引复核日期：2026-11-17
 > 覆盖面：教师 Web 25 个 `page.tsx` / 14 个 Feature、学生端 20 个路由文件、FastAPI 25 个 Router 模块与 `sse.py` 心跳助手、51 个 Service 模块。
@@ -109,7 +109,7 @@ apps/api/.venv/Scripts/python.exe -m pytest -c database/pytest.ini database/test
 
 当前公开索引共同基线：
 
-- 根项目 `package.json`：`0.0.297`
-- 教师 Web：`0.0.297`
-- API：`0.0.297`
+- 对外展示版本：`v0.0.x-274`
+- 教师 Web：`v0.0.x-274`
+- API：`v0.0.x-274`
 - 数据库迁移 head：`f1a2b3c4d5e6`
